@@ -165,13 +165,12 @@ describe('módulo de entrada por defecto', () => {
     expect(screen.getAllByTestId('stub-modulo')).toHaveLength(1);
   });
 
-  it('Socio aterriza en Logística pese a no tenerlo en el sidebar: defecto preexistente', () => {
+  it('un Socio entra a un módulo que sí tiene en el sidebar', () => {
     renderComo('Socio');
-    // Defecto preexistente (Fase 1): `moduloPorDefecto(['Socio'])` devuelve
-    // `logistica`, pero Logística no está en el sidebar de un Socio. La vista
-    // renderiza con su breadcrumb, pero no hay entrada que permita cambiarla.
-    expect(breadcrumb()).toEqual(['Logística', 'Logística']);
-    expect(modulosDelSidebar()).not.toContain('Logística');
+    // Bug 7 corregido en Fase 1: antes caía en Logística, que no ve, y quedaba
+    // sin ninguna entrada de navegación desde la que salir.
+    expect(breadcrumb()).toBeNull();
+    expect(modulosDelSidebar()).toContain('Centro de Mando');
     expect(screen.getAllByTestId('stub-modulo')).toHaveLength(1);
   });
 
@@ -195,10 +194,11 @@ describe('tabs de Finanzas', () => {
     expect(tabsActivos()).toEqual(['flujo']);
   });
 
-  it('Socio solo ve Reportes', async () => {
+  it('Socio solo ve Reportes y lo tiene activo por defecto', async () => {
     renderComo('Socio');
     await abrirModulo('Finanzas');
     expect(idsDeTabs()).toEqual(['reportes']);
+    expect(tabsActivos()).toEqual(['reportes']);
   });
 
   it('cambiar de tab marca solo ese tab como activo', async () => {

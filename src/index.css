@@ -390,3 +390,33 @@
 .dark .shadow-lg { box-shadow: 0 0 0 1px var(--border-default) !important; }
 .dark .shadow-xl { box-shadow: 0 0 0 1px var(--border-default) !important; }
 .dark .shadow-2xl { box-shadow: 0 0 0 1px var(--border-default) !important; }
+
+/* ═══════════════════════════════════════════════════════
+   IMPRESIÓN
+   El botón "Imprimir" de Facturación llama `window.print()`.
+   Sin esto salía impreso el shell entero: sidebar, cabecera,
+   breadcrumb, filas de tabs y botones.
+   ═══════════════════════════════════════════════════════ */
+@media print {
+  body { background: #fff !important; }
+
+  aside,
+  header,
+  nav { display: none !important; }
+
+  [data-testid="nav-tabs"] { display: none !important; }
+
+  main {
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  table { page-break-inside: avoid; }
+  tr { page-break-inside: avoid; }
+
+  /* Los controles no aportan nada en papel. */
+  button { display: none !important; }
+
+  @page { margin: 12mm; }
+}

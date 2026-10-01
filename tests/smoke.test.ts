@@ -409,6 +409,18 @@ describe('SMOKE — Todos los endpoints responden', () => {
     expect(res.body).toHaveProperty('margen');
   });
 
+  // Los cinco reportes ya se cubren uno a uno arriba. Este caso ata el conjunto:
+  // los ids que el cliente pide tienen que existir como rutas. El bug 1 fue
+  // precisamente un id (`ventas-ruta`) que el cliente pedía y el servidor no
+  // servía, de modo que el reporte se veía vacío en vez de roto.
+  it('todos los reportes que consume Reportes.tsx resuelven 200', async () => {
+    const ids = ['financiero', 'ventas-por-ruta', 'produccion', 'inventario', 'desperdicios'];
+    for (const id of ids) {
+      const res = await request(app).get(`/api/reportes/${id}`);
+      expect(res.status, `reporte ${id}`).toBe(200);
+    }
+  });
+
   it('GET /api/users', async () => {
     const res = await request(app).get('/api/users');
     expect(res.status).toBe(200);

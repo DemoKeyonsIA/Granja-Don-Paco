@@ -832,17 +832,11 @@ ${JSON.stringify(historicalData, null, 2)}`;
     }
   });
 
-  // GET /api/produccion/historial
-  app.get("/api/produccion/historial", async (req, res) => {
-    try {
-      const producciones = await db.query.produccion_diaria.findMany();
-      res.json(producciones);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+  // GET /api/produccion/historial se registra más abajo, con filtros de
+  // granja/fecha. Este duplicado sin filtros ganaba la resolución de Express y
+  // hacía que `Granjas.tsx:1009` pidiera granja+fechas y recibiera el histórico
+  // completo en silencio.
 
-  
   // GET /api/inventario/movimientos — enriquecido con camión/guía/estado/responsable para el árbol día → camión → eventos
   app.get("/api/inventario/movimientos", async (req, res) => {
     try {
@@ -1274,7 +1268,8 @@ ${JSON.stringify(historicalData, null, 2)}`;
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
 
-  // Produccion historial filtrado
+  // Produccion historial filtrado. Único handler de esta ruta: ver el comentario
+  // en el lugar donde estaba el duplicado que lo precedía.
   app.get("/api/produccion/historial", async (req, res) => {
     try {
       const { granjaId, desde, hasta } = req.query;

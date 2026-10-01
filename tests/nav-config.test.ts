@@ -151,15 +151,17 @@ describe('módulo de entrada por defecto', () => {
     for (const r of ROLES_MOVIL) expect(moduloPorDefecto([r]), r).toBe('operaciones');
   });
 
-  it('Socio y Comercial entran a Logística', () => {
-    expect(moduloPorDefecto(['Socio'])).toBe('logistica');
+  it('Comercial entra a Logística; un Socio, al Centro de Mando', () => {
     expect(moduloPorDefecto(['Comercial'])).toBe('logistica');
+    // Bug 7 corregido en Fase 1: un Socio caía en `logistica`, que no ve.
+    expect(moduloPorDefecto(['Socio'])).toBe('dashboard');
   });
 
-  it('defecto conocido: el módulo por defecto de Socio no está en su sidebar', () => {
-    // Un Socio aterriza en Logística, pero `logistica.roles` es [Admin, Comercial].
-    expect(moduloPorDefecto(['Socio'])).toBe('logistica');
-    expect(idsModulos(['Socio'])).not.toContain('logistica');
+  it('el módulo por defecto siempre es alcanzable desde el propio sidebar', () => {
+    for (const rol of TODOS) {
+      const defecto = moduloPorDefecto([rol]);
+      expect(idsModulos([rol]), `${rol} no ve su módulo por defecto`).toContain(defecto);
+    }
   });
 });
 
@@ -174,18 +176,15 @@ describe('sub-tabs por módulo y rol', () => {
     expect(ids(subTabsDe('finanzas', ['Socio']))).toEqual(['reportes']);
   });
 
-  it('Finanzas a un Socio no le ofrece un tab de Pago que no ve', () => {
-    // Documenta el hueco detectado en la investigación que la Fase 1 va a
-    // corregir: un Socio entra a Finanzas y el tab por defecto es `flujo`,
-    // que no aparece en su lista de tabs visibles.
-    const visibles = ids(subTabsDe('finanzas', ['Socio']));
-    expect(subTabPorDefecto('finanzas', ['Socio'])).toBe('flujo');
-    expect(visibles).not.toContain(subTabPorDefecto('finanzas', ['Socio']));
-  });
-
-  it('Finanzas a Admin sí es coherente', () => {
-    const visibles = ids(subTabsDe('finanzas', ['Admin']));
-    expect(visibles).toContain(subTabPorDefecto('finanzas', ['Admin']));
+  it('el tab por defecto de Finanzas es siempre visible para el rol', () => {
+    // Bug 2 corregido en Fase 1: un Socio entraba con `flujo`, que solo ve
+    // Admin, y veía el P&L del Flujo de Caja bajo un tab no seleccionado.
+    for (const rol of ['Admin', 'Socio'] as Role[]) {
+      const visibles = ids(subTabsDe('finanzas', [rol]));
+      expect(visibles, rol).toContain(subTabPorDefecto('finanzas', [rol]));
+    }
+    expect(subTabPorDefecto('finanzas', ['Admin'])).toBe('flujo');
+    expect(subTabPorDefecto('finanzas', ['Socio'])).toBe('reportes');
   });
 
   it('Comercial no ve Finanzas todavía', () => {

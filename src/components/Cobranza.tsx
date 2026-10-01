@@ -51,10 +51,17 @@ export default function Cobranza({ currentUser }: CobranzaProps) {
 
   const getCliente = (id: string) => clientes.find(c => c.id === id);
 
-  const calculateDaysPast = (dateStr: string) => {
-    const diffTime = Math.abs(new Date().getTime() - new Date(dateStr).getTime());
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  };
+/**
+ * Días transcurridos desde `dateStr`, como mínimo 0.
+ *
+ * Sin el `Math.abs` que tenía antes, una factura con fecha futura reportaba una
+ * antigüedad positiva y caía en "vencida" (`daysPast > 15`). El valor se usa
+ * para aging, así que una fecha que aún no llega vale 0 días, no negativos.
+ */
+const calculateDaysPast = (dateStr: string) => {
+  const diffTime = new Date().getTime() - new Date(dateStr).getTime();
+  return Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+};
 
   const confirmarPago = async () => {
     if (!pagoSel) return;

@@ -251,11 +251,28 @@ export const labelDeModulo = (id: ModuleId, roles: Role[]): string => {
 /**
  * Módulo al que entra un usuario por defecto. Antes vivía hardcodeado en el
  * `useState` de `AppLayout`.
+ *
+ * La última línea no es decorativa: el módulo preferido tiene que ser alcanzable
+ * desde el propio sidebar. Un Socio caía en `logistica` (bug 7 del plan) y
+ * `logistica.roles` es `[Admin, Comercial]`, así que aterrizaba en una pantalla
+ * sin ninguna entrada de navegación. Con la guarda, cualquier combinación de
+ * roles futura hereda el primer módulo que sí ve en lugar de repetarlo.
  */
 export const moduloPorDefecto = (roles: Role[]): ModuleId => {
+  const preferido = preferidoDe(roles);
+  const visibles = modulosVisibles(roles);
+  return visibles.some(v => v.id === preferido)
+    ? preferido
+    : (visibles[0]?.id ?? 'dashboard');
+};
+
+const preferidoDe = (roles: Role[]): ModuleId => {
   if (roles.includes('Admin')) return 'dashboard';
   if (esRolMovil(roles)) return 'operaciones';
-  return 'logistica';
+  // Comercial entra a Logística, que sí ve, y conserva su comportamiento actual.
+  if (roles.includes('Comercial')) return 'logistica';
+  // Un Socio solo ve Centro de Mando, Finanzas y Office: entra al Centro de Mando.
+  return 'dashboard';
 };
 
 /** Sub-tabs de Logística visibles para un conjunto de roles, conservando la banda. */
@@ -285,7 +302,12 @@ export const subTabPorDefecto = (id: ModuleId, roles: Role[], manual = false): s
     // Comercial arranca en Caja Ruta; el resto en Logística.
     return roles.includes('Comercial') && !roles.includes('Admin') ? 'caja' : 'logistica';
   }
-  if (id === 'finanzas') return 'flujo';
+  if (id === 'finanzas') {
+    // Solo Admin ve `flujo`/`cobranza`; un Socio solo tiene `reportes`, así que
+    // "flujo" lo dejaba viendo el P&L del Flujo de Caja bajo un tab que no
+    // tenía seleccionado. Bug 2 del plan, corregido en Fase 1.
+    return roles.includes('Admin') ? 'flujo' : 'reportes';
+  }
   if (id === 'granja') return 'granjas';
   if (id === 'admin') return manual ? '' : 'productos';
   if (id === 'operaciones') {
@@ -366,16 +388,12 @@ export const breadcrumbDe = (
 /**
  * Defectos de producto heredados que la configuración hace visibles.
  *
- * No son errores de este módulo: son inconsistencias reales de la aplicación que
+* No son errores de este módulo: son inconsistencias reales de la aplicación que
  * la extracción a datos puros dejó a la vista. Cada una tiene una fase asignada
  * en PLAN-IA-UNIFICADA.md, así que se listan aquí en vez de silenciarse, y los
- * testsfallen si aparece alguna nueva o si alguna se cierra antes de tiempo.
+ * tests fallan si aparece alguna nueva o si alguna se cierra antes de tiempo.
  */
 export const INCIDENCIAS_CONOCIDAS: Record<string, string> = {
-  'El módulo por defecto de Socio es logistica, pero no lo ve en el sidebar':
-    'Fase 1 — un Socio inicia sesión y aterriza en Logística, un módulo cuyo `roles` es [Admin, Comercial]. Queda en una pantalla sin entrada de navegación que le permita salir.',
-  'Rol Socio entra a finanzas/flujo pero no ve ese tab':
-    'Fase 1 — un Socio entra a Finanzas y el tab por defecto es `flujo`, que solo existe para Admin. Ve el P&L del Flujo de Caja bajo un tab que no tiene seleccionado.',
   'Rol Admin entra a operaciones/produccion pero no ve ese tab':
     'Fase 7 — el hub de escritorio de Operaciones ignora `subTab`: sus tabs son internos de BodegaAdmin. El valor `produccion` queda muerto hasta que el hub sea dirigido por la configuración.',
   'Rol Comercial entra a operaciones/produccion pero no ve ese tab':

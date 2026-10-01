@@ -743,7 +743,13 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <button className="p-1.5 hover:bg-stone-50 rounded-lg transition-colors inline-flex items-center space-x-1" style={{ color: 'var(--brand-primary)' }}>
+                        {/* El botón no tenía onClick: no hacía nada. `window.print()`
+                            imprime la página actual; las reglas `@media print` de
+                            `index.css` quitan sidebar, cabecera y filas de tabs para
+                            que salga la tabla de facturas y no el shell. */}
+                        <button onClick={() => window.print()}
+                          title={`Imprimir factura ${f.consecutivo}`}
+                          className="p-1.5 hover:bg-stone-50 rounded-lg transition-colors inline-flex items-center space-x-1" style={{ color: 'var(--brand-primary)' }}>
                           <Printer className="w-4 h-4" /><span className="text-xs font-bold">Imprimir</span>
                         </button>
                       </td>

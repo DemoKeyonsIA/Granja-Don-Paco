@@ -4,7 +4,7 @@ import { User } from '../types';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 
-type ReporteTipo = 'ventas-ruta' | 'produccion' | 'inventario' | 'desperdicios' | 'financiero';
+type ReporteTipo = 'ventas-por-ruta' | 'produccion' | 'inventario' | 'desperdicios' | 'financiero';
 
 export default function Reportes({ currentUser }: { currentUser: User }) {
   const [reporteActivo, setReporteActivo] = useState<ReporteTipo>('financiero');
@@ -19,6 +19,7 @@ export default function Reportes({ currentUser }: { currentUser: User }) {
 
   const cargarReporte = async () => {
     setLoading(true);
+    setDatos(null);
     try {
       const params = new URLSearchParams();
       if (fechaInicio) params.set('fechaInicio', fechaInicio);
@@ -26,15 +27,24 @@ export default function Reportes({ currentUser }: { currentUser: User }) {
       const qs = params.toString();
       const url = `/api/reportes/${reporteActivo}${qs ? '?' + qs : ''}`;
       const res = await fetch(url);
+      if (!res.ok) {
+        // Sin esto, un 404 se renderizaba como "No hay datos disponibles",
+        // que hacía creer que el reporte venía vacío y no roto.
+        const detalle = await res.text().catch(() => '');
+        throw new Error(`${res.status} ${res.statusText}${detalle ? `: ${detalle.slice(0, 200)}` : ''}`);
+      }
       const data = await res.json();
       setDatos(data);
-    } catch (e) { toast.error("Error al cargar el reporte"); }
+    } catch (e) {
+      console.error('Error al cargar el reporte', reporteActivo, e);
+      toast.error(`No se pudo cargar el reporte: ${e instanceof Error ? e.message : String(e)}`);
+    }
     setLoading(false);
   };
 
   const tabs: { id: ReporteTipo; label: string; icon: any }[] = [
     { id: 'financiero', label: 'Financiero', icon: DollarSign },
-    { id: 'ventas-ruta', label: 'Ventas por Ruta', icon: TrendingUp },
+    { id: 'ventas-por-ruta', label: 'Ventas por Ruta', icon: TrendingUp },
     { id: 'produccion', label: 'Producción', icon: BarChart3 },
     { id: 'inventario', label: 'Inventario', icon: Package },
     { id: 'desperdicios', label: 'Desperdicios', icon: AlertTriangle },
@@ -77,7 +87,7 @@ export default function Reportes({ currentUser }: { currentUser: User }) {
       ) : (
         <div className="animate-in fade-in">
           {reporteActivo === 'financiero' && <ReporteFinanciero data={datos} />}
-          {reporteActivo === 'ventas-ruta' && <ReporteVentasRuta data={datos} />}
+          {reporteActivo === 'ventas-por-ruta' && <ReporteVentasRuta data={datos} />}
           {reporteActivo === 'produccion' && <ReporteProduccion data={datos} />}
           {reporteActivo === 'inventario' && <ReporteInventario data={datos} />}
           {reporteActivo === 'desperdicios' && <ReporteDesperdicios data={datos} />}
