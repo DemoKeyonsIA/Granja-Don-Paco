@@ -14,13 +14,13 @@
 import type { Role } from '../types';
 
 export type IconName =
-  | 'LayoutDashboard' | 'DollarSign' | 'Egg' | 'Settings' | 'Mail'
+  | 'DollarSign' | 'Egg' | 'Settings' | 'Mail'
   | 'PackageOpen' | 'Truck' | 'Users' | 'ClipboardList' | 'CreditCard'
   | 'Tag' | 'FileText' | 'BarChart3' | 'TrendingUp' | 'Receipt'
   | 'CreditCardAlt' | 'Scale' | 'PiggyBank';
 
 export type ModuleId =
-  | 'dashboard' | 'finanzas' | 'granja' | 'admin'
+  | 'finanzas' | 'granja' | 'admin'
   | 'office' | 'operaciones' | 'logistica' | 'clientes';
 
 export interface ModuloDef {
@@ -48,14 +48,10 @@ export interface SubTabDef {
 
 /** Módulos de primer nivel del sidebar, en orden de aparición. */
 export const MODULOS: ModuloDef[] = [
-  {
-    id: 'dashboard',
-    label: 'Centro de Mando',
-    icon: 'LayoutDashboard',
-    roles: ['Admin', 'Socio'],
-    shortLabel: 'Centro',
-    sinBreadcrumb: true,
-  },
+  // Fase 5: el módulo `dashboard` (Centro de Mando) desaparece. No queda como
+  // entrada oculta con `roles: []` porque eso deja un id muerto por el que se
+  // puede entrar a una pantalla que ya no existe: lo que aportaba vive como
+  // columna derecha de Finanzas > Resumen.
   {
     id: 'finanzas',
     label: 'Finanzas',
@@ -328,16 +324,19 @@ export const moduloPorDefecto = (roles: Role[]): ModuleId => {
   const visibles = modulosVisibles(roles);
   return visibles.some(v => v.id === preferido)
     ? preferido
-    : (visibles[0]?.id ?? 'dashboard');
+    : (visibles[0]?.id ?? 'finanzas');
 };
 
 const preferidoDe = (roles: Role[]): ModuleId => {
-  if (roles.includes('Admin')) return 'dashboard';
+  // Fase 5: Admin y Socio entran a Finanzas. Antes ambos caían en el Centro de
+  // Mando, que era una segunda puerta al mismo P&L: el mismo número en dos
+  // pantallas era exactamente el bug de "4 pantallas, 11 cálculos" del plan.
+  if (roles.includes('Admin')) return 'finanzas';
   if (esRolMovil(roles)) return 'operaciones';
   // Comercial entra a Logística, que sí ve, y conserva su comportamiento actual.
   if (roles.includes('Comercial')) return 'logistica';
-  // Un Socio solo ve Centro de Mando, Finanzas y Office: entra al Centro de Mando.
-  return 'dashboard';
+  // Un Socio solo ve Finanzas y Office: entra a Finanzas.
+  return 'finanzas';
 };
 
 /** Sub-tabs de Logística visibles para un conjunto de roles, conservando la banda. */

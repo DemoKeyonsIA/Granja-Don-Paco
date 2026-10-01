@@ -118,16 +118,16 @@ afterEach(() => {
 });
 
 describe('sidebar por rol', () => {
-  it('Admin ve los 8 módulos', () => {
+  it('Admin ve los 7 módulos, sin Centro de Mando', () => {
     renderComo('Admin');
     expect(modulosDelSidebar()).toEqual([
-      'Centro de Mando', 'Finanzas', 'Granja', 'Admin', 'Office', 'Operaciones y Bodegas', 'Logística', 'Clientes',
+      'Finanzas', 'Granja', 'Admin', 'Office', 'Operaciones y Bodegas', 'Logística', 'Clientes',
     ]);
   });
 
-  it('Socio ve solo 3 módulos', () => {
+  it('Socio ve solo Finanzas y Office', () => {
     renderComo('Socio');
-    expect(modulosDelSidebar()).toEqual(['Centro de Mando', 'Finanzas', 'Office']);
+    expect(modulosDelSidebar()).toEqual(['Finanzas', 'Office']);
   });
 
   it('Comercial ve Finanzas, Office, Operaciones, Logística y Clientes', () => {
@@ -163,7 +163,7 @@ describe('sidebar por rol', () => {
 });
 
 describe('módulo de entrada por defecto', () => {
-  it('Admin entra al Centro de Mando', () => {
+  it('Admin entra a Finanzas, no a un módulo que ya no existe', () => {
     renderComo('Admin');
     expect(screen.getAllByTestId('stub-modulo')).toHaveLength(1);
   });
@@ -171,9 +171,10 @@ describe('módulo de entrada por defecto', () => {
   it('un Socio entra a un módulo que sí tiene en el sidebar', () => {
     renderComo('Socio');
     // Bug 7 corregido en Fase 1: antes caía en Logística, que no ve, y quedaba
-    // sin ninguna entrada de navegación desde la que salir.
-    expect(breadcrumb()).toBeNull();
-    expect(modulosDelSidebar()).toContain('Centro de Mando');
+    // sin ninguna entrada de navegación desde la que salir. Fase 5: el módulo
+    // es Finanzas, que sí ve, y por eso ahora sí hay breadcrumb que lo delata.
+    expect(breadcrumb()).toEqual(['Finanzas', 'Resumen']);
+    expect(modulosDelSidebar()).toContain('Finanzas');
     expect(screen.getAllByTestId('stub-modulo')).toHaveLength(1);
   });
 
@@ -366,8 +367,9 @@ describe('camino móvil de Operaciones', () => {
 });
 
 describe('breadcrumbs', () => {
-  it('el Centro de Mando no muestra breadcrumb', () => {
+  it('Clientes, que es una sola vista, no muestra breadcrumb', async () => {
     renderComo('Admin');
+    await abrirModulo('Clientes');
     expect(textoDelModuloActual()).toBe('');
   });
 

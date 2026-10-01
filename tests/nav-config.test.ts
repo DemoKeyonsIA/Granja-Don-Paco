@@ -79,14 +79,20 @@ describe('roles efectivos', () => {
 });
 
 describe('sidebar por rol', () => {
-  it('Admin ve los 8 módulos', () => {
+  it('Admin ve los 7 módulos: ya no existe el Centro de Mando', () => {
     expect(idsModulos(['Admin'])).toEqual([
-      'dashboard', 'finanzas', 'granja', 'admin', 'office', 'operaciones', 'logistica', 'clientes',
+      'finanzas', 'granja', 'admin', 'office', 'operaciones', 'logistica', 'clientes',
     ]);
   });
 
-  it('Socio ve 3 módulos: Centro de Mando, Finanzas y Office', () => {
-    expect(idsModulos(['Socio'])).toEqual(['dashboard', 'finanzas', 'office']);
+  it('Socio ve 2 módulos: Finanzas y Office', () => {
+    expect(idsModulos(['Socio'])).toEqual(['finanzas', 'office']);
+  });
+
+  it('ningún rol ve el módulo dashboard, que fue disuelto en Fase 5', () => {
+    for (const rol of TODOS) {
+      expect(idsModulos([rol]), rol).not.toContain('dashboard');
+    }
   });
 
   it('Socio no ve Granja, Admin, Operaciones, Logística ni Clientes', () => {
@@ -146,18 +152,19 @@ describe('etiqueta del módulo Operaciones', () => {
 });
 
 describe('módulo de entrada por defecto', () => {
-  it('Admin entra al Centro de Mando', () => {
-    expect(moduloPorDefecto(['Admin'])).toBe('dashboard');
+  it('Admin entra a Finanzas, que es donde vive el P&L', () => {
+    expect(moduloPorDefecto(['Admin'])).toBe('finanzas');
   });
 
   it('los roles móviles entran a Operaciones', () => {
     for (const r of ROLES_MOVIL) expect(moduloPorDefecto([r]), r).toBe('operaciones');
   });
 
-  it('Comercial entra a Logística; un Socio, al Centro de Mando', () => {
+  it('Comercial entra a Logística; un Socio, a Finanzas', () => {
     expect(moduloPorDefecto(['Comercial'])).toBe('logistica');
     // Bug 7 corregido en Fase 1: un Socio caía en `logistica`, que no ve.
-    expect(moduloPorDefecto(['Socio'])).toBe('dashboard');
+    // Fase 5: el destino ya no es el Centro de Mando, que fue disuelto.
+    expect(moduloPorDefecto(['Socio'])).toBe('finanzas');
   });
 
   it('el módulo por defecto siempre es alcanzable desde el propio sidebar', () => {
@@ -342,8 +349,7 @@ describe('camino móvil de Operaciones', () => {
 });
 
 describe('breadcrumb', () => {
-  it('Centro de Mando y Clientes no llevan breadcrumb', () => {
-    expect(breadcrumbDe('dashboard', '', ['Admin'])).toBeNull();
+  it('Clientes no lleva breadcrumb', () => {
     expect(breadcrumbDe('clientes', '', ['Admin'])).toBeNull();
   });
 

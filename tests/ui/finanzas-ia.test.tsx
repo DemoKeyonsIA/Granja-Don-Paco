@@ -19,7 +19,7 @@ import type { Role, User } from '../../src/types';
 
 const MODULOS_APLICACION = [
   'Login', 'Clientes', 'Cobranza', 'Granjas', 'Etiquetas', 'Pesos',
-  'DashboardEnterprise', 'SaludAvicola', 'Alimento', 'Mantenimiento', 'Precios',
+  'SaludAvicola', 'Alimento', 'Mantenimiento', 'Precios',
   'Admin', 'Office', 'Logistica', 'CajaRuta', 'TableroRutas',
   'operaciones', 'operaciones/BodegaAdmin',
   'DespachoMovil', 'BodegaMovil', 'CamioneroMovil', 'IncidentesMovil',
@@ -84,15 +84,69 @@ const crc = (n: number | null | undefined) =>
   new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 0 })
     .format(Number(n) || 0);
 
+/**
+ * Respuesta con la forma de `GET /api/dashboard/enterprise`.
+ *
+ * Fase 5: Resumen la consume para la columna "Salud del negocio" y para las
+ * alertas de operación de la bandeja. Se incluye completa, con sus campos de
+ * dinero, aunque Resumen los ignora a propósito: que el endpoint los devuelva
+ * igual es la razón por la que el pick operativo no puede filtrarse por la
+ * cabeza del JSON.
+ */
+const EMPRESA = {
+  ingresosHoy: 9_000_000,
+  ingresosCobradosHoy: 3_200_000,
+  gastosHoy: 2_000_000,
+  utilidadNeta: 7_000_000,
+  cuentasPorCobrar: 4_444_444,
+  facturasEmitidas: 12,
+  cartonesProducidos: 320,
+  stockBodegaCentral: 1_500,
+  totalAvesVivas: 48_300,
+  clientesActivos: 37,
+  rutasActivas: 6,
+  vacunasVencidas: 2,
+  mantenimientosVencidos: 1,
+  desperdiciosHoy: 4,
+  impactoDesperdicioHoy: 45_000,
+  alertas: [
+    { tipo: 'Vacuna vencida', detalle: 'Newcastle — Granja El Alto', nivel: 'Crítica' },
+    { tipo: 'Mantenimiento vencido', detalle: 'Cambio de cama — Galerón 3', nivel: 'Alta' },
+  ],
+};
+
 const mockFetch = () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     const u = String(url);
     if (u.includes('/api/finanzas/resumen') || u.includes('/api/reportes/flujo-caja')) {
       return { ok: true, status: 200, statusText: 'OK', json: async () => RESUMEN, text: async () => '' };
     }
+    if (u.includes('/api/dashboard/enterprise')) {
+      return { ok: true, status: 200, statusText: 'OK', json: async () => EMPRESA, text: async () => '' };
+    }
     // El resto (facturas, gastos, catálogos) responde vacío: esta fase no
     // verifica el contenido de Documentos, solo que la ruta exista y monte.
     return { ok: true, status: 200, statusText: 'OK', json: async () => [], text: async () => '' };
+  }));
+};
+
+/**
+ * Igual que `mockFetch`, pero con un resumen propio.
+ *
+ * Desde la Fase 5 Resumen pide dos endpoints, así que un `json: async () => ({...})`
+ * a pelo es un bug esperando: la segunda respuesta tiene que ser la de
+ * `dashboard/enterprise` o el bloque operativo se oculta solo.
+ */
+const mockResumen = (overrides: Record<string, unknown>) => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const u = String(url);
+    if (u.includes('/api/dashboard/enterprise')) {
+      return { ok: true, status: 200, statusText: 'OK', json: async () => EMPRESA, text: async () => '' };
+    }
+    return {
+      ok: true, status: 200, statusText: 'OK', text: async () => '',
+      json: async () => ({ ...RESUMEN, ...overrides }),
+    };
   }));
 };
 
@@ -257,15 +311,11 @@ describe('Resumen', () => {
   });
 
   it('no inventa una variación cuando el periodo anterior fue cero', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true, status: 200, statusText: 'OK', text: async () => '',
-      json: async () => ({
-        ...RESUMEN,
-        ingresosFacturados: 1_000_000,
-        ingresosCobrados: 0, gastos: 0, utilidad: 1_000_000, margen: 100,
-        variacion: { ingresosFacturados: null, ingresosCobrados: null, gastos: null, utilidad: null },
-      }),
-    })));
+    mockResumen({
+      ingresosFacturados: 1_000_000,
+      ingresosCobrados: 0, gastos: 0, utilidad: 1_000_000, margen: 100,
+      variacion: { ingresosFacturados: null, ingresosCobrados: null, gastos: null, utilidad: null },
+    });
     renderComo('Admin');
     await abrirModulo('Finanzas');
     expect(screen.getAllByText('Sin periodo anterior con que comparar').length).toBeGreaterThan(0);
@@ -292,20 +342,38 @@ describe('Resumen', () => {
     expect(bandeja.textContent).toContain(crc(600_000));
   });
 
-  it('la bandeja se vacía cuando no hay nada vencido y el mes cierra en positivo', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true, status: 200, statusText: 'OK', text: async () => '',
-      json: async () => ({
-        ...RESUMEN,
-        ingresosFacturados: 5_000_000,
-        ingresosCobrados: 5_000_000,
-        gastos: 1_000_000,
-        utilidad: 4_000_000,
-        cuentasPorCobrar: 0,
-        aging: { alDia: 0, d1_30: 0, d31_60: 0, d60: 0 },
-        gastosPorCategoria: [],
-      }),
-    })));
+  it('la bandeja se vacía cuando no hay nada vencido, no hay alertas de operación y el mes cierra en positivo', async () => {
+    mockResumen({
+      ingresosFacturados: 5_000_000,
+      ingresosCobrados: 5_000_000,
+      gastos: 1_000_000,
+      utilidad: 4_000_000,
+      cuentasPorCobrar: 0,
+      aging: { alDia: 0, d1_30: 0, d31_60: 0, d60: 0 },
+      gastosPorCategoria: [],
+    });
+    // EMPRESA trae dos alertas de operación (vacuna vencida, mantenimiento
+    // vencido), así que "vacía" exige también un endpoint sin alertas: desde la
+    // Fase 5 la bandeja es una sola y no puede quedar medio vacía.
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/api/dashboard/enterprise')) {
+        return { ok: true, status: 200, statusText: 'OK', text: async () => '', json: async () => ({ ...EMPRESA, alertas: [] }) };
+      }
+      return {
+        ok: true, status: 200, statusText: 'OK', text: async () => '',
+        json: async () => ({
+          ...RESUMEN,
+          ingresosFacturados: 5_000_000,
+          ingresosCobrados: 5_000_000,
+          gastos: 1_000_000,
+          utilidad: 4_000_000,
+          cuentasPorCobrar: 0,
+          aging: { alDia: 0, d1_30: 0, d31_60: 0, d60: 0 },
+          gastosPorCategoria: [],
+        }),
+      };
+    }));
     renderComo('Admin');
     await abrirModulo('Finanzas');
     const bandeja = screen.getByTestId('finanzas-requiere-atencion');
@@ -313,10 +381,7 @@ describe('Resumen', () => {
   });
 
   it('avisa cuando el periodo cierra en pérdida', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true, status: 200, statusText: 'OK', text: async () => '',
-      json: async () => ({ ...RESUMEN, gastos: 9_000_000, utilidad: -4_000_000, margen: -80 }),
-    })));
+    mockResumen({ gastos: 9_000_000, utilidad: -4_000_000, margen: -80 });
     renderComo('Admin');
     await abrirModulo('Finanzas');
     expect(screen.getByTestId('finanzas-requiere-atencion').textContent).toContain('cierra en pérdida');

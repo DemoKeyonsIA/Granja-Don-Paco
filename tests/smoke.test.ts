@@ -312,6 +312,38 @@ describe('SMOKE — Todos los endpoints responden', () => {
     expect(res.body).toHaveProperty('alertas');
   });
 
+  /**
+   * Fase 5: desde que el módulo Centro de Mando salió del sidebar, este endpoint
+   * no alimenta una pantalla propia sino la columna "Salud del negocio" de
+   * Resumen. `FinanzasResumen` elige las claves una por una y, si falta alguna,
+   * oculta el bloque en vez de inventar ceros; este caso es lo que avisa del
+   * cambio de nombre antes de que el bloque desaparezca en silencio.
+   */
+  it('GET /api/dashboard/enterprise — las 7 claves que lee Resumen', async () => {
+    const res = await request(app).get('/api/dashboard/enterprise');
+    expect(res.status).toBe(200);
+    for (const clave of [
+      'cartonesProducidos', 'stockBodegaCentral', 'totalAvesVivas', 'rutasActivas',
+      'clientesActivos', 'desperdiciosHoy', 'impactoDesperdicioHoy',
+    ]) {
+      expect(typeof res.body[clave], clave).toBe('number');
+    }
+  });
+
+  it('GET /api/finanzas/resumen — la fuente única que Resumen muestra', async () => {
+    const res = await request(app).get('/api/finanzas/resumen');
+    expect(res.status).toBe(200);
+    for (const clave of [
+      'ingresosFacturados', 'ingresosCobrados', 'gastos', 'utilidad', 'margen',
+      'cuentasPorCobrar', 'aging', 'cicloDelDinero', 'documentosEmitidos',
+    ]) {
+      expect(res.body, clave).toHaveProperty(clave);
+    }
+    // Con una base vacía todo es cero, pero la estructura sigue ahí: un resumen
+    // que devuelve `{}` con 200 hace creer que el mes cerró en cero.
+    expect(res.body.cicloDelDinero).toHaveLength(6);
+  });
+
   it('GET /api/auditoria', async () => {
     const res = await request(app).get('/api/auditoria');
     expect(res.status).toBe(200);

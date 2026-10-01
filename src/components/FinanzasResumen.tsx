@@ -2,19 +2,24 @@
  * Tab Resumen de Finanzas: la pantalla A→D del boceto.
  *
  * Reemplaza a `Finanzas.tsx` (eliminado en esta fase). No recalcula ninguna
- * cifra: todo sale de `GET /api/finanzas/resumen`, que es la fuente única del
- * P&L desde la Fase 3. Esta pantalla decide qué se muestra y cómo se cuenta,
- * no cuánto vale.
+ * cifra: el dinero sale de `GET /api/finanzas/resumen`, la fuente única del P&L
+ * desde la Fase 3, y la operación sale de `GET /api/dashboard/enterprise`. Esta
+ * pantalla decide qué se muestra y cómo se cuenta, no cuánto vale.
  *
- * Tres bloques, en el orden en que se leen:
+ * Cuatro bloques, en el orden en que se leen:
  *   1. Cinco tarjetas: Ingresos, Cobrado, Gastos, Utilidad, Por cobrar.
  *   2. La banda del ciclo del dinero: de la venta en ruta al resultado.
- *   3. La bandeja "Requiere atención": lo que hay que hacer hoy.
+ *   3. "Requiere atención": una sola bandeja, con lo de dinero y lo de operación.
+ *   4. Columna derecha: "Salud del negocio" (lo que el Centro de Mando aportaba)
+ *      sobre "Salud de la cartera" (aging).
+ *
+ * Desde la Fase 5 esta pantalla es también el principio de la app: el módulo
+ * `dashboard` se disolvió acá, así que estas cifras se ven sin cambiar de lugar.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  AlertTriangle, CheckCircle2, Clock, DollarSign, FileText,
-  TrendingDown, TrendingUp, Wallet,
+  AlertTriangle, CheckCircle2, Clock, DollarSign, Egg, FileText,
+  Heart, Package, TrendingDown, TrendingUp, Truck, Users, Wallet,
 } from 'lucide-react';
 import type { User } from '../types';
 import { fmtCRC, type NodoCiclo, type RangoPeriodo } from '../lib/finanzas';
@@ -42,6 +47,76 @@ type ResumenFinanzas = {
   cicloDelDinero: NodoCiclo[];
   aging: Aging;
   documentosEmitidos: number;
+};
+
+/** Respuesta de `/api/dashboard/enterprise`, tal cual la devuelve el server. */
+type DashboardEnterprise = {
+  ingresosHoy: number;
+  ingresosCobradosHoy: number;
+  gastosHoy: number;
+  utilidadNeta: number;
+  cuentasPorCobrar: number;
+  facturasEmitidas: number;
+  cartonesProducidos: number;
+  stockBodegaCentral: number;
+  totalAvesVivas: number;
+  clientesActivos: number;
+  rutasActivas: number;
+  vacunasVencidas: number;
+  mantenimientosVencidos: number;
+  desperdiciosHoy: number;
+  impactoDesperdicioHoy: number;
+  alertas: { tipo: string; detalle: string; nivel: string }[];
+};
+
+/**
+ * Lo que se conserva de `DashboardEnterprise`: producción, bodega y logística.
+ *
+ * Se dejan fuera a propósito los cinco campos de dinero que el endpoint también
+ * devuelve (`ingresosHoy`, `ingresosCobradosHoy`, `gastosHoy`, `utilidadNeta`,
+ * `cuentasPorCobrar`) y `facturasEmitidas`. Esos los calcula mejor
+ * `/api/finanzas/resumen`, y copiarlos acá volvería a abrir la brecha que la
+ * Fase 3 cerró: el mismo número en dos pantallas con dos códigos. También
+ * explica que `desperdiciosHoy` se renombre a 7 días: el campo se llama así
+ * desde antes de que la ventana fuera de 7 días.
+ */
+type SaludNegocio = {
+  cartonesProducidos: number;
+  stockBodegaCentral: number;
+  totalAvesVivas: number;
+  rutasActivas: number;
+  clientesActivos: number;
+  desperdicios7d: number;
+  impactoDesperdicio7d: number;
+};
+
+const OPERATIVO_NUMERICO = [
+  'cartonesProducidos', 'stockBodegaCentral', 'totalAvesVivas', 'rutasActivas',
+  'clientesActivos', 'desperdiciosHoy', 'impactoDesperdicioHoy',
+] as const;
+
+/**
+ * Traduce la respuesta del endpoint al bloque "Salud del negocio".
+ *
+ * Devuelve `null` si falta cualquiera de los siete números, y no los rellena con
+ * ceros: pintar "0 cartones" porque el endpoint vino incompleto es la misma
+ * mentira que pintar "todo en cero" cuando el resumen da 404. Con `null` el
+ * bloque se oculta y el resto de Resumen —que sí tiene los números que deciden—
+ * sigue en pie.
+ */
+const operativoDe = (d: Partial<DashboardEnterprise>): SaludNegocio | null => {
+  if (OPERATIVO_NUMERICO.some(k => typeof d[k] !== 'number' || !Number.isFinite(d[k]))) {
+    return null;
+  }
+  return {
+    cartonesProducidos: d.cartonesProducidos as number,
+    stockBodegaCentral: d.stockBodegaCentral as number,
+    totalAvesVivas: d.totalAvesVivas as number,
+    rutasActivas: d.rutasActivas as number,
+    clientesActivos: d.clientesActivos as number,
+    desperdicios7d: d.desperdiciosHoy as number,
+    impactoDesperdicio7d: d.impactoDesperdicioHoy as number,
+  };
 };
 
 /** Un aviso de la bandeja. `nivel` decide el color, no el orden. */
@@ -133,6 +208,25 @@ const avisosDe = (r: ResumenFinanzas): Aviso[] => {
   return avisos.sort((a, b) => (b.monto ?? -1) - (a.monto ?? -1));
 };
 
+/**
+ * Las alertas que traía la bandeja del Centro de Mando (vacunas y
+ * mantenimientos vencidos, diferencias de recepción) traducidas al mismo formato
+ * que los avisos de dinero.
+ *
+ * Se fusionan en la misma bandeja en vez de vivir aparte por dos razones: eran
+ * dos listas de "cosas que hay que hacer hoy" en dos pantallas que ya no existen
+ * como pantallas separadas, y separarlas obligaba al usuario a recordarlas.
+ * `Crítica` y `Alta` se distinguen por el color, igual que antes.
+ */
+const avisosOperativosDe = (alertas: DashboardEnterprise['alertas']): Aviso[] =>
+  (alertas ?? []).map((a, i) => ({
+    id: `operativo-${i}`,
+    nivel: a.nivel === 'Crítica' ? 'alto' as const : 'medio' as const,
+    titulo: a.tipo,
+    detalle: a.detalle,
+    monto: null,
+  }));
+
 const ESTILO_NIVEL: Record<Aviso['nivel'], { fondo: string; texto: string; punto: string }> = {
   alto: { fondo: 'bg-red-50 dark:bg-red-950/30', texto: 'text-red-800 dark:text-red-300', punto: 'bg-red-500' },
   medio: { fondo: 'bg-amber-50 dark:bg-amber-950/30', texto: 'text-amber-900 dark:text-amber-200', punto: 'bg-amber-500' },
@@ -185,6 +279,8 @@ function Tarjeta({
 
 export default function FinanzasResumen({ currentUser }: { currentUser: User }) {
   const [resumen, setResumen] = useState<ResumenFinanzas | null>(null);
+  const [salud, setSalud] = useState<SaludNegocio | null>(null);
+  const [alertasOperacion, setAlertasOperacion] = useState<DashboardEnterprise['alertas']>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -208,7 +304,27 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
     }
   }, []);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  /**
+   * La operación va en su propia llamada y a su propio estado.
+   *
+   * No se espera a que responda para pintar el P&L: si `/api/dashboard/enterprise`
+   * se cae, Resumen todavía muestra las cinco tarjetas, el ciclo y la cartera,
+   * y solo se pierde "Salud del negocio". Un bloque accesorio no puede tumbar la
+   * pantalla que sí tiene los números que sostienen la decisión.
+   */
+  const cargarOperacion = useCallback(async () => {
+    try {
+      const res = await fetch('/api/dashboard/enterprise');
+      if (!res.ok) return;
+      const datos: Partial<DashboardEnterprise> = await res.json();
+      setSalud(operativoDe(datos));
+      setAlertasOperacion(datos.alertas ?? []);
+    } catch {
+      // Red caída o JSON inválido: se deja el bloque fuera, sin rastro de error.
+    }
+  }, []);
+
+  useEffect(() => { cargar(); cargarOperacion(); }, [cargar, cargarOperacion]);
 
   if (isLoading) {
     return (
@@ -227,7 +343,8 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
     );
   }
 
-  const avisos = avisosDe(resumen);
+  const avisos = [...avisosDe(resumen), ...avisosOperativosDe(alertasOperacion)]
+    .sort((a, b) => (b.monto ?? -1) - (a.monto ?? -1));
   const vencido = resumen.aging.d1_30 + resumen.aging.d31_60 + resumen.aging.d60;
   const enRiesgo = resumen.aging.d31_60 + resumen.aging.d60;
 
@@ -333,39 +450,93 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
           ) : (
             <div className="p-10 text-center">
               <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-              <p className="text-sm text-neutral-600 dark:text-neutral-300 mt-2">Sin cartera vencida y el periodo cierra en positivo.</p>
+              <p className="text-sm text-neutral-600 dark:text-neutral-300 mt-2">Sin cartera vencida, sin alertas de operación y el periodo cierra en positivo.</p>
             </div>
           )}
         </section>
 
-        {/* Composición de la cartera, el bloque que sustituye al dashboard */}
-        <section className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm p-5">
-          <h3 className="font-bold text-neutral-900 dark:text-white mb-1">Salud de la cartera</h3>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4">
-            {fmtCRC(resumen.cuentasPorCobrar)} por cobrar, {fmtCRC(vencido)} vencido.
-          </p>
-          <ul className="space-y-2" data-testid="finanzas-aging">
-            {ETIQUETAS_AGING.map(e => {
-              const monto = resumen.aging[e.id] ?? 0;
-              const pct = resumen.cuentasPorCobrar > 0 ? (monto / resumen.cuentasPorCobrar) * 100 : 0;
-              return (
-                <li key={e.id}>
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="font-bold text-neutral-700 dark:text-neutral-300">{e.label}</span>
-                    <span className="text-neutral-500 dark:text-neutral-400">{fmtCRC(monto)}</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-neutral-100 dark:bg-neutral-700 overflow-hidden">
-                    <div className={`h-full ${ESTILO_NIVEL[e.nivel].punto}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+        {/* Columna derecha: lo que aportaba el Centro de Mando, y la cartera */}
+        <div className="space-y-6">
+          <section
+            className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm p-5"
+            data-testid="finanzas-salud-negocio"
+          >
+            <h3 className="font-bold text-neutral-900 dark:text-white mb-1">Salud del negocio</h3>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4">
+              Producción, bodega y rutas de hoy.
+            </p>
+            {salud ? (
+              <ul className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Cartones', valor: salud.cartonesProducidos, sufijo: 'hoy', icono: Package },
+                  { label: 'Aves vivas', valor: salud.totalAvesVivas, sufijo: 'en producción', icono: Heart },
+                  { label: 'Huevos', valor: salud.stockBodegaCentral, sufijo: 'en bodega central', icono: Egg },
+                  { label: 'Rutas', valor: salud.rutasActivas, sufijo: 'activas', icono: Truck },
+                  { label: 'Clientes', valor: salud.clientesActivos, sufijo: 'activos', icono: Users },
+                  {
+                    label: 'Desperdicios',
+                    valor: salud.desperdicios7d,
+                    sufijo: 'en 7 días',
+                    icono: AlertTriangle,
+                    monto: salud.impactoDesperdicio7d,
+                  },
+                ].map(k => (
+                  <li key={k.label} className="rounded-xl bg-neutral-50 dark:bg-neutral-900/60 p-3">
+                    <div className="flex items-center gap-1.5">
+                      <k.icono className="w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                        {k.label}
+                      </span>
+                    </div>
+                    <p className="text-xl font-black text-neutral-900 dark:text-white mt-1">
+                      {k.valor.toLocaleString('es-CR')}
+                    </p>
+                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{k.sufijo}</p>
+                    {k.monto != null && k.monto > 0 && (
+                      <p className="text-[11px] font-bold text-red-600 dark:text-red-400 mt-1">
+                        {fmtCRC(k.monto)} de impacto
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 py-4" data-testid="finanzas-salud-negocio-no-disponible">
+                No se pudo cargar la operación de hoy. Las cifras de arriba siguen
+                siendo las de `/api/finanzas/resumen`.
+              </p>
+            )}
+          </section>
+
+          <section className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm p-5">
+            <h3 className="font-bold text-neutral-900 dark:text-white mb-1">Salud de la cartera</h3>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4">
+              {fmtCRC(resumen.cuentasPorCobrar)} por cobrar, {fmtCRC(vencido)} vencido.
+            </p>
+            <ul className="space-y-2" data-testid="finanzas-aging">
+              {ETIQUETAS_AGING.map(e => {
+                const monto = resumen.aging[e.id] ?? 0;
+                const pct = resumen.cuentasPorCobrar > 0 ? (monto / resumen.cuentasPorCobrar) * 100 : 0;
+                return (
+                  <li key={e.id}>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="font-bold text-neutral-700 dark:text-neutral-300">{e.label}</span>
+                      <span className="text-neutral-500 dark:text-neutral-400">{fmtCRC(monto)}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-neutral-100 dark:bg-neutral-700 overflow-hidden">
+                      <div className={`h-full ${ESTILO_NIVEL[e.nivel].punto}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        </div>
       </div>
 
       <p className="text-[11px] text-neutral-400 dark:text-neutral-500">
-        Actualizado por {currentUser.name} · cifras de `/api/finanzas/resumen`, la fuente única del P&L.
+        Actualizado por {currentUser.name} · dinero de `/api/finanzas/resumen` (fuente única del
+        P&L) y operación de `/api/dashboard/enterprise`.
       </p>
     </div>
   );

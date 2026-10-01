@@ -20,7 +20,6 @@ import IncidentesMovil from "./components/IncidentesMovil";
 import FinanzasResumen from "./components/FinanzasResumen";
 import Etiquetas from "./components/Etiquetas";
 import Pesos from "./components/Pesos";
-import DashboardEnterprise from "./components/DashboardEnterprise";
 import SaludAvicola from "./components/SaludAvicola";
 import Alimento from "./components/Alimento";
 import Mantenimiento from "./components/Mantenimiento";
@@ -664,10 +663,6 @@ const nuevoItems = useMemo(() => {
               </div>
             );
           })()}
-          {activeTab === 'dashboard' && (
-            <DashboardEnterprise currentUser={currentUser} />
-          )}
-
           {activeTab === 'granja' && (
             <div className="space-y-6">
               {renderFilaTabs(subTabsDe('granja', userRoles), 'primario')}

@@ -6,7 +6,7 @@
  * `environment: node`, sin arrastrar React a los tests de configuración.
  */
 import {
-  LayoutDashboard, DollarSign, Egg, Settings, Mail, PackageOpen, Truck, Users,
+  DollarSign, Egg, Settings, Mail, PackageOpen, Truck, Users,
   ClipboardList, CreditCard, Tag, FileText, BarChart3, TrendingUp, Receipt,
   CreditCard as CreditCardAlt, Scale, PiggyBank,
   type LucideIcon,
@@ -14,7 +14,6 @@ import {
 import type { IconName } from './modulos';
 
 const ICONOS: Record<IconName, LucideIcon> = {
-  LayoutDashboard,
   DollarSign,
   Egg,
   Settings,
