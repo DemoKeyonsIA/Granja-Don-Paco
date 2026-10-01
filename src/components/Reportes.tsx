@@ -1,13 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, Package, AlertTriangle, DollarSign, Loader2, Calendar } from 'lucide-react';
+import { Loader2, ArrowRight } from 'lucide-react';
 import { User } from '../types';
-import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { fmtCRC } from '../lib/finanzas';
+import type { TipoReporte } from '../nav/modulos';
 
-type ReporteTipo = 'ventas-por-ruta' | 'produccion' | 'inventario' | 'desperdicios' | 'financiero';
-
-export default function Reportes({ currentUser }: { currentUser: User }) {
-  const [reporteActivo, setReporteActivo] = useState<ReporteTipo>('financiero');
+/**
+ * Sub-fila de Analítica: los seis reportes.
+ *
+ * El tipo activo y su navegación bajan de `App.tsx` como prop. Antes eran un
+ * `useState` local y una fila de tabs propia: eso dejaba el reporte visible sin
+ * tab que lo seleccionara, que es el bug 2 del plan en otra forma. Ahora quien
+ * navega es el shell, que también sabe qué roles ven esta pantalla.
+ */
+export default function Reportes({
+  currentUser,
+  tipo,
+}: {
+  currentUser: User;
+  tipo: TipoReporte;
+}) {
+  const reporteActivo = tipo;
   const [datos, setDatos] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [fechaInicio, setFechaInicio] = useState('');
@@ -42,14 +55,6 @@ export default function Reportes({ currentUser }: { currentUser: User }) {
     setLoading(false);
   };
 
-  const tabs: { id: ReporteTipo; label: string; icon: any }[] = [
-    { id: 'financiero', label: 'Financiero', icon: DollarSign },
-    { id: 'ventas-por-ruta', label: 'Ventas por Ruta', icon: TrendingUp },
-    { id: 'produccion', label: 'Producción', icon: BarChart3 },
-    { id: 'inventario', label: 'Inventario', icon: Package },
-    { id: 'desperdicios', label: 'Desperdicios', icon: AlertTriangle },
-  ];
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -61,21 +66,6 @@ export default function Reportes({ currentUser }: { currentUser: User }) {
           <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)}
             className="px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white" />
         </div>
-      </div>
-
-      <div className="flex border-b border-neutral-200 dark:border-neutral-700 space-x-6 overflow-x-auto">
-        {tabs.map(t => {
-          const Icon = t.icon;
-          return (
-            <button key={t.id} onClick={() => setReporteActivo(t.id)}
-              className={`pb-3 text-sm font-bold flex items-center space-x-2 whitespace-nowrap border-b-2 transition-colors ${
-                reporteActivo === t.id ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400' : 'text-neutral-500 dark:text-neutral-400 border-transparent hover:text-neutral-800 dark:hover:text-white'
-              }`}>
-              <Icon className="w-4 h-4" />
-              <span>{t.label}</span>
-            </button>
-          );
-        })}
       </div>
 
       {loading ? (
@@ -91,6 +81,7 @@ export default function Reportes({ currentUser }: { currentUser: User }) {
           {reporteActivo === 'produccion' && <ReporteProduccion data={datos} />}
           {reporteActivo === 'inventario' && <ReporteInventario data={datos} />}
           {reporteActivo === 'desperdicios' && <ReporteDesperdicios data={datos} />}
+          {reporteActivo === 'flujo-caja' && <ReporteFlujoCaja data={datos} />}
         </div>
       )}
     </div>
@@ -131,6 +122,76 @@ function ReporteFinanciero({ data }: { data: any }) {
               <div key={cat} className="flex items-center justify-between">
                 <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">{cat}</span>
                 <span className="text-sm font-bold text-neutral-800 dark:text-white">₡{Number(monto).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Flujo de caja: el recorrido del dinero etapa por etapa.
+ *
+ * Se alimenta de `/api/finanzas/resumen`, no de `/api/reportes/financiero`:
+ * el ciclo del dinero es devengado arriba y cobrado abajo, y el reporte
+ * financiero legacy solo conoce el total de todo el historial.
+ */
+function ReporteFlujoCaja({ data }: { data: any }) {
+  const ciclo: { etapa: string; etiqueta: string; monto: number }[] = data?.cicloDelDinero ?? [];
+  const gastos = (data?.gastosPorCategoria ?? []) as { categoria: string; monto: number }[];
+  const totalGastos = Number(data?.gastos || 0);
+  const cobrado = Number(data?.ingresosCobrados || 0);
+  // Caja es efectivo: lo que entró menos lo que salió. No se deriva de la
+  // utilidad devengada, porque esa todavía incluye lo que no se cobró.
+  const caja = cobrado - totalGastos;
+
+  if (ciclo.length === 0 && gastos.length === 0) {
+    return <div className="text-center py-10 text-neutral-400 dark:text-neutral-500">No hay movimientos en el periodo</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPI label="Facturado" value={fmtCRC(data?.ingresosFacturados)} color="green" />
+        <KPI label="Cobrado" value={fmtCRC(cobrado)} color="blue" />
+        <KPI label="Por cobrar" value={fmtCRC(data?.cuentasPorCobrar)} color="yellow" />
+        <KPI label="Caja del periodo" value={fmtCRC(caja)} color={caja >= 0 ? 'green' : 'red'} />
+      </div>
+
+      <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 p-6">
+        <h3 className="font-bold text-neutral-800 dark:text-white mb-4">Del mostrador al resultado</h3>
+        <ol className="space-y-2">
+          {ciclo.map((n, i) => (
+            <li key={n.etapa} className="flex items-center justify-between gap-3 py-1.5">
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black text-white" style={{ background: 'var(--brand-primary)' }}>{i + 1}</span>
+                <ArrowRight className="w-3.5 h-3.5 shrink-0 text-neutral-400" />
+                <span className="text-sm text-neutral-700 dark:text-neutral-300 truncate">{n.etapa.replace(/_/g, ' ')}</span>
+              </span>
+              <span className="text-sm font-bold text-neutral-900 dark:text-white shrink-0">{fmtCRC(n.monto)}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      {gastos.length > 0 && (
+        <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 p-6">
+          <h3 className="font-bold text-neutral-800 dark:text-white mb-4">Dónde se fue la plata</h3>
+          <div className="space-y-3">
+            {gastos.map(g => (
+              <div key={g.categoria}>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="font-medium text-neutral-600 dark:text-neutral-400">{g.categoria}</span>
+                  <span className="font-bold text-neutral-800 dark:text-white">{fmtCRC(g.monto)}</span>
+                </div>
+                <div className="h-2 rounded-full bg-neutral-100 dark:bg-neutral-700 overflow-hidden">
+                  <div
+                    className="h-full bg-red-500"
+                    style={{ width: `${totalGastos > 0 ? Math.min((g.monto / totalGastos) * 100, 100) : 0}%` }}
+                  />
+                </div>
               </div>
             ))}
           </div>

@@ -24,7 +24,7 @@ import type { Role, User } from '../../src/types';
  */
 const MODULOS_APLICACION = [
   'Login', 'Clientes', 'Facturacion', 'Logistica', 'CajaRuta', 'TableroRutas',
-  'Cobranza', 'Granjas', 'Finanzas', 'Etiquetas', 'Pesos', 'DashboardEnterprise',
+  'Cobranza', 'Granjas', 'FinanzasResumen', 'Etiquetas', 'Pesos', 'DashboardEnterprise',
   'SaludAvicola', 'Alimento', 'Mantenimiento', 'Precios', 'Admin', 'Office',
   'Reportes',
   'operaciones', 'operaciones/BodegaAdmin',
@@ -130,9 +130,12 @@ describe('sidebar por rol', () => {
     expect(modulosDelSidebar()).toEqual(['Centro de Mando', 'Finanzas', 'Office']);
   });
 
-  it('Comercial ve Office, Operaciones, Logística y Clientes', () => {
+  it('Comercial ve Finanzas, Office, Operaciones, Logística y Clientes', () => {
+    // Fase 4: el Comercial entra a Finanzas para facturar y consultar analítica.
     renderComo('Comercial');
-    expect(modulosDelSidebar()).toEqual(['Office', 'Operaciones y Bodegas', 'Logística', 'Clientes']);
+    expect(modulosDelSidebar()).toEqual([
+      'Finanzas', 'Office', 'Operaciones y Bodegas', 'Logística', 'Clientes',
+    ]);
   });
 
   it('un Bodeguero solo ve su módulo móvil, con etiqueta propia', () => {
@@ -187,18 +190,25 @@ describe('módulo de entrada por defecto', () => {
 });
 
 describe('tabs de Finanzas', () => {
-  it('Admin ve Flujo, Cobranza y Reportes con Flujo activo', async () => {
+  it('Admin ve los 4 tabs con Resumen activo', async () => {
     renderComo('Admin');
     await abrirModulo('Finanzas');
-    expect(idsDeTabs()).toEqual(['flujo', 'cobranza', 'reportes']);
-    expect(tabsActivos()).toEqual(['flujo']);
+    expect(idsDeTabs()).toEqual(['resumen', 'documentos', 'cobranza', 'analitica']);
+    expect(tabsActivos()).toEqual(['resumen']);
   });
 
-  it('Socio solo ve Reportes y lo tiene activo por defecto', async () => {
+  it('Socio ve Resumen + Analítica', async () => {
     renderComo('Socio');
     await abrirModulo('Finanzas');
-    expect(idsDeTabs()).toEqual(['reportes']);
-    expect(tabsActivos()).toEqual(['reportes']);
+    expect(idsDeTabs()).toEqual(['resumen', 'analitica']);
+    expect(tabsActivos()).toEqual(['resumen']);
+  });
+
+  it('Comercial ve Documentos + Analítica y entra en Documentos', async () => {
+    renderComo('Comercial');
+    await abrirModulo('Finanzas');
+    expect(idsDeTabs()).toEqual(['documentos', 'analitica']);
+    expect(tabsActivos()).toEqual(['documentos']);
   });
 
   it('cambiar de tab marca solo ese tab como activo', async () => {
@@ -208,16 +218,68 @@ describe('tabs de Finanzas', () => {
     await user.click(document.querySelector('[data-tab-id="cobranza"]')!);
     expect(tabsActivos()).toEqual(['cobranza']);
   });
+
+  // El reseteo por cambio de módulo no puede pisar una sub-vista elegida a mano: la
+  // búsqueda dice a dónde ir, y mandar a otro lado deja el texto buscado a la
+  // vista con el resultado en otra pantalla.
+  it('buscar "factura" lleva a Documentos y no al tab inicial del módulo', async () => {
+    const user = userEvent.setup();
+    renderComo('Admin');
+    await abrirModulo('Granja');
+    await user.type(screen.getByRole('textbox'), 'factura');
+    await user.keyboard('{Enter}');
+    expect(idsDeTabs()).toEqual(['resumen', 'documentos', 'cobranza', 'analitica']);
+    expect(tabsActivos()).toEqual(['documentos']);
+  });
+
+  it('buscar "flujo de caja" abre Analítica en el reporte, no un tab vacío', async () => {
+    const user = userEvent.setup();
+    renderComo('Admin');
+    await abrirModulo('Granja');
+    await user.type(screen.getByRole('textbox'), 'flujo de caja');
+    await user.keyboard('{Enter}');
+    expect(
+      Array.from(document.querySelectorAll('[data-banda="primario"] [data-tab-id]'))
+        .filter(el => el.getAttribute('aria-current') === 'page')
+        .map(el => el.getAttribute('data-tab-id')),
+    ).toEqual(['analitica']);
+    expect(
+      Array.from(document.querySelectorAll('[data-banda="secundario"] [data-tab-id]'))
+        .filter(el => el.getAttribute('aria-current') === 'page')
+        .map(el => el.getAttribute('data-tab-id')),
+    ).toEqual(['reporte:flujo-caja']);
+  });
+
+  it('un Socio que busca "factura" aterriza en un tab que sí ve', async () => {
+    const user = userEvent.setup();
+    renderComo('Socio');
+    await abrirModulo('Office');
+    await user.type(screen.getByRole('textbox'), 'factura');
+    await user.keyboard('{Enter}');
+    expect(idsDeTabs()).toEqual(['resumen', 'analitica']);
+    expect(tabsActivos()).toEqual(['resumen']);
+  });
+
+  it('volver a un módulo después de una búsqueda reinicia en su tab por defecto', async () => {
+    const user = userEvent.setup();
+    renderComo('Admin');
+    await user.type(screen.getByRole('textbox'), 'factura');
+    await user.keyboard('{Enter}');
+    expect(tabsActivos()).toEqual(['documentos']);
+    await abrirModulo('Logística');
+    await abrirModulo('Finanzas');
+    expect(tabsActivos()).toEqual(['resumen']);
+  });
 });
 
 describe('tabs de Logística', () => {
   it('Admin ve las tres bandas', async () => {
     renderComo('Admin');
     await abrirModulo('Logística');
-    expect(bandasDeTabs()).toEqual(['primario', 'secundario', 'terciario']);
+    expect(bandasDeTabs()).toEqual(['primario', 'terciario']);
     expect(idsDeTabs()).toEqual([
       'logistica', 'guias', 'remisiones', 'caja', 'tablero',
-      'facturacion', 'etiquetas', 'pesos', 'precios',
+      'etiquetas', 'pesos', 'precios',
     ]);
   });
 
@@ -227,18 +289,19 @@ describe('tabs de Logística', () => {
     expect(tabsActivos()).toEqual(['logistica']);
   });
 
-  it('Comercial ve dos bandas: sin configuración', async () => {
+  it('Comercial ve una sola banda: sin configuración ni facturación', async () => {
     renderComo('Comercial');
     await abrirModulo('Logística');
-    expect(bandasDeTabs()).toEqual(['primario', 'secundario']);
-    expect(idsDeTabs()).toEqual(['logistica', 'guias', 'remisiones', 'caja', 'tablero', 'facturacion']);
+    expect(bandasDeTabs()).toEqual(['primario']);
+    expect(idsDeTabs()).toEqual(['logistica', 'guias', 'remisiones', 'caja', 'tablero']);
   });
 
   it('las etiquetas coinciden con el modelo del boceto', async () => {
     renderComo('Admin');
     await abrirModulo('Logística');
-    expect(etiquetasDeTabs()).toContain('Facturación');
     expect(etiquetasDeTabs()).toContain('Control Pesos');
+    // Facturación ya no es etiqueta de Logística: vive en Finanzas → Documentos.
+    expect(etiquetasDeTabs()).not.toContain('Facturación');
   });
 });
 
@@ -311,7 +374,7 @@ describe('breadcrumbs', () => {
   it('Finanzas muestra módulo y tab activo en el breadcrumb', async () => {
     renderComo('Admin');
     await abrirModulo('Finanzas');
-    expect(breadcrumb()).toEqual(['Finanzas', 'Flujo de Caja']);
+    expect(breadcrumb()).toEqual(['Finanzas', 'Resumen']);
   });
 
   it('el breadcrumb sigue al tab que se elige', async () => {
@@ -319,7 +382,7 @@ describe('breadcrumbs', () => {
     renderComo('Admin');
     await abrirModulo('Finanzas');
     await user.click(document.querySelector('[data-tab-id="cobranza"]')!);
-    expect(breadcrumb()).toEqual(['Finanzas', 'Cuentas por Cobrar']);
+    expect(breadcrumb()).toEqual(['Finanzas', 'Cobranza']);
   });
 
   it('el hub de Operaciones no muestra el sub-tab en el breadcrumb', async () => {

@@ -14,6 +14,7 @@ import type { Role } from '../src/types';
 import {
   MODULOS, ROLES_MOVIL, ESPACIOS_OFFICE,
   SUBTABS_GRANJA, SUBTABS_ADMIN, SUBTABS_FINANZAS, SUBTABS_LOGISTICA,
+  SUBTABS_ANALITICA, TIPOS_REPORTE, idSubTabReporte, tipoReporteDe, subTabsInternosDe,
   rolesEfectivos, modulosVisibles, moduloPorId, labelDeModulo, moduloPorDefecto,
   subTabsDe, subTabsLogisticaDe, subTabPorDefecto, subTabsOperacionesMovil,
   subTabMovilEfectivo, breadcrumbDe, esRolMovil, validarConfig, INCIDENCIAS_CONOCIDAS,
@@ -95,8 +96,10 @@ describe('sidebar por rol', () => {
     }
   });
 
-  it('Comercial ve Office, Operaciones, Logística y Clientes', () => {
-    expect(idsModulos(['Comercial'])).toEqual(['office', 'operaciones', 'logistica', 'clientes']);
+  it('Comercial ve Finanzas, Office, Operaciones, Logística y Clientes', () => {
+    expect(idsModulos(['Comercial'])).toEqual([
+      'finanzas', 'office', 'operaciones', 'logistica', 'clientes',
+    ]);
   });
 
   it('Bodeguero solo ve Operaciones', () => {
@@ -113,7 +116,7 @@ describe('sidebar por rol', () => {
 
   it('un usuario con varios roles ve la unión', () => {
     expect(idsModulos(['Bodeguero', 'Comercial'])).toEqual([
-      'office', 'operaciones', 'logistica', 'clientes',
+      'finanzas', 'office', 'operaciones', 'logistica', 'clientes',
     ]);
   });
 });
@@ -171,24 +174,75 @@ describe('sub-tabs por módulo y rol', () => {
     expect(idsModulos(['Socio'])).not.toContain('granja');
   });
 
-  it('Finanzas muestra Flujo y Cobranza solo a Admin', () => {
-    expect(ids(subTabsDe('finanzas', ['Admin']))).toEqual(['flujo', 'cobranza', 'reportes']);
-    expect(ids(subTabsDe('finanzas', ['Socio']))).toEqual(['reportes']);
+  it('Finanzas es Resumen · Documentos · Cobranza · Analítica con matriz por rol', () => {
+    expect(ids(subTabsDe('finanzas', ['Admin']))).toEqual(['resumen', 'documentos', 'cobranza', 'analitica']);
+    expect(ids(subTabsDe('finanzas', ['Socio']))).toEqual(['resumen', 'analitica']);
+    expect(ids(subTabsDe('finanzas', ['Comercial']))).toEqual(['documentos', 'analitica']);
   });
 
   it('el tab por defecto de Finanzas es siempre visible para el rol', () => {
-    // Bug 2 corregido en Fase 1: un Socio entraba con `flujo`, que solo ve
-    // Admin, y veía el P&L del Flujo de Caja bajo un tab no seleccionado.
-    for (const rol of ['Admin', 'Socio'] as Role[]) {
+    // Bug 2 corregido en Fase 1 y generalized en Fase 4: cada rol aterriza en
+    // el primer tab que puede ver, nunca en uno ajeno.
+    for (const rol of ['Admin', 'Socio', 'Comercial'] as Role[]) {
       const visibles = ids(subTabsDe('finanzas', [rol]));
       expect(visibles, rol).toContain(subTabPorDefecto('finanzas', [rol]));
     }
-    expect(subTabPorDefecto('finanzas', ['Admin'])).toBe('flujo');
-    expect(subTabPorDefecto('finanzas', ['Socio'])).toBe('reportes');
+    expect(subTabPorDefecto('finanzas', ['Admin'])).toBe('resumen');
+    expect(subTabPorDefecto('finanzas', ['Socio'])).toBe('resumen');
+    expect(subTabPorDefecto('finanzas', ['Comercial'])).toBe('documentos');
   });
 
-  it('Comercial no ve Finanzas todavía', () => {
-    expect(idsModulos(['Comercial'])).not.toContain('finanzas');
+  it('Comercial entra a Finanzas por Documentos', () => {
+    expect(idsModulos(['Comercial'])).toContain('finanzas');
+  });
+
+  // La sub-fila de Analítica se resuelve por dos caminos distintos según dónde
+  // esté el sub-tab activo. Antes solo reconocía `analitica`, así que al elegir
+  // un reporte la fila desaparecía y no había forma de cambiar de reporte.
+  it('la sub-fila de Analítica aparece con el tab y también con un tipo de reporte', () => {
+    expect(ids(subTabsInternosDe('finanzas', 'analitica'))).toEqual([
+      'reporte:financiero', 'reporte:flujo-caja', 'reporte:ventas-por-ruta',
+      'reporte:produccion', 'reporte:inventario', 'reporte:desperdicios',
+    ]);
+    for (const tipo of TIPOS_REPORTE) {
+      expect(ids(subTabsInternosDe('finanzas', idSubTabReporte(tipo.id))), tipo.id).toHaveLength(6);
+    }
+  });
+
+  it('ningún otro tab pide una sub-fila', () => {
+    for (const subTab of ['resumen', 'documentos', 'cobranza', '', 'inventario']) {
+      expect(subTabsInternosDe('finanzas', subTab), subTab).toEqual([]);
+    }
+    expect(subTabsInternosDe('logistica', 'guias')).toEqual([]);
+    expect(subTabsInternosDe('office', 'documentos')).toEqual([]);
+  });
+
+  it('el prefijo reporte: mantiene los ids de Analítica separados de los tabs', () => {
+    // Sin prefijo, un tipo de reporte colisionaría con un tab y `subTab` dejaría
+    // de saber cuál de los dos está activo.
+    expect(idSubTabReporte('financiero')).toBe('reporte:financiero');
+    expect(SUBTABS_FINANZAS.some(t => t.id.startsWith('reporte:'))).toBe(false);
+    expect(tipoReporteDe('reporte:flujo-caja')).toBe('flujo-caja');
+  });
+
+  it('tipoReporteDe rechaza cualquier cosa que no sea un tipo de reporte', () => {
+    for (const faux of ['resumen', 'analitica', 'reporte:', 'reporte:inventario-2', 'guias', '']) {
+      expect(tipoReporteDe(faux), faux).toBeNull();
+    }
+  });
+
+  it('los seis tipos de reporte tienen etiqueta y son únicos', () => {
+    expect(TIPOS_REPORTE.map(t => t.label)).toEqual([
+      'Financiero', 'Flujo de Caja', 'Ventas por Ruta', 'Producción', 'Inventario', 'Desperdicios',
+    ]);
+    expect(new Set(TIPOS_REPORTE.map(t => t.id)).size).toBe(TIPOS_REPORTE.length);
+  });
+
+  it('la sub-fila de Analítica lleva el breadcrumb del tab que la contiene', () => {
+    for (const t of SUBTABS_ANALITICA) {
+      expect(t.breadcrumb, t.id).toBe('Analítica');
+    }
+    expect(breadcrumbDe('finanzas', 'reporte:inventario', ['Admin'])).toEqual(['Finanzas', 'Analítica']);
   });
 
   it('Admin ve los 4 tabs de Admin', () => {
@@ -199,19 +253,21 @@ describe('sub-tabs por módulo y rol', () => {
     expect(ids(ESPACIOS_OFFICE)).toEqual(['correo', 'documentos']);
   });
 
-  it('Logística separa tres bandas', () => {
+  it('Logística separa bandas y ya no tiene banda admin', () => {
+    // Fase 4: el tab `facturacion` salió de Logística. Documentos, en Finanzas,
+    // es la única ruta a la facturación.
     const visibles = subTabsLogisticaDe(['Admin']);
     expect(visibles.filter(t => t.banda === 'nucleo').map(t => t.id))
       .toEqual(['logistica', 'guias', 'remisiones', 'caja', 'tablero']);
-    expect(visibles.filter(t => t.banda === 'admin').map(t => t.id)).toEqual(['facturacion']);
+    expect(visibles.filter(t => t.banda === 'admin')).toEqual([]);
     expect(visibles.filter(t => t.banda === 'config').map(t => t.id))
       .toEqual(['etiquetas', 'pesos', 'precios']);
   });
 
-  it('Comercial ve Facturación pero no la configuración', () => {
+  it('Comercial ve el núcleo de Logística pero no la configuración', () => {
     const visibles = subTabsLogisticaDe(['Comercial']);
     const porBanda = (b: string) => visibles.filter(t => t.banda === b).map(t => t.id);
-    expect(porBanda('admin')).toEqual(['facturacion']);
+    expect(porBanda('admin')).toEqual([]);
     expect(porBanda('config')).toEqual([]);
   });
 
@@ -243,13 +299,13 @@ describe('sub-tab por defecto', () => {
     expect(subTabPorDefecto('operaciones', ['Admin'])).toBe('produccion');
   });
 
-  it('solo Admin respeta el flag manual', () => {
-    expect(subTabPorDefecto('admin', ['Admin'], true)).toBe('');
-    expect(subTabPorDefecto('admin', ['Admin'], false)).toBe('productos');
-    // El resto de módulos lo ignoraban antes de esta extracción; la Fase 1
-    // lo corrige para que el menú "Nuevo" pueda abrir Guías y Facturación.
-    expect(subTabPorDefecto('logistica', ['Admin'], true)).toBe('logistica');
-    expect(subTabPorDefecto('finanzas', ['Admin'], true)).toBe('flujo');
+  it('el default de cada módulo no depende de cómo se llegó', () => {
+    // Ya no hay flag `manual`: el shell salta el reseteo cuando la sub-vista se
+    // eligió a mano, así que el default es siempre el mismo.
+    expect(subTabPorDefecto('admin', ['Admin'])).toBe('productos');
+    expect(subTabPorDefecto('logistica', ['Admin'])).toBe('logistica');
+    expect(subTabPorDefecto('finanzas', ['Admin'])).toBe('resumen');
+    expect(subTabPorDefecto('finanzas', ['Comercial'])).toBe('documentos');
   });
 });
 
@@ -292,7 +348,7 @@ describe('breadcrumb', () => {
   });
 
   it('muestra módulo y sub-tab', () => {
-    expect(breadcrumbDe('finanzas', 'cobranza', ['Admin'])).toEqual(['Finanzas', 'Cuentas por Cobrar']);
+    expect(breadcrumbDe('finanzas', 'cobranza', ['Admin'])).toEqual(['Finanzas', 'Cobranza']);
     expect(breadcrumbDe('logistica', 'guias', ['Admin'])).toEqual(['Logística', 'Guías y Camiones']);
     expect(breadcrumbDe('granja', 'salud', ['Admin'])).toEqual(['Granja', 'Salud Avícola']);
     expect(breadcrumbDe('admin', 'infraestructura', ['Admin'])).toEqual(['Admin', 'Infraestructura']);

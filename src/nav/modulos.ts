@@ -60,7 +60,7 @@ export const MODULOS: ModuloDef[] = [
     id: 'finanzas',
     label: 'Finanzas',
     icon: 'DollarSign',
-    roles: ['Admin', 'Socio'],
+    roles: ['Admin', 'Socio', 'Comercial'],
   },
   {
     id: 'granja',
@@ -153,9 +153,10 @@ export const SUBTABS_LOGISTICA: Record<BandaLogistica, SubTabLogisticaDef[]> = {
     { id: 'caja', label: 'Caja Ruta', banda: 'nucleo' },
     { id: 'tablero', label: 'Tablero Vivo', banda: 'nucleo' },
   ],
-  admin: [
-    { id: 'facturacion', label: 'Facturación', roles: ['Admin', 'Comercial'], banda: 'admin' },
-  ],
+  // El tab `facturacion` que vivía acá se elimina: Facturación es ahora el tab
+  // Documentos de Finanzas, y dejarlo aquí le daba a Logística una segunda
+  // puerta a la misma pantalla con dos rutas de navegación distintas.
+  admin: [],
   config: [
     { id: 'etiquetas', label: 'Etiquetas QR', roles: ['Admin'], banda: 'config' },
     { id: 'pesos', label: 'Control Pesos', roles: ['Admin'], banda: 'config' },
@@ -184,19 +185,83 @@ export const SUBTABS_ADMIN: SubTabDef[] = [
   { id: 'vinculaciones', label: 'Vinculaciones' },
 ];
 
-/** Sub-tabs de Finanzas. `roles` decide quién ve cada tab. */
+/**
+ * Sub-tabs de Finanzas: Resumen · Documentos · Cobranza · Analítica.
+ *
+ * La matriz por rol es explícita y no se deriva de "si no tiene `roles`, lo ve
+ * todo", porque ese default ya causó el bug 2 del plan: un Comercial sin filtro
+ * heredaba un tab que no tenía seleccionado y veía contenido de otro.
+ *
+ *   Admin    → los 4
+ *   Socio    → Resumen + Analítica
+ *   Comercial→ Documentos + Analítica
+ *
+ * El Comercial entra al módulo (decisión del boceto): Documentos es donde
+ * factura y la Analítica es donde mira cómo va el negocio, sin exponerle el
+ * P&L completo ni la cartera de todos los clientes.
+ */
 export const SUBTABS_FINANZAS: SubTabDef[] = [
-  { id: 'flujo', label: 'Flujo de Caja', roles: ['Admin'] },
-  { id: 'cobranza', label: 'Cuentas por Cobrar', roles: ['Admin'] },
-  { id: 'reportes', label: 'Reportes' },
+  { id: 'resumen', label: 'Resumen', roles: ['Admin', 'Socio'] },
+  { id: 'documentos', label: 'Documentos', roles: ['Admin', 'Comercial'] },
+  { id: 'cobranza', label: 'Cobranza', roles: ['Admin'] },
+  { id: 'analitica', label: 'Analítica', roles: ['Admin', 'Socio', 'Comercial'] },
 ];
+
+/**
+ * Tipos de reporte de la sub-fila de Analítica.
+ *
+ * `flujo-caja` es nuevo: el ciclo del dinero de `/api/finanzas/resumen` ya está
+ * calculado y sin pantalla que lo muestre.
+ */
+export type TipoReporte =
+  | 'financiero'
+  | 'flujo-caja'
+  | 'ventas-por-ruta'
+  | 'produccion'
+  | 'inventario'
+  | 'desperdicios';
+
+export const TIPOS_REPORTE: { id: TipoReporte; label: string }[] = [
+  { id: 'financiero', label: 'Financiero' },
+  { id: 'flujo-caja', label: 'Flujo de Caja' },
+  { id: 'ventas-por-ruta', label: 'Ventas por Ruta' },
+  { id: 'produccion', label: 'Producción' },
+  { id: 'inventario', label: 'Inventario' },
+  { id: 'desperdicios', label: 'Desperdicios' },
+];
+
+/**
+ * Sub-fila de Analítica: los seis tipos de reporte.
+ *
+ * Los ids llevan el prefijo `reporte:` porque comparten el espacio de `subTab`
+ * con los tabs del módulo. Así el tipo activo vive en el mismo lugar que el tab
+ * activo y el breadcrumb puede leerlo, en vez de en un `useState` que se
+ * desincroniza al cambiar de rol o de módulo.
+ */
+export const PREFIJO_REPORTE = 'reporte:';
+
+export const idSubTabReporte = (tipo: TipoReporte): string => `${PREFIJO_REPORTE}${tipo}`;
+
+export const tipoReporteDe = (idSubTab: string): TipoReporte | null => {
+  if (!idSubTab.startsWith(PREFIJO_REPORTE)) return null;
+  const tipo = idSubTab.slice(PREFIJO_REPORTE.length) as TipoReporte;
+  return TIPOS_REPORTE.some(t => t.id === tipo) ? tipo : null;
+};
+
+/** Sub-tabs de Analítica, derivados de los tipos de reporte. */
+export const SUBTABS_ANALITICA: SubTabDef[] = TIPOS_REPORTE.map(t => ({
+  id: idSubTabReporte(t.id),
+  label: t.label,
+  // El breadcrumb muestra el módulo y el tab (Analítica); el tipo de reporte se
+  // muestra en la propia fila, que ya lo dice.
+  breadcrumb: 'Analítica',
+}));
 
 /**
  * Espacios de Office.
  *
  * El boceto de Office tiene un tercer espacio, Vinculaciones, que hoy vive en
- * `admin`. Se suma en la Fase 6, cuando se mueva: declararlo antes haría que
- * el invariante viera un tab duplicado.
+ * `admin`. Se suma en la Fase 6, cuando se mueva.
  */
 export const ESPACIOS_OFFICE: SubTabDef[] = [
   { id: 'correo', label: 'Correo' },
@@ -289,27 +354,48 @@ export const subTabsDe = (id: ModuleId, roles: Role[]): SubTabDef[] => {
 };
 
 /**
+ * Sub-fila de un tab: los tipos de reporte cuando el tab es Analítica.
+ *
+ * Cualquier otro tab no tiene sub-fila, y por eso no se pide una fila vacía.
+ *
+ * La fila se resuelve también cuando el sub-tab activo ya es un tipo de reporte
+ * (`reporte:financiero`), no solo cuando vale `analitica`: al elegir un reporte
+ * el sub-tab pasa a ser el reporte, y si aquí no lo reconociera la fila
+ * desaparecería justo en el momento en que el usuario la necesita para cambiar
+ * de reporte.
+ */
+export const subTabsInternosDe = (id: ModuleId, subTab: string): SubTabDef[] => {
+  if (id === 'finanzas' && (subTab === 'analitica' || tipoReporteDe(subTab) !== null)) {
+    return SUBTABS_ANALITICA;
+  }
+  return [];
+};
+
+/**
  * Sub-tab activo por defecto al entrar a un módulo.
  *
  * Reproduce exactamente la lógica que estaba hardcodeada en el `useEffect` de
- * `AppLayout`, incluidos sus defectos: el flag `manual` solo se respeta en
- * `admin`, que es el único módulo que lo consultaba. Corregir el resto (el menú
- * "Nuevo" no lograba abrir Guías ni Facturación al cambiar de módulo) es la
- * Fase 1, no esta extracción.
+ * `AppLayout`. No recibe el flag `manual` que tenía antes: en la Fase 4 ese flag
+ * ya no decide nada aquí, porque el `useEffect` del shell salta el reseteo por
+ * completo cuando la sub-vista se eligió a mano (búsqueda o menú "+ Nuevo"). Un
+ * parámetro que solo un módulo consultaba hacía parecer que los demás lo
+ * respetaban.
  */
-export const subTabPorDefecto = (id: ModuleId, roles: Role[], manual = false): string => {
+export const subTabPorDefecto = (id: ModuleId, roles: Role[]): string => {
   if (id === 'logistica') {
     // Comercial arranca en Caja Ruta; el resto en Logística.
     return roles.includes('Comercial') && !roles.includes('Admin') ? 'caja' : 'logistica';
   }
   if (id === 'finanzas') {
-    // Solo Admin ve `flujo`/`cobranza`; un Socio solo tiene `reportes`, así que
-    // "flujo" lo dejaba viendo el P&L del Flujo de Caja bajo un tab que no
-    // tenía seleccionado. Bug 2 del plan, corregido en Fase 1.
-    return roles.includes('Admin') ? 'flujo' : 'reportes';
+    // Todo rol que entra a Finanzas aterriza en el primer tab que puede ver.
+    // Generaliza la corrección del bug 2: antes devolvía `'flujo'` o
+    // `'reportes'` a mano, y si ese tab caía fuera de la matriz de roles el
+    // usuario veía el contenido de una pantalla sin tab seleccionado.
+    const visibles = subTabsDe('finanzas', roles);
+    return visibles[0]?.id ?? 'resumen';
   }
   if (id === 'granja') return 'granjas';
-  if (id === 'admin') return manual ? '' : 'productos';
+  if (id === 'admin') return 'productos';
   if (id === 'operaciones') {
     if (esRolMovil(roles)) {
       if (roles.includes('Camionero')) {
@@ -379,11 +465,17 @@ export const breadcrumbDe = (
   // El hub de Operaciones no muestra el sub-tab en el breadcrumb.
   if (id === 'operaciones') return [labelDeModulo(id, roles), ''];
 
-  const visibles = subTabsDe(id, roles);
-  const tab = visibles.find(t => t.id === subTab);
-  const etiqueta = tab?.breadcrumb ?? tab?.label ?? BREADCRUMB_EXTRA[subTab] ?? '';
-  return [labelDeModulo(id, roles), etiqueta];
-};
+const visibles = subTabsDe(id, roles);
+    const tab = visibles.find(t => t.id === subTab);
+    if (tab) {
+      return [labelDeModulo(id, roles), tab.breadcrumb ?? tab.label];
+    }
+    // Un id de sub-fila (`reporte:financiero` bajo Analítica) no es un tab del
+    // módulo: el breadcrumb nombra el tab que lo contiene, no el tipo de reporte.
+    const padre = visibles.find(t => subTabsInternosDe(id, t.id).some(s => s.id === subTab));
+    if (padre) return [labelDeModulo(id, roles), padre.breadcrumb ?? padre.label];
+    return [labelDeModulo(id, roles), BREADCRUMB_EXTRA[subTab] ?? ''];
+  };
 
 /**
  * Defectos de producto heredados que la configuración hace visibles.
@@ -418,13 +510,21 @@ export const validarConfig = (): ResultadoValidacion => {
     if (m.roles.length === 0) problemas.push(`Módulo ${m.id} sin roles`);
   }
 
-  const idsSub = new Set<string>();
+  // La unicidad de un sub-tab es por módulo, no global: `subTab` se resuelve
+  // siempre dentro de su `activeTab`, así que Office y Finanzas pueden tener un
+  // `documentos` cada uno sin que nada se confunda. Antes el chequeo era global
+  // y solo pasaba porque no había coincidencias; el invariante de Fase 0 llegó
+  // a poner en pausa "Vinculaciones" en Office por esa razón.
   for (const [modId, tabs] of Object.entries(SUBTABS_POR_MODULO)) {
+    const idsSub = new Set<string>();
     for (const t of tabs) {
       if (idsSub.has(t.id)) problemas.push(`Sub-tab duplicado en ${modId}: ${t.id}`);
       idsSub.add(t.id);
       if (!t.label.trim()) problemas.push(`Sub-tab ${modId}/${t.id} sin etiqueta`);
     }
+  }
+  for (const t of SUBTABS_ANALITICA) {
+    if (!t.label.trim()) problemas.push(`Sub-tab finanzas/${t.id} sin etiqueta`);
   }
 
   for (const banda of ['nucleo', 'admin', 'config'] as BandaLogistica[]) {

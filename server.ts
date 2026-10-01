@@ -6031,12 +6031,21 @@ ${JSON.stringify(historicalData, null, 2)}`;
    * no son la misma cifra.
    *
    * `?desde`/`?hasta` en `YYYY-MM-DD`; sin parámetros, el mes en curso.
+   *
+   * Se registra además como `/api/reportes/flujo-caja`: el reporte nuevo de
+   * Analítica muestra el ciclo del dinero, y duplicar el cálculo ahí le
+   * devolvería cifras distintas a las de Resumen.
    */
-  app.get("/api/finanzas/resumen", async (req, res) => {
+  const handlerFinanzasResumen = async (req: any, res: any) => {
     try {
       const mesActual = mesEnCursoDe();
-      const desde = (req.query.desde as string) || mesActual.desde;
-      const hasta = (req.query.hasta as string) || mesActual.hasta;
+// Los reportes de `Reportes.tsx` mandan `fechaInicio`/`fechaFin` (así lo
+      // hacen los cinco endpoints legacy) y el resumen usaba `desde`/`hasta`.
+      // Se aceptan los dos nombres: con un solo par, el filtro de fechas de
+      // Analítica se ignoraba en silencio y parecía que el reporte salía
+      // completo cuando en realidad venía sin filtrar.
+      const desde = (req.query.desde as string) || (req.query.fechaInicio as string) || mesActual.desde;
+      const hasta = (req.query.hasta as string) || (req.query.fechaFin as string) || mesActual.hasta;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta)) {
         return res.status(400).json({ error: "Las fechas deben ir en YYYY-MM-DD" });
       }
@@ -6102,7 +6111,10 @@ ${JSON.stringify(historicalData, null, 2)}`;
         documentosEmitidos: documentos.length,
       });
     } catch (error: any) { res.status(500).json({ error: error.message }); }
-  });
+  };
+
+  app.get("/api/finanzas/resumen", handlerFinanzasResumen);
+  app.get("/api/reportes/flujo-caja", handlerFinanzasResumen);
 
   /**
    * Reporte financiero: ahora es un alias de la fuente única.

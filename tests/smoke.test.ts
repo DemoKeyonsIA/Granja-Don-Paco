@@ -413,11 +413,29 @@ describe('SMOKE — Todos los endpoints responden', () => {
   // los ids que el cliente pide tienen que existir como rutas. El bug 1 fue
   // precisamente un id (`ventas-ruta`) que el cliente pedía y el servidor no
   // servía, de modo que el reporte se veía vacío en vez de roto.
+  // Fase 4 sumó `flujo-caja` a la lista: es la sexta sub-fila de Analítica.
   it('todos los reportes que consume Reportes.tsx resuelven 200', async () => {
-    const ids = ['financiero', 'ventas-por-ruta', 'produccion', 'inventario', 'desperdicios'];
+    const ids = ['financiero', 'flujo-caja', 'ventas-por-ruta', 'produccion', 'inventario', 'desperdicios'];
     for (const id of ids) {
       const res = await request(app).get(`/api/reportes/${id}`);
       expect(res.status, `reporte ${id}`).toBe(200);
+    }
+  });
+
+  // Resumen y Flujo de Caja muestran el mismo P&L: si divergieran, una de las dos
+  // pantallas estaría mintiendo. La comparación exacta vive en
+  // `e2e-finanzas-roles.test.ts`; acá solo se ata que ambas rutas existen.
+  it('GET /api/finanzas/resumen y /api/reportes/flujo-caja responden 200', async () => {
+    const [resumen, flujo] = await Promise.all([
+      request(app).get('/api/finanzas/resumen'),
+      request(app).get('/api/reportes/flujo-caja'),
+    ]);
+    expect(resumen.status).toBe(200);
+    expect(flujo.status).toBe(200);
+    for (const cuerpo of [resumen.body, flujo.body]) {
+      expect(Array.isArray(cuerpo.cicloDelDinero)).toBe(true);
+      expect(cuerpo).toHaveProperty('aging');
+      expect(cuerpo).toHaveProperty('cuentasPorCobrar');
     }
   });
 

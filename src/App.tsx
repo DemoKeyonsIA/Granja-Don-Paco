@@ -17,7 +17,7 @@ import DespachoMovil from "./components/DespachoMovil";
 import BodegaMovil from "./components/BodegaMovil";
 import CamioneroMovil from "./components/CamioneroMovil";
 import IncidentesMovil from "./components/IncidentesMovil";
-import Finanzas from "./components/Finanzas";
+import FinanzasResumen from "./components/FinanzasResumen";
 import Etiquetas from "./components/Etiquetas";
 import Pesos from "./components/Pesos";
 import DashboardEnterprise from "./components/DashboardEnterprise";
@@ -28,6 +28,7 @@ import Precios from "./components/Precios";
 import Admin from "./components/Admin";
 import Office from "./components/Office";
 import Reportes from "./components/Reportes";
+import RegistroGasto from "./components/RegistroGasto";
 import { User, Role } from './types';
 import { loadSession, clearSession } from './lib/session';
 import { iconoDe } from './nav/icons';
@@ -38,7 +39,8 @@ import {
 import {
   rolesEfectivos, modulosVisibles, labelDeModulo, moduloPorDefecto,
   subTabsDe, subTabPorDefecto, subTabsOperacionesMovil, subTabMovilEfectivo,
-  subTabsLogisticaDe, breadcrumbDe, esRolMovil,
+  subTabsLogisticaDe, subTabsInternosDe, breadcrumbDe, esRolMovil,
+  tipoReporteDe, idSubTabReporte,
 } from './nav/modulos';
 
 export default function App() {
@@ -119,15 +121,23 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
   const subTabManual = useRef(false);
 
   useEffect(() => {
-    const mod = activeTab as ModuleId;
-    setSubTab(subTabPorDefecto(mod, userRoles, subTabManual.current));
-    subTabManual.current = false;
+    // Una sub-vista elegida a mano manda sobre el default del módulo. Antes el
+    // reseteo la pisaba siempre y solo `admin` consultaba el flag: por eso
+    // "+ Nuevo → Guía de Despacho", desde otro módulo, abría Logística en su tab
+    // inicial en vez de en Guías, y la búsqueda de "factura" aterrizaba donde
+    // el usuario no pidió.
+    if (subTabManual.current) {
+      subTabManual.current = false;
+      return;
+    }
+    setSubTab(subTabPorDefecto(activeTab as ModuleId, userRoles));
   }, [activeTab, userRoles]);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEstelaOpen, setIsEstelaOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isNuevoOpen, setIsNuevoOpen] = useState(false);
+  const [isRegistroGastoOpen, setIsRegistroGastoOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [message, setMessage] = useState('');
@@ -172,8 +182,20 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
     }
   };
 
-  const nuevoItems = useMemo(() => {
-    const items: { label: string; icon: any; tab: string; subTab?: string }[] = [];
+  /**
+ * ¿Este rol no tiene nada que crear en el módulo actual?
+ *
+ * El fallback de abajo ofrecía "Guía de Despacho" a cualquiera. Para un Socio en
+ * Finanzas eso era un botón a un módulo que no ve en su sidebar. En el único
+ * caso donde el módulo no aporta ninguna acción (Finanzas para no-Admin) el
+ * menú se oculta en vez de mentir.
+ */
+const finanzasEsSoloLectura = activeTab === 'finanzas' && !userRoles.includes('Admin');
+
+const nuevoItems = useMemo(() => {
+    // `accion` abre un formulario en vez de navegar: se usa para el gasto, que
+    // dejó de ser un tab y pasó a ser una acción del menú.
+    const items: { label: string; icon: any; tab: string; subTab?: string; accion?: 'gasto' }[] = [];
     if (currentUser.role === 'Despachador' || currentUser.role === 'Bodeguero') return items;
     if (activeTab === 'logistica') {
       items.push({ label: 'Guía de Despacho', icon: ClipboardList, tab: 'logistica', subTab: 'guias' });
@@ -189,7 +211,13 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
         items.push({ label: 'Usuario', icon: Users, tab: 'admin', subTab: 'usuarios' });
       }
     } else if (activeTab === 'finanzas') {
-      items.push({ label: 'Gasto', icon: DollarSign, tab: 'finanzas', subTab: 'flujo' });
+      // Registrar un gasto es de Admin: el gasto baja utilidad, y un Socio
+      // puede verla pero no moverla. Se lee de `userRoles`, no de `role`: un
+      // usuario con Admin como segundo rol es Admin aunque su rol principal sea
+      // otro, y en el resto de la app ya se le trata así.
+      if (userRoles.includes('Admin')) {
+        items.push({ label: 'Gasto', icon: DollarSign, tab: 'finanzas', accion: 'gasto' });
+      }
     } else if (activeTab === 'granja') {
       items.push({ label: 'Granja', icon: Egg, tab: 'granja', subTab: 'granjas' });
     } else if (activeTab === 'operaciones') {
@@ -199,12 +227,12 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
       items.push({ label: 'Conectar cuenta', icon: Mail, tab: 'office', subTab: 'correo' });
       items.push({ label: 'Subir documento', icon: FileText, tab: 'office', subTab: 'documentos' });
     }
-    if (items.length === 0) {
+    if (items.length === 0 && !finanzasEsSoloLectura) {
       items.push({ label: 'Guía de Despacho', icon: ClipboardList, tab: 'logistica', subTab: 'guias' });
       items.push({ label: 'Cliente', icon: Users, tab: 'clientes' });
     }
     return items;
-  }, [activeTab, subTab, currentUser.role]);
+  }, [activeTab, subTab, userRoles, finanzasEsSoloLectura]);
 
   const handleSearch = (q: string) => {
     setSearchQuery(q);
@@ -223,14 +251,27 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
       setActiveTab('logistica'); setSubTab('remisiones');
     } else if (lower.includes('cliente')) {
       setActiveTab('clientes');
+} else if (lower.includes('flujo')) {
+      // Va antes de "caja" porque "flujo de caja" contiene las dos palabras y el
+      // reporte de Analítica es a donde realmente lleva.
+      subTabManual.current = true;
+      setActiveTab('finanzas'); setSubTab(idSubTabReporte('flujo-caja'));
     } else if (lower.includes('venta') || lower.includes('caja') || lower.includes('tiquete')) {
       setActiveTab('logistica'); setSubTab('caja');
     } else if (lower.includes('factura') || lower.includes('cobro')) {
-      setActiveTab('logistica'); setSubTab('facturacion');
-    } else if (lower.includes('tablero') || lower.includes('ruta')) {
-      setActiveTab('logistica'); setSubTab('tablero');
-    } else if (lower.includes('gasto') || lower.includes('flujo')) {
-      setActiveTab('finanzas'); setSubTab('flujo');
+      // "Facturación" pasó a ser el tab Documentos de Finanzas. Se decide por
+      // rol porque un Comercial sí lo ve y un Socio no: mandarlo a un tab
+      // invisible lo dejaba en la pantalla anterior, con el texto buscado a la
+      // vista pero el resultado en otro lado.
+      subTabManual.current = true;
+      setActiveTab('finanzas');
+      setSubTab(userRoles.includes('Admin') || userRoles.includes('Comercial') ? 'documentos' : 'resumen');
+    } else if (lower.includes('gasto')) {
+      // El gasto ya no es un tab: es la acción "+ Nuevo → Gasto", que es de
+      // Admin. Quien no es Admin aterriza en el primer tab que sí ve, no en
+      // `resumen` a ciegas.
+      subTabManual.current = true;
+      setActiveTab('finanzas'); setSubTab(subTabPorDefecto('finanzas', userRoles));
     } else if (lower.includes('granja') || lower.includes('galero')) {
       setActiveTab('granja'); setSubTab('granjas');
     } else if (lower.includes('etiqueta') || lower.includes('qr')) {
@@ -242,7 +283,8 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
     } else if (lower.includes('producto') && (lower.includes('tipo') || lower.includes('admin'))) {
       setActiveTab('admin'); setSubTab('productos');
     } else if (lower.includes('reporte')) {
-      setActiveTab('finanzas'); setSubTab('reportes');
+      subTabManual.current = true;
+      setActiveTab('finanzas'); setSubTab(idSubTabReporte('financiero'));
     } else if (lower.includes('peso')) {
       setActiveTab('logistica'); setSubTab('pesos');
     } else if (lower.includes('precio')) {
@@ -252,8 +294,20 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
 
   const modulos = useMemo(() => modulosVisibles(userRoles), [userRoles]);
 
-  /** Fila de tabs simple (una banda). `tono` replica los tres estilos heredados. */
-  const renderFilaTabs = (tabs: SubTabDef[], tono: 'primario' | 'secundario' | 'terciario') => {
+  /**
+ * Fila de tabs simple (una banda). `tono` replica los tres estilos heredados.
+ *
+ * `activoEn` permite que una fila resuelva el resaltado sobre otro id: la fila
+ * primaria de Finanzas debe marcar `analitica` aunque el sub-tab activo sea un
+ * tipo de reporte (`reporte:financiero`). Sin eso, elegir un reporte apagaba el
+ * tab que lo contiene.
+ */
+  const renderFilaTabs = (
+    tabs: SubTabDef[],
+    tono: 'primario' | 'secundario' | 'terciario',
+    activoEn: string = subTab,
+    onSelect?: (id: string) => void,
+  ) => {
     if (tabs.length === 0) return null;
     const activo = tono === 'primario'
       ? { color: 'var(--brand-primary)', borderColor: 'var(--brand-primary)' }
@@ -272,12 +326,12 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
           <button
             key={t.id}
             data-tab-id={t.id}
-            aria-current={subTab === t.id ? 'page' : undefined}
-            onClick={() => setSubTab(t.id)}
+            aria-current={activoEn === t.id ? 'page' : undefined}
+            onClick={() => (onSelect ? onSelect(t.id) : setSubTab(t.id))}
             className={`pb-3 capitalize transition-colors whitespace-nowrap border-b-2 ${
               tono === 'primario' ? 'text-sm font-semibold' : 'text-[13px] font-medium'
             }`}
-            style={subTab === t.id ? activo : inactivo}
+            style={activoEn === t.id ? activo : inactivo}
           >
             {t.label}
           </button>
@@ -421,7 +475,17 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
                         {nuevoItems.map((item) => {
                           const Icon = item.icon;
                           return (
-                            <button key={item.label} onClick={() => { setActiveTab(item.tab as any); if (item.subTab) setSubTab(item.subTab); setIsNuevoOpen(false); }}
+                            <button key={item.label} onClick={() => {
+                              if (item.accion === 'gasto') { setIsRegistroGastoOpen(true); }
+                              else {
+                                // La sub-vista viene escrita en el ítem, así que el
+                                // reseteo por cambio de módulo no debe pisarla.
+                                subTabManual.current = true;
+                                setActiveTab(item.tab as any);
+                                if (item.subTab) setSubTab(item.subTab);
+                              }
+                              setIsNuevoOpen(false);
+                            }}
                               className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium transition-colors hover:opacity-80" style={{ color: 'var(--text-primary)' }}>
                               <Icon className="w-4 h-4" style={{ color: 'var(--brand-primary)' }} />
                               {item.label}
@@ -651,7 +715,6 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
                 {subTab === 'remisiones' && <Logistica currentUser={currentUser} initialTab="remisiones" />}
                 {subTab === 'caja' && <CajaRuta currentUser={currentUser} />}
                 {subTab === 'tablero' && <TableroRutas currentUser={currentUser} />}
-                {subTab === 'facturacion' && <Facturacion currentUser={currentUser} />}
                 {subTab === 'etiquetas' && <Etiquetas currentUser={currentUser} />}
                 {subTab === 'pesos' && <Pesos currentUser={currentUser} />}
                 {subTab === 'precios' && <Precios currentUser={currentUser} />}
@@ -660,12 +723,29 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
           )}
 
           {activeTab === 'finanzas' && (
-            <div className="space-y-6">
-              {renderFilaTabs(subTabsDe('finanzas', userRoles), 'primario')}
+            <div className="space-y-6" data-testid="finanzas-hub">
+              {renderFilaTabs(
+                subTabsDe('finanzas', userRoles),
+                'primario',
+                // Con un tipo de reporte activo, la fila primaria sigue marcando
+                // Analítica: el sub-tab no reemplaza su contenedor.
+                tipoReporteDe(subTab) ? 'analitica' : subTab,
+                // Elegir Analítica abre el primer reporte. Si se quedara en el id
+                // del tab, la fila secundaria aparecería sin nada seleccionado y
+                // el contenido de abajo no renderizaría nada.
+                id => setSubTab(id === 'analitica' ? idSubTabReporte('financiero') : id),
+              )}
+              {/* Analítica tiene una sub-fila: los seis tipos de reporte. Vive
+                  aquí, en el shell, para que el tipo activo sea el mismo estado
+                  que el tab activo y el breadcrumb lo pueda leer. */}
+              {renderFilaTabs(subTabsInternosDe('finanzas', subTab), 'secundario')}
               <div className="animate-in fade-in">
-                {subTab === 'flujo' && <Finanzas currentUser={currentUser} />}
+                {subTab === 'resumen' && <FinanzasResumen currentUser={currentUser} />}
+                {subTab === 'documentos' && <Facturacion currentUser={currentUser} />}
                 {subTab === 'cobranza' && <Cobranza currentUser={currentUser} />}
-                {subTab === 'reportes' && <Reportes currentUser={currentUser} />}
+                {tipoReporteDe(subTab) && (
+                  <Reportes currentUser={currentUser} tipo={tipoReporteDe(subTab)!} />
+                )}
               </div>
             </div>
           )}
@@ -682,6 +762,10 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
           )}
         </main>
       </div>
+
+      {isRegistroGastoOpen && currentUser && (
+        <RegistroGasto currentUser={currentUser} onClose={() => setIsRegistroGastoOpen(false)} />
+      )}
 
       {/* Mobile Bottom Nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 backdrop-blur-lg z-40 px-2 py-1 safe-area-pb" style={{ background: 'var(--bg-card)', borderTop: '1px solid var(--border-default)' }}>

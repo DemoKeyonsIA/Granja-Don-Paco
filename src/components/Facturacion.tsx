@@ -99,7 +99,6 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isOffline, setIsOffline] = useState(currentUser.role === 'Comercial');
-  const [activeTab, setActiveTab] = useState<'ventas' | 'electronicos' | 'rutas'>('ventas');
 
   // Load draft on mount
   const draft = loadDraft();
@@ -341,8 +340,8 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6 animate-in fade-in pb-20">
       <Breadcrumb items={[
-        { label: 'Logística', onClick: () => {} },
-        { label: 'Facturación' }
+        { label: 'Finanzas' },
+        { label: 'Documentos' }
       ]} />
 
       {/* Header */}
@@ -350,9 +349,9 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
         <div>
           <h2 className="text-2xl font-bold text-neutral-800 flex items-center">
             <FileText className="w-6 h-6 mr-2" style={{ color: 'var(--brand-primary)' }} />
-            Facturación y Ventas
+            Documentos
           </h2>
-          <p className="text-sm text-neutral-500 mt-1">Punto de venta, facturación electrónica y recibos.</p>
+          <p className="text-sm text-neutral-500 mt-1">Facturas, documentos electrónicos y rutas por facturar.</p>
         </div>
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => setIsOffline(!isOffline)}
@@ -394,28 +393,6 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
           </button>
         </div>
       )}
-
-      {/* Tabs */}
-      <div className="flex gap-2 border-b border-neutral-200 pb-2">
-        <button onClick={() => setActiveTab('ventas')}
-          className={cn("px-4 py-2 rounded-t-lg text-sm font-bold transition-colors",
-            activeTab === 'ventas' ? "text-stone-800 border-b-2" : "text-stone-400 hover:text-stone-600")}
-            style={activeTab === 'ventas' ? { borderColor: 'var(--brand-primary)' } : {}}>
-          Ventas ({facturas.length})
-        </button>
-        <button onClick={() => setActiveTab('electronicos')}
-          className={cn("px-4 py-2 rounded-t-lg text-sm font-bold transition-colors flex items-center gap-1",
-            activeTab === 'electronicos' ? "text-stone-800 border-b-2" : "text-stone-400 hover:text-stone-600")}
-          style={activeTab === 'electronicos' ? { borderColor: 'var(--brand-primary)' } : {}}>
-          Docs Electrónicos ({documentosElectronicos.length})
-        </button>
-        <button onClick={() => setActiveTab('rutas')}
-          className={cn("px-4 py-2 rounded-t-lg text-sm font-bold transition-colors flex items-center gap-1",
-            activeTab === 'rutas' ? "text-stone-800 border-b-2" : "text-stone-400 hover:text-stone-600")}
-          style={activeTab === 'rutas' ? { borderColor: 'var(--brand-primary)' } : {}}>
-          Rutas del día ({rutasDia.length})
-        </button>
-      </div>
 
       {isCreating ? (
         <div className="bg-neutral-50 p-2 md:p-6 rounded-3xl animate-in slide-in-from-top-4">
@@ -704,7 +681,10 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
             </div>
           </div>
 
-          {activeTab === 'ventas' ? (
+          <section data-testid="documentos-ventas">
+            <h3 className="px-6 py-3 text-xs font-black uppercase tracking-wider text-neutral-500 border-b border-neutral-200">
+              Facturas ({facturas.length})
+            </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-neutral-50 text-neutral-500 uppercase tracking-wider font-bold text-xs border-b border-neutral-200">
@@ -761,7 +741,12 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 </tbody>
               </table>
             </div>
-          ) : activeTab === 'rutas' ? (
+          </section>
+
+          <section data-testid="documentos-rutas" className="border-t-8 border-neutral-100">
+            <h3 className="px-6 py-3 text-xs font-black uppercase tracking-wider text-neutral-500 border-b border-neutral-200">
+              Rutas del día ({rutasDia.length})
+            </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-neutral-50 text-neutral-500 uppercase tracking-wider font-bold text-xs border-b border-neutral-200">
@@ -814,7 +799,12 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 </tbody>
               </table>
             </div>
-          ) : (
+          </section>
+
+          <section data-testid="documentos-fisicos" className="border-t-8 border-neutral-100">
+            <h3 className="px-6 py-3 text-xs font-black uppercase tracking-wider text-neutral-500 border-b border-neutral-200">
+              Documentos electrónicos ({documentosElectronicos.length})
+            </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-neutral-50 text-neutral-500 uppercase tracking-wider font-bold text-xs border-b border-neutral-200">
@@ -896,7 +886,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 </tbody>
               </table>
             </div>
-          )}
+          </section>
         </div>
       )}
     </div>
