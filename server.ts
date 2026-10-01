@@ -12,6 +12,11 @@ import { CREATE_TABLES } from "./src/db/ddl";
 import QRCode from "qrcode";
 import { clasificarDiferencia, OPCIONES_DIFERENCIA_RECEPCION } from "./src/lib/opcionesRecepcion";
 import { saldoDe, round2, agingPorFacturas, dso as dsoDe, fechaVencimientoDe, diasVencidoDe, estaSaldada, esCredito } from "./src/lib/cobranza";
+import {
+  ingresosFacturadosDe, ingresosCobradosDe, cuentasPorCobrarDe,
+  gastosDe, gastosPorCategoriaDe, utilidadYMargenDe, variacionDe,
+  cicloDelDineroDe, mesEnCursoDe, periodoAnteriorDe, dentroDePeriodo,
+} from "./src/lib/finanzas";
 
 dotenv.config();
 
@@ -5590,8 +5595,18 @@ ${JSON.stringify(historicalData, null, 2)}`;
       const gastosHoy = todosGastos.filter(g => String(g.fecha).startsWith(hoy));
       const produccionHoy = todaProduccion.filter(p => String(p.fecha).startsWith(hoy));
 
-      const ingresosHoy = facturasHoy.filter(f => f.estado === 'Pagada').reduce((a, f) => a + Number(f.total), 0);
-      const gastosHoyTotal = gastosHoy.reduce((a, g) => a + Number(g.monto), 0);
+      // Devengado y cobrado, por separado: una venta a crédito cuenta como ingreso
+      // aunque no se haya cobrado. Antes `ingresosHoy` filtraba `estado ===
+      // 'Pagada'` y por eso no incluía las facturas de crédito del mismo día.
+      // `ingresosCobradosHoy` conserva ese número en efectivo para el bloque de
+      // caja, sin que ninguno de los dos se confunda con el otro.
+      const ingresosHoy = ingresosFacturadosDe(facturasHoy, [], { desde: hoy, hasta: hoy });
+      const ingresosCobradosHoy = ingresosCobradosDe(
+        facturasHoy,
+        (await db.query.pagos.findMany().catch(() => [] as any[])).filter(p => String(p.fecha ?? '').slice(0, 10) === hoy),
+        { desde: hoy, hasta: hoy },
+      );
+      const gastosHoyTotal = gastosDe(gastosHoy as any[], { desde: hoy, hasta: hoy });
       const cartonesHoy = produccionHoy.filter(p => String(p.tipo_producto).includes('Huevos')).reduce((a, p) => a + Number(p.cantidad), 0);
       const stockBodega = inventarioTotal.filter(i => i.ubicacion === 'Bodega Central' && String(i.producto).includes('Huevos')).reduce((a, i) => a + Number(i.cantidad), 0);
       const avesVivas = todosGalerones.filter(g => g.estado !== 'Archivado').reduce((a, g) => a + (g.aves_en_produccion || 0), 0);
@@ -5608,13 +5623,15 @@ ${JSON.stringify(historicalData, null, 2)}`;
       );
 
       res.json({
-        ingresosHoy, gastosHoy: gastosHoyTotal, utilidadNeta: ingresosHoy - gastosHoyTotal,
+        ingresosHoy, ingresosCobradosHoy, gastosHoy: gastosHoyTotal, utilidadNeta: ingresosHoy - gastosHoyTotal,
         cartonesProducidos: cartonesHoy, stockBodegaCentral: stockBodega, totalAvesVivas: avesVivas,
         facturasEmitidas: facturasHoy.length, clientesActivos: todosClientes.filter(c => c.estado === 'Activo' && c.id !== 'consumidor-final').length,
         rutasActivas: todasRutas.filter(r => r.estado === 'Activa').length,
         vacunasVencidas: vacunasVencidas.length, mantenimientosVencidos: mantenimientosVencidos.length,
         desperdiciosHoy: desperdicioHoy.length, impactoDesperdicioHoy: impactoDesperdicio,
-        cuentasPorCobrar: todasFacturas.filter(f => f.estado === 'Pendiente').reduce((a, f) => a + Number(f.total), 0),
+        // Saldo real, no `SUM(total)` de las pendientes: así coincide con el
+        // aging de la misma pantalla y una factura pagada a medias no cuenta doble.
+        cuentasPorCobrar: cuentasPorCobrarDe(todasFacturas as any[], await mapaPagadoPorFactura(todasFacturas as any[])),
         alertas: [
           ...vacunasVencidas.map(v => ({ tipo: 'Vacuna vencida', detalle: `${v.tipoVacuna} — ${v.granjaId}`, nivel: 'Crítica' })),
           ...mantenimientosVencidos.map(m => ({ tipo: 'Mantenimiento vencido', detalle: `${m.tipo} — ${m.activoId}`, nivel: 'Alta' })),
@@ -6006,24 +6023,119 @@ ${JSON.stringify(historicalData, null, 2)}`;
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
 
-  app.get("/api/reportes/financiero", async (req, res) => {
+  /**
+   * Fuente única del P&L. Todas las pantallas de dinero leen de acá.
+   *
+   * Distingue **devengado** (lo vendido en el periodo, cobrado o no) de
+   * **cobrado** (el dinero que entró). Ver `src/lib/finanzas.ts` para por qué
+   * no son la misma cifra.
+   *
+   * `?desde`/`?hasta` en `YYYY-MM-DD`; sin parámetros, el mes en curso.
+   */
+  app.get("/api/finanzas/resumen", async (req, res) => {
     try {
-      const [todasFacturas, todosGastos] = await Promise.all([
-        db.query.facturas.findMany(), db.query.gastos.findMany()
+      const mesActual = mesEnCursoDe();
+      const desde = (req.query.desde as string) || mesActual.desde;
+      const hasta = (req.query.hasta as string) || mesActual.hasta;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta)) {
+        return res.status(400).json({ error: "Las fechas deben ir en YYYY-MM-DD" });
+      }
+      if (desde > hasta) {
+        return res.status(400).json({ error: "La fecha inicial no puede ser posterior a la final" });
+      }
+      const periodo = { desde, hasta };
+      const periodoAnterior = periodoAnteriorDe(periodo);
+
+      // `pagos` y `ventas_ruta` no existen en toda instalación vieja: sin ellas
+      // el resumen debe servir ceros, no reventar.
+      const [facturas, tiquetes, gastos, pagos] = await Promise.all([
+        db.query.facturas.findMany(),
+        db.query.ventas_ruta.findMany().catch(() => [] as any[]),
+        db.query.gastos.findMany(),
+        db.query.pagos.findMany().catch(() => [] as any[]),
       ]);
 
-      const totalVentas = todasFacturas.filter(f => f.estado === 'Pagada').reduce((a, f) => a + Number(f.total), 0);
-      const cuentasPorCobrar = todasFacturas.filter(f => f.estado === 'Pendiente').reduce((a, f) => a + Number(f.total), 0);
-      const totalGastos = todosGastos.reduce((a, g) => a + Number(g.monto), 0);
-      const gastosPorCategoria = todosGastos.reduce((acc: Record<string, number>, g) => {
-        acc[g.categoria] = (acc[g.categoria] || 0) + Number(g.monto);
-        return acc;
-      }, {});
+      const pagadoPorFactura = await mapaPagadoPorFactura(facturas as any[]);
+
+      const ingresosFacturados = ingresosFacturadosDe(facturas as any[], tiquetes as any[], periodo);
+      const ingresosCobrados = ingresosCobradosDe(facturas as any[], pagos as any[], periodo);
+      const totalGastos = gastosDe(gastos as any[], periodo);
+      const { utilidad, margen } = utilidadYMargenDe(ingresosFacturados, totalGastos);
+
+      // La cartera es el estado actual, no una medida del periodo: se debe lo que
+      // se debe hoy, sin importar cuándo se vendió.
+      const cuentasPorCobrar = cuentasPorCobrarDe(facturas as any[], pagadoPorFactura);
+
+      const ingresosFacturadosAnterior = ingresosFacturadosDe(facturas as any[], tiquetes as any[], periodoAnterior);
+      const ingresosCobradosAnterior = ingresosCobradosDe(facturas as any[], pagos as any[], periodoAnterior);
+      const gastosAnterior = gastosDe(gastos as any[], periodoAnterior);
+
+      const aging = agingPorFacturas(facturas as any[], pagadoPorFactura);
+      const documentos = facturas.filter((f: any) => String(f.estado ?? '') !== 'Anulada' && dentroDePeriodo(String(f.fecha ?? ''), periodo));
 
       res.json({
-        totalVentas, totalGastos, utilidadNeta: totalVentas - totalGastos,
-        cuentasPorCobrar, gastosPorCategoria,
-        margen: totalVentas > 0 ? ((totalVentas - totalGastos) / totalVentas * 100).toFixed(1) : 0
+        periodo,
+        periodoAnterior,
+        // Devengado: base del P&L. Incluye crédito no cobrado.
+        ingresosFacturados,
+        // Cobrado: dinero que efectivamente entró.
+        ingresosCobrados,
+        gastos: totalGastos,
+        utilidad,
+        margen,
+        cuentasPorCobrar,
+        variacion: {
+          ingresosFacturados: variacionDe(ingresosFacturados, ingresosFacturadosAnterior),
+          ingresosCobrados: variacionDe(ingresosCobrados, ingresosCobradosAnterior),
+          gastos: variacionDe(totalGastos, gastosAnterior),
+          utilidad: variacionDe(utilidad, round2(ingresosFacturadosAnterior - gastosAnterior)),
+        },
+        anterior: {
+          ingresosFacturados: ingresosFacturadosAnterior,
+          ingresosCobrados: ingresosCobradosAnterior,
+          gastos: gastosAnterior,
+          utilidad: round2(ingresosFacturadosAnterior - gastosAnterior),
+        },
+        gastosPorCategoria: gastosPorCategoriaDe(gastos as any[], periodo),
+        cicloDelDinero: cicloDelDineroDe({ ingresosFacturados, ingresosCobrados, cuentasPorCobrar, gastos: totalGastos, utilidad }),
+        aging,
+        documentosEmitidos: documentos.length,
+      });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  /**
+   * Reporte financiero: ahora es un alias de la fuente única.
+   *
+   * Antes recalculaba sus propias cifras, y su `cuentasPorCobrar` como
+   * `SUM(total)` de las pendientes — que ignora los pagos parciales y no cuadraba
+   * con el aging. Los nombres antiguos se conservan para no romper a
+   * `Reportes.tsx`; los siguientes de la Fase 4.
+   */
+  app.get("/api/reportes/financiero", async (req, res) => {
+    try {
+      const [facturas, tiquetes, gastos, pagos] = await Promise.all([
+        db.query.facturas.findMany(),
+        db.query.ventas_ruta.findMany().catch(() => [] as any[]),
+        db.query.gastos.findMany(),
+        db.query.pagos.findMany().catch(() => [] as any[]),
+      ]);
+      const pagadoPorFactura = await mapaPagadoPorFactura(facturas as any[]);
+
+      const totalVentas = ingresosFacturadosDe(facturas as any[], tiquetes as any[]);
+      const totalGastos = gastosDe(gastos as any[]);
+      const { utilidad, margen } = utilidadYMargenDe(totalVentas, totalGastos);
+
+      res.json({
+        totalVentas,
+        totalGastos,
+        utilidadNeta: utilidad,
+        cuentasPorCobrar: cuentasPorCobrarDe(facturas as any[], pagadoPorFactura),
+        gastosPorCategoria: Object.fromEntries(
+          gastosPorCategoriaDe(gastos as any[]).map(g => [g.categoria, g.monto]),
+        ),
+        margen,
+        ingresosCobrados: ingresosCobradosDe(facturas as any[], pagos as any[]),
       });
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });

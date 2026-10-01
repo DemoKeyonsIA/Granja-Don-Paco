@@ -476,9 +476,13 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
     const res = await request(app).get('/api/dashboard/enterprise');
     expect(res.status).toBe(200);
 
-    expect(res.body.ingresosHoy).toBe(COSTO_CARTON * 30);                 // solo la factura Pagada (contado)
+    // Devengado: las dos facturas del día (contado + crédito), con la nota de
+    // crédito excluida por su estado `NotaCredito` (convención R3).
+    expect(res.body.ingresosHoy).toBe(2 * COSTO_CARTON * 30);
+    // Cobrado: solo la de contado, porque la de crédito sigue sin pagarse.
+    expect(res.body.ingresosCobradosHoy).toBe(COSTO_CARTON * 30);
     expect(res.body.gastosHoy).toBe(50000);                               // diesel real
-    expect(res.body.utilidadNeta).toBe(COSTO_CARTON * 30 - 50000);
+    expect(res.body.utilidadNeta).toBe(2 * COSTO_CARTON * 30 - 50000);
     expect(res.body.cartonesProducidos).toBe(120);                        // recolección real
     expect(res.body.stockBodegaCentral).toBe(38);                         // 98 - 90 + 30 retorno
     expect(res.body.totalAvesVivas).toBe(4500);                           // aves del galerón
@@ -511,7 +515,9 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
     expect(clientes.find((c: any) => c.id === cCred.id).saldo_pendiente).toBe(0);
 
     const d = (await request(app).get('/api/dashboard/enterprise')).body;
-    expect(d.ingresosHoy).toBe(2 * COSTO_CARTON * 30); // contado + crédito cobrado
+    expect(d.ingresosHoy).toBe(2 * COSTO_CARTON * 30); // devengado: las dos facturas
+    // Ya cobrado: con el crédito pagado, ambas son efectivo del día.
+    expect(d.ingresosCobradosHoy).toBe(2 * COSTO_CARTON * 30);
     expect(d.cuentasPorCobrar).toBe(0);
     expect(d.utilidadNeta).toBe(2 * COSTO_CARTON * 30 - 50000);
   });
@@ -547,7 +553,7 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
     // Dashboard empresarial: snapshot inmutable tras el flujo completo
     const d = (await request(app).get('/api/dashboard/enterprise')).body;
     // R3: la NC directa NO suma ingreso (estado NotaCredito, excluida del libro).
-    expect(d.ingresosHoy).toBe(2 * COSTO_CARTON * 30);                  // contado + crédito cobrado
+    expect(d.ingresosHoy).toBe(2 * COSTO_CARTON * 30);                  // devengado del día
     expect(d.gastosHoy).toBe(50000);
     expect(d.utilidadNeta).toBe(2 * COSTO_CARTON * 30 - 50000);
     expect(d.cartonesProducidos).toBe(120);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Truck, AlertTriangle, CheckCircle, TrendingUp, TrendingDown, Plus, Wrench, Fuel, Users, Package } from 'lucide-react';
-import { User, Factura } from '../types';
+import { User } from '../types';
+import { fmtCRC } from '../lib/finanzas';
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { toast } from 'sonner';
@@ -22,12 +23,26 @@ type Gasto = {
   usuarioId: string;
 };
 
+/** Subconjunto de `GET /api/finanzas/resumen` que esta pantalla usa. */
+type ResumenFinanzas = {
+  ingresosFacturados: number;
+  ingresosCobrados: number;
+  gastos: number;
+  utilidad: number;
+  margen: number;
+  cuentasPorCobrar: number;
+};
+
 export default function Finanzas({ currentUser }: FinanzasProps) {
   const [activeTab, setActiveTab] = useState<'flujo' | 'registro'>('flujo');
   
   // State for Finanzas Flujo de Caja
-  const [facturas, setFacturas] = useState<Factura[]>([]);
   const [gastosList, setGastosList] = useState<Gasto[]>([]);
+  // Las cifras de dinero salen de la fuente única; esta pantalla ya no las
+  // recalcula. Antes sumaba facturas `Pagada` de todo el historial menos gastos
+  // de todo el historial, así que mostraba un número distinto del de Analítica
+  // y del reporte con los mismos datos.
+  const [resumen, setResumen] = useState<ResumenFinanzas | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // State for Form
@@ -39,13 +54,13 @@ export default function Finanzas({ currentUser }: FinanzasProps) {
   const fetchFinanzas = async () => {
     setIsLoading(true);
     try {
-      const [resFacturas, resGastos] = await Promise.all([
-        fetch('/api/facturas'),
+      const [resResumen, resGastos] = await Promise.all([
+        fetch('/api/finanzas/resumen'),
         fetch('/api/gastos')
       ]);
-      
-      if (resFacturas.ok) {
-        setFacturas(await resFacturas.json());
+
+      if (resResumen.ok) {
+        setResumen(await resResumen.json());
       }
       if (resGastos.ok) {
         setGastosList(await resGastos.json());
@@ -94,15 +109,12 @@ export default function Finanzas({ currentUser }: FinanzasProps) {
     }
   };
 
-  // Calculations
-  const ingresosTotales = facturas
-    .filter(f => f.estado === 'Pagada')
-    .reduce((acc, f) => acc + f.total, 0);
-
-  const gastosTotales = gastosList.reduce((acc, g) => acc + g.monto, 0);
-  
-  const utilidadNeta = ingresosTotales - gastosTotales;
-  const margenUtilidad = ingresosTotales > 0 ? (utilidadNeta / ingresosTotales) * 100 : 0;
+  // Las cifras vienen del endpoint: devengado (lo vendido, cobrado o no), que
+  // es la base del P&L. `gastosList` sigue alimentando solo el historial.
+  const ingresosTotales = resumen?.ingresosFacturados ?? 0;
+  const gastosTotales = resumen?.gastos ?? 0;
+  const utilidadNeta = resumen?.utilidad ?? 0;
+  const margenUtilidad = resumen?.margen ?? 0;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in pb-20">
@@ -147,13 +159,13 @@ export default function Finanzas({ currentUser }: FinanzasProps) {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-sm flex flex-col justify-between">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">Ingresos (Pagados)</h3>
+                      <h3 className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">Ingresos del mes</h3>
                       <div className="bg-emerald-100 p-2 rounded-lg">
                         <TrendingUp className="w-5 h-5 text-emerald-600" />
                       </div>
                     </div>
                     <div>
-                      <p className="text-3xl font-black text-neutral-800">₡{ingresosTotales.toLocaleString()}</p>
+                      <p className="text-3xl font-black text-neutral-800">{fmtCRC(ingresosTotales)}</p>
                     </div>
                   </div>
 
@@ -165,7 +177,7 @@ export default function Finanzas({ currentUser }: FinanzasProps) {
                       </div>
                     </div>
                     <div>
-                      <p className="text-3xl font-black text-neutral-800">₡{gastosTotales.toLocaleString()}</p>
+                      <p className="text-3xl font-black text-neutral-800">{fmtCRC(gastosTotales)}</p>
                     </div>
                   </div>
 
@@ -178,7 +190,7 @@ export default function Finanzas({ currentUser }: FinanzasProps) {
                     </div>
                     <div>
                       <p className={cn("text-3xl font-black", utilidadNeta >= 0 ? "text-neutral-800" : "text-red-600")}>
-                        ₡{utilidadNeta.toLocaleString()}
+                        {fmtCRC(utilidadNeta)}
                       </p>
                       <p className="text-sm font-medium mt-1 text-neutral-500">
                         Margen: {margenUtilidad.toFixed(1)}%
@@ -213,7 +225,7 @@ export default function Finanzas({ currentUser }: FinanzasProps) {
                           </div>
                           <div className="text-right">
                             <p className="font-black text-lg text-orange-600">
-                              - ₡{gasto.monto.toLocaleString()}
+                              - {fmtCRC(gasto.monto)}
                             </p>
                           </div>
                         </div>
