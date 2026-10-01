@@ -1,6 +1,6 @@
 import React from "react";
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Activity, Bot, ChevronRight, ChevronDown, DollarSign, LayoutDashboard, LogOut, PackageOpen, Plus, Send, Settings, User as UserIcon, X, Loader2, Info, Navigation, Truck, RefreshCcw, Sparkles, Menu, Search, Egg, BarChart3, Sun, Moon, Shield, FileText, Users, ClipboardList, CreditCard, Tag, Mail } from 'lucide-react';
+import { Bot, ChevronRight, ChevronDown, DollarSign, LogOut, PackageOpen, Plus, Send, Settings, User as UserIcon, X, Loader2, Info, Sparkles, Menu, Search, Egg, Sun, Moon, Shield, FileText, Users, ClipboardList, CreditCard, Tag, Mail, Truck } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { cn } from './lib/utils';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -30,6 +30,16 @@ import Office from "./components/Office";
 import Reportes from "./components/Reportes";
 import { User, Role } from './types';
 import { loadSession, clearSession } from './lib/session';
+import { iconoDe } from './nav/icons';
+import {
+  MODULOS, SUBTABS_LOGISTICA, ESPACIOS_OFFICE,
+  type ModuleId, type SubTabDef, type BandaLogistica,
+} from './nav/modulos';
+import {
+  rolesEfectivos, modulosVisibles, labelDeModulo, moduloPorDefecto,
+  subTabsDe, subTabPorDefecto, subTabsOperacionesMovil, subTabMovilEfectivo,
+  subTabsLogisticaDe, breadcrumbDe, esRolMovil,
+} from './nav/modulos';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -93,33 +103,26 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
     Bodeguero: 'Bodeguero',
     Camionero: 'Camionero',
   };
-  const [activeTab, setActiveTab] = useState<string>(
-    currentUser.role === 'Admin' ? 'dashboard' : currentUser.role === 'Despachador' || currentUser.role === 'Bodeguero' || currentUser.role === 'Camionero' ? 'operaciones' : 'logistica'
+  const userRoles = useMemo(
+    () => rolesEfectivos(currentUser.role, currentUser.roles),
+    [currentUser.role, currentUser.roles]
   );
-  
+
+  const [activeTab, setActiveTab] = useState<string>(
+    moduloPorDefecto(rolesEfectivos(currentUser.role, currentUser.roles))
+  );
+
   // For sub-tabs within macro modules
-  const [subTab, setSubTab] = useState<string>(''); 
+  const [subTab, setSubTab] = useState<string>('');
   // Marca que la sub-vista fue elegida explícitamente (búsqueda o menú Nuevo)
   // para que el reset por cambio de macro-módulo no la pise.
   const subTabManual = useRef(false);
 
   useEffect(() => {
-    // Reset subtab when changing main tab
-    if (activeTab === 'logistica') {
-      setSubTab(currentUser.role === 'Comercial' ? 'caja' : 'logistica');
-    }
-    if (activeTab === 'finanzas') setSubTab('flujo');
-    if (activeTab === 'granja') setSubTab('granjas');
-    if (activeTab === 'admin' && !subTabManual.current) setSubTab('productos');
+    const mod = activeTab as ModuleId;
+    setSubTab(subTabPorDefecto(mod, userRoles, subTabManual.current));
     subTabManual.current = false;
-    if (activeTab === 'operaciones') {
-      const roles = currentUser.roles?.length ? currentUser.roles : [currentUser.role];
-      if (roles.some(r => r === 'Camionero')) setSubTab(roles.some(r => r === 'Bodeguero') ? 'recibir' : 'confirmar');
-      else if (roles.some(r => r === 'Bodeguero')) setSubTab('recibir');
-      else if (roles.some(r => r === 'Despachador')) setSubTab('carga');
-      else setSubTab('produccion');
-    }
-  }, [activeTab, currentUser.role, currentUser.roles]);
+  }, [activeTab, userRoles]);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEstelaOpen, setIsEstelaOpen] = useState(false);
@@ -247,21 +250,41 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
     }
   };
 
-  const macroModules = [
-    { id: 'dashboard' as const, label: 'Centro de Mando', icon: LayoutDashboard, roles: ['Admin', 'Socio'] },
-    { id: 'finanzas' as const, label: 'Finanzas', icon: DollarSign, roles: ['Admin', 'Socio'] },
-    { id: 'granja' as const, label: 'Granja', icon: Egg, roles: ['Admin'] },
-    { id: 'admin' as const, label: 'Admin', icon: Settings, roles: ['Admin'] },
-    { id: 'office' as const, label: 'Office', icon: Mail, roles: ['Admin', 'Socio', 'Comercial'] },
-    { id: 'operaciones' as const, label: currentUser.role === 'Despachador' ? 'Carga a Bodega' : currentUser.role === 'Bodeguero' ? 'Recepción' : currentUser.role === 'Camionero' ? 'Confirmar Cargas' : 'Operaciones y Bodegas', icon: PackageOpen, roles: ['Admin', 'Bodeguero', 'Despachador', 'Camionero', 'Comercial'] },
-    { id: 'logistica' as const, label: 'Logística', icon: Truck, roles: ['Admin', 'Comercial'] },
-    { id: 'clientes' as const, label: 'Clientes', icon: Users, roles: ['Admin', 'Comercial'] },
-  ];
+  const modulos = useMemo(() => modulosVisibles(userRoles), [userRoles]);
 
-  const userRoles = useMemo(() => {
-    const r = currentUser.roles || [currentUser.role];
-    return r.filter(Boolean);
-  }, [currentUser.roles, currentUser.role]);
+  /** Fila de tabs simple (una banda). `tono` replica los tres estilos heredados. */
+  const renderFilaTabs = (tabs: SubTabDef[], tono: 'primario' | 'secundario' | 'terciario') => {
+    if (tabs.length === 0) return null;
+    const activo = tono === 'primario'
+      ? { color: 'var(--brand-primary)', borderColor: 'var(--brand-primary)' }
+      : tono === 'secundario'
+        ? { color: 'var(--brand-secondary)', borderColor: 'var(--brand-secondary)' }
+        : { color: 'var(--text-secondary)', borderColor: 'var(--text-secondary)' };
+    const inactivo = { color: 'var(--text-muted)', borderColor: 'transparent' };
+    return (
+      <div
+        data-testid="nav-tabs"
+        data-banda={tono}
+        className={`flex space-x-6 overflow-x-auto ${tono === 'primario' ? '' : 'pt-1'}`}
+        style={{ borderBottom: '1px solid var(--border-default)' }}
+      >
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            data-tab-id={t.id}
+            aria-current={subTab === t.id ? 'page' : undefined}
+            onClick={() => setSubTab(t.id)}
+            className={`pb-3 capitalize transition-colors whitespace-nowrap border-b-2 ${
+              tono === 'primario' ? 'text-sm font-semibold' : 'text-[13px] font-medium'
+            }`}
+            style={subTab === t.id ? activo : inactivo}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+    );
+  };
 
   const renderSidebarContent = (isMobile = false) => (
     <>
@@ -287,12 +310,13 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
 
       <div className="flex-1 overflow-y-auto px-3 py-6 space-y-0.5">
         <p className="px-3 text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>Modulos</p>
-        {macroModules.filter(item => userRoles.some(r => item.roles.includes(r))).map((item) => {
-          const Icon = item.icon;
+        {modulos.map((item) => {
+          const Icon = iconoDe(item.icon);
           const isActive = activeTab === item.id;
           return (
             <button
               key={item.id}
+              data-modulo-id={item.id}
               onClick={() => {
                 setActiveTab(item.id as any);
                 if (isMobile) setIsMenuOpen(false);
@@ -304,7 +328,7 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
               }}
             >
               <Icon className="w-[18px] h-[18px]" style={{ color: isActive ? 'var(--brand-primary-light)' : 'var(--text-muted)' }} />
-              <span>{item.label}</span>
+              <span>{labelDeModulo(item.id, userRoles)}</span>
             </button>
           );
         })}
@@ -564,15 +588,15 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
 
         <main className="flex-1 overflow-y-auto w-full p-4 lg:p-6 pb-24 lg:pb-6" style={{ background: 'var(--bg-page)' }}>
           {(() => {
-            const moduleLabels: Record<string, string> = { dashboard: 'Centro de Mando', finanzas: 'Finanzas', granja: 'Granja', operaciones: 'Operaciones', logistica: 'Logística', admin: 'Admin', clientes: 'Clientes' };
-            const subLabels: Record<string, string> = { logistica: 'Logística', guias: 'Guías y Camiones', remisiones: 'Remisiones', caja: 'Caja Ruta', tablero: 'Tablero Vivo', facturacion: 'Facturación', catalogo: 'Catálogo', etiquetas: 'Etiquetas QR', pesos: 'Control Pesos', precios: 'Precios', flujo: 'Flujo de Caja', cobranza: 'Cuentas por Cobrar', reportes: 'Reportes', granjas: 'Granjas', salud: 'Salud Avícola', alimento: 'Alimento/Silos', mantenimiento: 'Mantenimiento', produccion: 'Producción', desperdicios: 'Desperdicios', productos: 'Productos', infraestructura: 'Infraestructura', usuarios: 'Usuarios' };
-            const mLabel = moduleLabels[activeTab] || activeTab;
-            const sLabel = activeTab === 'operaciones' ? '' : (subLabels[subTab] || '');
-            if (activeTab === 'dashboard' || activeTab === 'clientes') return null;
+            const crumbs = breadcrumbDe(activeTab as ModuleId, subTab, userRoles);
+            if (!crumbs) return null;
+            const [mLabel, sLabel] = crumbs;
+            if (!sLabel) return <div className="flex items-center gap-2 text-xs font-medium mb-4" style={{ color: 'var(--text-muted)' }}><span>{mLabel}</span></div>;
             return (
               <div className="flex items-center gap-2 text-xs font-medium mb-4" style={{ color: 'var(--text-muted)' }}>
                 <span>{mLabel}</span>
-                {sLabel && (<><ChevronRight className="w-3 h-3" /><span style={{ color: 'var(--text-primary)' }}>{sLabel}</span></>)}
+                <ChevronRight className="w-3 h-3" />
+                <span style={{ color: 'var(--text-primary)' }}>{sLabel}</span>
               </div>
             );
           })()}
@@ -582,18 +606,7 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
 
           {activeTab === 'granja' && (
             <div className="space-y-6">
-              <div className="flex space-x-6 overflow-x-auto" style={{ borderBottom: '1px solid var(--border-default)' }}>
-                {[['granjas', 'Granjas'], ['salud', 'Salud Avicola'], ['alimento', 'Alimento/Silos'], ['mantenimiento', 'Mantenimiento']].map(([key, label]) => (
-                  <button key={key} onClick={() => setSubTab(key)}
-                    className="pb-3 text-sm font-semibold capitalize transition-colors whitespace-nowrap border-b-2"
-                    style={subTab === key 
-                      ? { color: 'var(--brand-primary)', borderColor: 'var(--brand-primary)' }
-                      : { color: 'var(--text-muted)', borderColor: 'transparent' }
-                    }>
-                    {label}
-                  </button>
-                ))}
-              </div>
+              {renderFilaTabs(subTabsDe('granja', userRoles), 'primario')}
               <div className="animate-in fade-in">
                 {subTab === 'granjas' && <Granjas currentUser={currentUser} />}
                 {subTab === 'salud' && <SaludAvicola currentUser={currentUser} />}
@@ -605,28 +618,12 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
 
           {activeTab === 'admin' && <Admin currentUser={currentUser} initialTab={subTab as any} />}
 
-          {activeTab === 'operaciones' && userRoles.some(r => ['Despachador', 'Bodeguero', 'Camionero'].includes(r)) && (() => {
-            const mobileRoles: Role[] = (['Despachador', 'Bodeguero', 'Camionero'] as Role[]).filter(r => userRoles.includes(r) || currentUser.role === r);
-            const subTabsByRole: Record<string, string[]> = { Despachador: ['carga', 'incidencias'], Camionero: ['confirmar'], Bodeguero: ['recibir'] };
-            const subTabLabels: Record<string, string> = { carga: 'Carga', incidencias: 'Incidencias', confirmar: 'Confirmar', recibir: 'Recibir' };
-            const subTabs = Array.from(new Set(mobileRoles.flatMap(r => subTabsByRole[r] || [])));
-            const effectiveSub = (subTabs.includes(subTab) ? subTab : subTabs[0]) || 'carga';
+          {activeTab === 'operaciones' && esRolMovil(userRoles) && (() => {
+            const subTabs = subTabsOperacionesMovil(userRoles);
+            const effectiveSub = subTabMovilEfectivo(userRoles, subTab);
             return (
               <div className="space-y-6">
-                {subTabs.length > 1 && (
-                  <div className="flex space-x-6 overflow-x-auto" style={{ borderBottom: '1px solid var(--border-default)' }}>
-                    {subTabs.map(key => (
-                      <button key={key} onClick={() => setSubTab(key)}
-                        className="pb-3 text-sm font-semibold capitalize transition-colors whitespace-nowrap border-b-2"
-                        style={effectiveSub === key
-                          ? { color: 'var(--brand-primary)', borderColor: 'var(--brand-primary)' }
-                          : { color: 'var(--text-muted)', borderColor: 'transparent' }
-                        }>
-                        {subTabLabels[key]}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {subTabs.length > 1 && renderFilaTabs(subTabs, 'primario')}
                 <div className="max-w-md mx-auto">
                   {effectiveSub === 'carga' && <DespachoMovil currentUser={currentUser} />}
                   {effectiveSub === 'incidencias' && <IncidentesMovil currentUser={currentUser} />}
@@ -636,60 +633,18 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
               </div>
             );
           })()}
-          {activeTab === 'operaciones' && !userRoles.some(r => ['Despachador', 'Bodeguero', 'Camionero'].includes(r)) && (
+          {activeTab === 'operaciones' && !esRolMovil(userRoles) && (
             <OperacionesAdmin currentUser={currentUser} />
           )}
 
           {activeTab === 'logistica' && (
             <div className="space-y-6">
               <div className="space-y-0">
-                {(() => {
-                  const core = ['logistica', 'caja', 'tablero'];
-                  const admin = ['facturacion'];
-                  const config = ['etiquetas', 'pesos', 'precios'];
-                  const f3Core = currentUser.role === 'Admin' ? core : currentUser.role === 'Comercial' ? ['logistica', 'caja'] : currentUser.role === 'Despachador' ? ['logistica', 'tablero'] : ['logistica'];
-                  const f3Admin = currentUser.role === 'Admin' ? admin : currentUser.role === 'Comercial' ? ['facturacion'] : [];
-                  const f3Config = currentUser.role === 'Admin' ? config : [];
-                  const allTabs = [...new Set([...f3Core, ...f3Admin, ...f3Config])];
-                  const labels: Record<string, string> = { logistica: 'Logística', caja: 'Caja Ruta', tablero: 'Tablero Vivo', facturacion: 'Facturación', catalogo: 'Catálogo', etiquetas: 'Etiquetas QR', pesos: 'Control Pesos', precios: 'Precios' };
-                  return (
-                    <>
-                      <div className="flex space-x-6 overflow-x-auto" style={{ borderBottom: '1px solid var(--border-default)' }}>
-                        {allTabs.filter(t => f3Core.includes(t)).map(t => (
-                          <button key={t} onClick={() => setSubTab(t)}
-                            className="pb-3 text-sm font-semibold capitalize transition-colors whitespace-nowrap border-b-2"
-                            style={subTab === t ? { color: 'var(--brand-primary)', borderColor: 'var(--brand-primary)' } : { color: 'var(--text-muted)', borderColor: 'transparent' }}>
-                            {labels[t] || t}
-                          </button>
-                        ))}
-                      </div>
-                      {f3Admin.length > 0 && (
-                        <div className="flex space-x-6 overflow-x-auto pt-1" style={{ borderBottom: '1px solid var(--border-default)' }}>
-                          {allTabs.filter(t => f3Admin.includes(t)).map(t => (
-                            <button key={t} onClick={() => setSubTab(t)}
-                              className="pb-3 text-[13px] font-medium capitalize transition-colors whitespace-nowrap border-b-2"
-                              style={subTab === t ? { color: 'var(--brand-secondary)', borderColor: 'var(--brand-secondary)' } : { color: 'var(--text-muted)', borderColor: 'transparent' }}>
-                              {labels[t] || t}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {f3Config.length > 0 && (
-                        <div className="flex space-x-6 overflow-x-auto pt-1" style={{ borderBottom: '1px solid var(--border-default)' }}>
-                          {allTabs.filter(t => f3Config.includes(t)).map(t => (
-                            <button key={t} onClick={() => setSubTab(t)}
-                              className="pb-3 text-[13px] font-medium capitalize transition-colors whitespace-nowrap border-b-2"
-                              style={subTab === t ? { color: 'var(--text-secondary)', borderColor: 'var(--text-secondary)' } : { color: 'var(--text-muted)', borderColor: 'transparent' }}>
-                              {labels[t] || t}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
+                {renderFilaTabs(subTabsLogisticaDe(userRoles).filter(t => t.banda === 'nucleo'), 'primario')}
+                {renderFilaTabs(subTabsLogisticaDe(userRoles).filter(t => t.banda === 'admin'), 'secundario')}
+                {renderFilaTabs(subTabsLogisticaDe(userRoles).filter(t => t.banda === 'config'), 'terciario')}
               </div>
-              
+
               <div className="animate-in fade-in">
                 {subTab === 'logistica' && <Logistica currentUser={currentUser} />}
                 {subTab === 'guias' && <Logistica currentUser={currentUser} initialTab="guias" />}
@@ -706,21 +661,7 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
 
           {activeTab === 'finanzas' && (
             <div className="space-y-6">
-              <div className="flex space-x-6 overflow-x-auto" style={{ borderBottom: '1px solid var(--border-default)' }}>
-                {[
-                  ...(currentUser.role === 'Admin' ? [['flujo', 'Flujo de Caja'], ['cobranza', 'Cuentas por Cobrar']] : []),
-                  ['reportes', 'Reportes']
-                ].map(([key, label]) => (
-                  <button key={key} onClick={() => setSubTab(key)}
-                    className="pb-3 text-sm font-semibold capitalize transition-colors whitespace-nowrap border-b-2"
-                    style={subTab === key 
-                      ? { color: 'var(--brand-primary)', borderColor: 'var(--brand-primary)' }
-                      : { color: 'var(--text-muted)', borderColor: 'transparent' }
-                    }>
-                    {label}
-                  </button>
-                ))}
-              </div>
+              {renderFilaTabs(subTabsDe('finanzas', userRoles), 'primario')}
               <div className="animate-in fade-in">
                 {subTab === 'flujo' && <Finanzas currentUser={currentUser} />}
                 {subTab === 'cobranza' && <Cobranza currentUser={currentUser} />}
@@ -729,7 +670,12 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
             </div>
           )}
 
-          {activeTab === 'office' && <Office currentUser={currentUser} initialEspacio={subTab === 'documentos' ? 'documentos' : 'correo'} />}
+          {activeTab === 'office' && (
+            <Office
+              currentUser={currentUser}
+              initialEspacio={ESPACIOS_OFFICE.map(e => e.id).includes(subTab) ? (subTab as any) : 'correo'}
+            />
+          )}
 
           {activeTab === 'clientes' && (
             <Clientes currentUser={currentUser} />
@@ -740,8 +686,8 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
       {/* Mobile Bottom Nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 backdrop-blur-lg z-40 px-2 py-1 safe-area-pb" style={{ background: 'var(--bg-card)', borderTop: '1px solid var(--border-default)' }}>
         <div className="flex items-center justify-around">
-          {macroModules.filter(item => userRoles.some(r => item.roles.includes(r))).map((item) => {
-            const Icon = item.icon;
+          {modulos.map((item) => {
+            const Icon = iconoDe(item.icon);
             const isActive = activeTab === item.id;
             return (
               <button
@@ -752,7 +698,7 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
               >
                 <Icon className={cn("w-5 h-5 mb-1", isActive && "scale-110")} />
                 <span className="text-[10px] font-bold leading-tight truncate max-w-[60px]">
-                  {item.id === 'operaciones' ? 'Ops' : item.id === 'dashboard' ? 'Centro' : item.label.split(' ')[0]}
+                  {item.shortLabel ?? labelDeModulo(item.id, userRoles).split(' ')[0]}
                 </span>
               </button>
             );

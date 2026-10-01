@@ -38,6 +38,8 @@ Investigados en el código, no asumidos:
 4. **`Cobranza.tsx:55` usa `Math.abs`** en `calculateDaysPast`, así que una factura con fecha futura reporta antigüedad positiva.
 5. **`notas de débito` no existen.** El tipo es `'Factura' | 'Tiquete' | 'NotaCredito'` (`types.ts:187`); cero coincidencias de `NotaDebito` en todo el repo. El boceto de Documentos las muestra: hay que crearlas o quitarlas del diseño.
 6. **El P&L se calcula 11 veces** con 4 definiciones incompatibles. El caso peligroso es *Cuentas por Cobrar*: 3 semánticas distintas, así que los números no coinciden entre pantallas.
+7. **Un Socio que entra a sesión aterriza en un módulo que no ve.** `moduloPorDefecto(['Socio'])` devuelve `'logistica'`, pero `logistica.roles` es `['Admin','Comercial']`. El módulo renderiza y el breadcrumb muestra "Logística", pero el sidebar del Socio no tiene esa entrada: no hay forma de navegar a otro sitio. Detectado por `tests/ui/nav-render.test.tsx` en la Fase 0, no estaba en los bocetos.
+8. **Un crash en un módulo borra toda la aplicación.** `App.tsx` envuelve todo el shell en un único `ErrorBoundary`; un fallo en `DashboardEnterprise` deja al usuario en la pantalla de error global en lugar de conservar la navegación.
 
 ---
 
@@ -47,9 +49,9 @@ Investigados en el código, no asumidos:
 
 | | |
 |---|---|
-| **Código** | `git init` + commit base. Añadir `.test-*.db` a `.gitignore`. Borrar los 23 `.db` huérfanos. Extraer la IA a datos puros: `src/nav/modulos.ts` (macroModules) y `src/nav/tabs.ts` (definiciones de tab con `roles`, `subLabels`, `moduleLabels`). `App.tsx` pasa a importar de ahí. Instalar `jsdom` + `@testing-library/react` + `@testing-library/user-event` (sin navegador, ~3 deps) y añadir el docblock `// @vitest-environment jsdom` en los tests de UI, sin tocar `vitest.config.ts`. |
+| **Código** | `git init` + commit base. Añadir `.test-*.db` a `.gitignore`. Borrar los 23 `.db` huérfanos. Extraer la IA a datos puros: `src/nav/modulos.ts` (módulos, tabs, defaults, breadcrumbs, `INCIDENCIAS_CONOCIDAS` y `validarConfig()`) e `src/nav/icons.tsx` (mapa de iconos). `App.tsx` pasa a importar de ahí. Instalar `jsdom` + `@testing-library/react` + `@testing-library/user-event` + `@testing-library/jest-dom` (sin navegador) con el docblock `// @vitest-environment jsdom` en los tests de UI, sin tocar `vitest.config.ts`. Añadir `data-modulo-id`, `data-testid="nav-tabs"` y `data-tab-id` a la navegación. |
 | **Por qué** | Hoy los tabs son arrays literales inline en 6 lugares de `App.tsx`. Sin extraerlos a datos puros, ninguna fase es testeable ni reversible. |
-| **Tests** | `tests/ui/nav-ia.test.ts` — por cada rol: qué módulos ve, qué tabs ve cada módulo, que todo tab tenga label y componente. `tests/smoke-nav.test.ts` — invariantes de la config (sin labels huérfanos, sin subTabs sin render, sin roles desconocidos). |
+| **Tests** | `tests/nav-config.test.ts` — 56 tests de caracterización e invariantes sobre la config pura, incluidos los 4 bugs abiertos y sus fases. `tests/ui/nav-render.test.tsx` — 31 tests de render real con `jsdom` + `user-event`: sidebar por rol, módulo de entrada, fila de tabs por módulo, camino móvil, breadcrumbs y navegación propia de Office/Admin. Los módulos hijos se sustituyen con `vi.doMock` (no `vi.mock`: dentro de un bucle el hoisting rompe la ruta) usando rutas relativas al archivo de test. |
 | **Def. de hecho** | `npm run lint` verde · suite completa verde (345+N) · `git status` limpio tras el commit |
 
 ---
@@ -60,8 +62,8 @@ Investigados en el código, no asumidos:
 
 | | |
 |---|---|
-| **Código** | `Reportes.tsx:37` → id `ventas-por-ruta`. `Reportes.tsx:28` → chequeo de `res.ok` con mensaje de error. `App.tsx:111` → tab por defecto de Finanzas coherente con el rol. Eliminar el handler duplicado de `/api/produccion/historial` (`server.ts:836`); el de `server.ts:1278` pasa a filtrar por `galeronId`. `Cobranza.tsx:55` → quitar `Math.abs`. `Facturacion.tsx` → botón "Imprimir" sin `onClick` (`:746`). |
-| **Tests** | `tests/e2e-fixes-criticos.test.ts` — 200 en los 5 reportes (incluido `ventas-por-ruta` con datos), filtro de fechas aplicado en financiero, historial de producción devuelve solo la granja pedida, aging de fecha futura = 0 días. `tests/smoke.test.ts` → +1 caso: los 5 reportes responden 200. |
+| **Código** | `Reportes.tsx:37` → id `ventas-por-ruta`. `Reportes.tsx:28` → chequeo de `res.ok` con mensaje de error. `App.tsx` → tab por defecto de Finanzas coherente con el rol. **Y el módulo por defecto de Socio: hoy es `logistica`, pero `logistica.roles` es `[Admin, Comercial]`, así que un Socio aterriza en un módulo que no tiene en su sidebar y del que no puede salir (bug 4, detectado por `tests/ui/nav-render.test.tsx`).** Eliminar el handler duplicado de `/api/produccion/historial` (`server.ts:836`); el de `server.ts:1278` pasa a filtrar por `galeronId`. `Cobranza.tsx:55` → quitar `Math.abs`. `Facturacion.tsx` → botón "Imprimir" sin `onClick` (`:746`). |
+| **Tests** | `tests/e2e-fixes-criticos.test.ts` — 200 en los 5 reportes (incluido `ventas-por-ruta` con datos), filtro de fechas aplicado en financiero, historial de producción devuelve solo la granja pedida, aging de fecha futura = 0 días. `tests/smoke.test.ts` → +1 caso: los 5 reportes responden 200. Actualizar `tests/nav-config.test.ts` y `tests/ui/nav-render.test.tsx` para que los 4 bugs queden como regresión cubierta y `validarConfig()` devuelva `errores` vacío. |
 | **Def. de hecho** | Los 5 tabs de Reportes muestran datos. Socio entrando a Finanzas ve un tab seleccionado que corresponde al contenido. |
 
 ---
