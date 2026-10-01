@@ -499,8 +499,10 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
     const facturas = (await request(app).get('/api/facturas')).body;
     const facCred = facturas.find((f: any) => f.consecutivo === 'FAC-000002');
 
-    const res = await request(app).post('/api/pagos').send({
-      facturaId: facCred.id, metodoPago: 'Efectivo', monto: COSTO_CARTON * 30, usuarioId: 'u-ven'
+    // Registrar un cobro exige sesión: la ruta ahora valida permisos, así que el
+// pago va firmado y no permitido "a cualquiera" como antes.
+    const res = await request(app).post('/api/pagos').set('x-user-id', 'u-log').send({
+      facturaId: facCred.id, metodoPago: 'Efectivo', monto: COSTO_CARTON * 30
     });
     expect(res.status).toBe(200);
     expect(res.body.factura.estado).toBe('Pagada');

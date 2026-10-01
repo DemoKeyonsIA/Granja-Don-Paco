@@ -6,11 +6,12 @@ import dotenv from "dotenv";
 import { drizzle } from "drizzle-orm/libsql";
 import { createClient } from "@libsql/client";
 import * as schema from "./src/db/schema";
-import { eq, like, and, lt, ne, inArray, gt, desc } from "drizzle-orm";
+import { eq, like, and, lt, ne, inArray, gt, desc, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./src/lib/password";
 import { CREATE_TABLES } from "./src/db/ddl";
 import QRCode from "qrcode";
 import { clasificarDiferencia, OPCIONES_DIFERENCIA_RECEPCION } from "./src/lib/opcionesRecepcion";
+import { saldoDe, round2, agingPorFacturas, dso as dsoDe, fechaVencimientoDe, diasVencidoDe, estaSaldada, esCredito } from "./src/lib/cobranza";
 
 dotenv.config();
 
@@ -81,7 +82,7 @@ export async function createApp(testMode = false, testDb?: any) {
     db = drizzle(client, { schema });
   }
 
-  const { facturas, detallesFactura, inventario, gastos, granjas, galerones, lotes_aves, mantenimientos, movimientosInventario, produccion_diaria, clientes, rutas, traslados, recepciones, etiquetas, facturas_electronicas, pesos_por_punto, vacunaciones, inventario_alimento, consumo_alimento, activos_mantenimiento, ordenes_mantenimiento, desperdicios, listas_precios, precios_detalle, historial_precios, auditoria, aprobaciones, sesiones, guias_remision, traza_etiqueta, camiones, guias_despacho, guias_despacho_detalle, consecutivos, ventas_ruta, retornos_camion } = schema;
+  const { facturas, detallesFactura, inventario, gastos, granjas, galerones, lotes_aves, mantenimientos, movimientosInventario, produccion_diaria, clientes, rutas, traslados, recepciones, etiquetas, facturas_electronicas, pesos_por_punto, vacunaciones, inventario_alimento, consumo_alimento, activos_mantenimiento, ordenes_mantenimiento, desperdicios, listas_precios, precios_detalle, historial_precios, auditoria, aprobaciones, sesiones, guias_remision, traza_etiqueta, camiones, guias_despacho, guias_despacho_detalle, consecutivos, ventas_ruta, retornos_camion, pagos } = schema;
 
   // ==================== PHASE 5 — ROLE-BASED AUTH ====================
 
@@ -573,6 +574,10 @@ ${JSON.stringify(historicalData, null, 2)}`;
           id: factura.id,
           consecutivo: consecutivoAsignado,
           fecha: factura.fecha,
+          // Vencimiento resuelto al crear, para que el aging no dependa de
+          // recalcularlo cada lectura. `Credito` no tiene plazo fijo definido en
+          // la app, así que vence el mismo día y no se inventa ninguno.
+          fechaVencimiento: fechaVencimientoDe(factura as any) || null,
           clienteId: factura.clienteId,
           vendedorId,
           subtotal: factura.subtotal,
@@ -669,43 +674,114 @@ ${JSON.stringify(historicalData, null, 2)}`;
     }
   });
 
-  // Registrar pago de una cuenta por cobrar
-  app.post("/api/pagos", async (req, res) => {
+  // Registrar pago de una cuenta por cobrar.
+  // Un pago es append-only: cada uno es una fila en `pagos` y el saldo de la
+  // factura es `total - SUM(pagos.monto)`. Antes ponía `estado = 'Pagada'` sin
+  // más, así que un pago parcial marcaba la factura entera como pagada y no
+  // quedaba historial.
+  app.post("/api/pagos", requirePermission(['facturacion', 'ventas'], 'create'), async (req, res) => {
     try {
-      const { facturaId, metodoPago, monto, usuarioId } = req.body;
+      const { facturaId, metodoPago, monto, nota } = req.body;
+      // El autor del pago es el autenticado, nunca uno del body: aceptar el
+      // `usuarioId` del body firmaría la auditoría de un cobro ajeno.
+      const usuarioId = ((req as any).usuario && (req as any).usuario.id) || 'system';
       if (!facturaId) return res.status(400).json({ error: "facturaId requerido" });
 
       const factura = await db.query.facturas.findFirst({ where: eq(facturas.id, facturaId) });
       if (!factura) return res.status(404).json({ error: "Factura no encontrada" });
-
-      const updateData: any = { estado: 'Pagada' };
-      if (metodoPago) updateData.metodo_pago = metodoPago;
-
-      await db.update(facturas).set(updateData).where(eq(facturas.id, facturaId));
-
-      // Ajusta el saldo pendiente del cliente (facturas a crédito)
-      if (factura.condicion_pago === 'Credito') {
-        const cliente = await db.query.clientes.findFirst({ where: eq(clientes.id, factura.clienteId) });
-        if (cliente && Number(cliente.saldo_pendiente || 0) > 0) {
-          const montoPago = Number(monto) > 0 ? Number(monto) : Number(factura.total);
-          await db.update(clientes).set({
-            saldo_pendiente: Math.max(0, Number(cliente.saldo_pendiente || 0) - montoPago)
-          }).where(eq(clientes.id, factura.clienteId));
-        }
+      if (factura.estado === 'Anulada') {
+        // Una factura anulada no debe dinero; aceptarle un pago la reviviría
+        // como "Pagada" y devolvería una cartera que nunca existió.
+        return res.status(409).json({ error: "No se puede pagar una factura anulada" });
       }
 
+      const pagadoPrevio = await totalPagado(facturaId);
+      const saldoPrevio = saldoDe(factura as any, pagadoPrevio);
+      if (saldoPrevio <= 0) {
+        return res.status(409).json({ error: "La factura ya está saldada" });
+      }
+
+      const montoPago = monto === undefined || monto === null || Number(monto) <= 0
+        ? saldoPrevio
+        : round2(Number(monto));
+      if (!Number.isFinite(montoPago) || montoPago <= 0) {
+        return res.status(400).json({ error: "monto inválido" });
+      }
+      if (montoPago > saldoPrevio) {
+        return res.status(400).json({
+          error: `El monto (${montoPago}) supera el saldo pendiente (${saldoPrevio})`,
+        });
+      }
+
+      const pagoId = crypto.randomUUID();
+      const saldoRestante = round2(saldoPrevio - montoPago);
+      // Solo queda `Pagada` cuando no debe nada. Antes cualquier monto la marcaba.
+      const estadoResultante = saldoRestante <= 0 ? 'Pagada' : factura.estado;
+
+      await db.transaction(async (tx) => {
+        await tx.insert(pagos).values({
+          id: pagoId,
+          facturaId,
+          fecha: new Date().toISOString().slice(0, 10),
+          monto: montoPago,
+          metodo: metodoPago ?? null,
+          usuarioId: usuarioId ?? null,
+          nota: nota ?? null,
+        });
+
+        await tx.update(facturas).set({
+          estado: estadoResultante,
+          ...(metodoPago ? { metodo_pago: metodoPago } : {}),
+        }).where(eq(facturas.id, facturaId));
+
+        // El saldo del cliente baja por lo efectivamente pagado, no por el total.
+        if (factura.condicion_pago === 'Credito') {
+          await tx.update(clientes).set({
+            saldo_pendiente: sql`MAX(0, COALESCE(saldo_pendiente, 0) - ${montoPago})`,
+          }).where(eq(clientes.id, factura.clienteId));
+        }
+      });
+
       await logAudit(
-        usuarioId || 'system',
+        usuarioId,
         'Pago registrado',
         'Cobranza',
         facturaId,
-        { estado: factura.estado },
-        updateData,
-        monto ? `Pago parcial: ${monto}` : `Pago total: ${factura.total}`
+        { estado: factura.estado, saldo: saldoPrevio },
+        { estado: estadoResultante, saldo: saldoRestante },
+        saldoRestante > 0
+          ? `Pago parcial: ${montoPago} de ${saldoPrevio}`
+          : `Pago total: ${montoPago}`
       );
 
       const actualizada = await db.query.facturas.findFirst({ where: eq(facturas.id, facturaId) });
-      res.json({ ok: true, factura: actualizada });
+      res.json({
+        ok: true,
+        pago: { id: pagoId, facturaId, monto: montoPago, metodo: metodoPago ?? null },
+        pagado: round2(pagadoPrevio + montoPago),
+        saldo: saldoRestante,
+        factura: actualizada,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /** Historial de pagos de una factura, del más reciente al más antiguo. */
+  app.get("/api/facturas/:id/pagos", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const factura = await db.query.facturas.findFirst({ where: eq(facturas.id, id) });
+      if (!factura) return res.status(404).json({ error: "Factura no encontrada" });
+
+      const lista = await db.query.pagos.findMany({ where: eq(pagos.facturaId, id) });
+      const pagado = lista.reduce((a: number, p: any) => a + Number(p.monto || 0), 0);
+
+      res.json({
+        pagos: lista.sort((a: any, b: any) => String(b.fecha).localeCompare(String(a.fecha))),
+        pagado: round2(pagado),
+        saldo: saldoDe(factura as any, pagado),
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -2225,6 +2301,23 @@ ${JSON.stringify(historicalData, null, 2)}`;
     return { clave: 'Crónico', label: 'Crónico' };
   }
 
+  /** Suma de `pagos.monto` de una factura. Base del saldo pendiente. */
+  async function totalPagado(facturaId: string): Promise<number> {
+    const lista = await db.query.pagos.findMany({ where: eq(pagos.facturaId, facturaId) });
+    return round2(lista.reduce((a: number, p: any) => a + Number(p.monto || 0), 0));
+  }
+
+  /** `facturaId -> pagado`, para no consultar la tabla de pagos factura por factura. */
+  async function mapaPagadoPorFactura(facturas: { id: string }[]): Promise<Map<string, number>> {
+    if (facturas.length === 0) return new Map();
+    const todos = await db.query.pagos.findMany();
+    const porFactura = new Map<string, number>();
+    for (const p of (todos as any[])) {
+      porFactura.set(p.facturaId, round2((porFactura.get(p.facturaId) ?? 0) + Number(p.monto || 0)));
+    }
+    return porFactura;
+  }
+
   // Score de riesgo 0–100 (menor = mejor). Sin scorecard único:
   // puntualidad 12m + uso de línea + frecuencia reciente (regla del boceto v6).
   function calcularScore(cliente: any, diasVencidoMax: number, facturas30d: number): { score: number; nivel: 'Bajo' | 'Medio' | 'Alto' } {
@@ -2251,6 +2344,9 @@ ${JSON.stringify(historicalData, null, 2)}`;
     const ultimoTrimestre = fechaRef - 90 * 86400000;
     const ultimoAnio = fechaRef - 365 * 86400000;
 
+    // El saldo ya descuenta lo pagado: `facturas.total` no es lo que se debe.
+    const pagadoPorFactura = await mapaPagadoPorFactura(facturasTbl as any[]);
+
     const filas = clientesTbl.map((c: any) => {
       const facturasCliente = facturasTbl.filter((f: any) => f.clienteId === c.id);
       const facturas90d = facturasCliente.filter((f: any) => new Date(f.fecha).getTime() >= ultimoTrimestre);
@@ -2265,10 +2361,25 @@ ${JSON.stringify(historicalData, null, 2)}`;
       const ticketProm = facturas90d.length > 0 ? Math.round(facturas90d.reduce((a: number, f: any) => a + Number(f.total || 0), 0) / facturas90d.length) : 0;
       const monto90d = facturas90d.reduce((a: number, f: any) => a + Number(f.total || 0), 0);
 
-      // Días de mayor vencido: facturas a crédito no pagadas (y no anuladas).
-      const pendientes = facturasCliente.filter((f: any) => f.condicion_pago === 'Credito' && !['Pagada', 'Anulada'].includes(f.estado));
-      const diasVencidoMax = pendientes.length > 0 ? Math.max(...pendientes.map((f: any) => diasTranscurridos(f.fecha, fechaRef))) : 0;
-      const vencido = pendientes.reduce((a: number, f: any) => a + Number(f.total || 0), 0);
+      // Días de mayor atraso y monto vencido, ya sobre el vencimiento real
+      // (fecha + crédito) y solo sobre el saldo que queda. Antes se medía desde
+      // `fecha` y se sumaba `total` de facturas que ni habían vencido, así que
+      // "vencido" incluía dinero que aún no se debía.
+      const pendientes = facturasCliente.filter((f: any) =>
+        esCredito(f.condicion_pago) && !estaSaldada(f.estado));
+      const conSaldo = pendientes.filter((f: any) =>
+        saldoDe(f, pagadoPorFactura.get(f.id) ?? 0) > 0);
+
+      const diasVencidoMax = conSaldo.length > 0
+        ? Math.max(...conSaldo.map((f: any) => diasVencidoDe(f, fechaRef)))
+        : 0;
+      const vencido = round2(conSaldo.reduce((a: number, f: any) => {
+        const saldo = saldoDe(f, pagadoPorFactura.get(f.id) ?? 0);
+        // Solo lo que además ya pasó la fecha de vencimiento.
+        return diasVencidoDe(f, fechaRef) > 0 ? a + saldo : a;
+      }, 0));
+      const carteraCliente = round2(conSaldo.reduce((a: number, f: any) =>
+        a + saldoDe(f, pagadoPorFactura.get(f.id) ?? 0), 0));
 
       const comp = comportamientoPago(diasVencidoMax);
       const { score, nivel } = calcularScore(c, diasVencidoMax, facturas30d.length);
@@ -2285,7 +2396,10 @@ ${JSON.stringify(historicalData, null, 2)}`;
         condicionPago: c.condicion_pago,
         precioEspecial: c.precio_especial,
         limiteCredito: Number(c.limite_credito || 0),
-        saldoPendiente: Number(c.saldo_pendiente || 0),
+        // El saldo real, derivado de las facturas. `clientes.saldo_pendiente`
+        // se queda como campo propio del cliente para los otros que lo leen,
+        // pero el aging necesita el que cuadra con `pagos`.
+        saldoPendiente: carteraCliente,
         promedioCompra: c.promedio_compra || 0,
         notas: c.notas || '',
         fechaCreacion: c.fecha_creacion,
@@ -2338,21 +2452,26 @@ ${JSON.stringify(historicalData, null, 2)}`;
       const ventaMes = facturasMes.reduce((a: number, f: any) => a + Number(f.total || 0), 0) +
         tiquetesMes.reduce((a: number, v: any) => a + Number(v.total || 0), 0);
 
-      const facturasCredito = facturasTbl.filter((f: any) => f.condicion_pago === 'Credito');
-      const diasParaLasPendientes: number[] = facturasCredito
-        .filter((f: any) => !['Pagada', 'Anulada'].includes(f.estado))
-        .map((f: any) => diasTranscurridos(f.fecha, fechaRef));
-      const dso = diasParaLasPendientes.length > 0 ? Math.round(diasParaLasPendientes.reduce((a, b) => a + b, 0) / diasParaLasPendientes.length) : 0;
+      // Un solo mapa de lo pagado por factura sirve para el DSO, el aging y la
+      // lista de vencidas: leerlo una vez evita que las tres lecturas midan
+      // cosas distintas.
+      const pagadoPorFactura = await mapaPagadoPorFactura(facturasTbl as any[]);
+      // DSO sobre facturas que están vencidas y tienen saldo.
+      const dso = dsoDe(facturasTbl as any[], pagadoPorFactura, fechaRef);
 
-      const carteraTotal = filas.reduce((a: number, f: any) => a + Number(f.saldoPendiente || 0), 0);
-      const vencidoTotal = filas.reduce((a: number, f: any) => a + Number(f.vencido || 0), 0);
+      const carteraTotal = round2(filas.reduce((a: number, f: any) => a + Number(f.saldoPendiente || 0), 0));
+      const vencidoTotal = round2(filas.reduce((a: number, f: any) => a + Number(f.vencido || 0), 0));
       const enRiesgo = filas.filter((f: any) => f.riesgo !== 'Bajo');
 
+      // El aging se recalcula sobre las facturas con el helper compartido, para
+      // que sus buckets no puedan apartarse de `diasVencido` ni de `vencido`
+      // que ya salen de `cargarCartera`.
+      const agingCrudo = agingPorFacturas(facturasTbl as any[], pagadoPorFactura, fechaRef);
       const aging = {
-        alDia: filas.reduce((a: number, f: any) => a + (f.diasVencido <= 3 ? Number(f.saldoPendiente || 0) : 0), 0),
-        d1_30: filas.reduce((a: number, f: any) => a + (f.diasVencido > 3 && f.diasVencido <= 30 ? Number(f.vencido || 0) : 0), 0),
-        d31_60: filas.reduce((a: number, f: any) => a + (f.diasVencido > 30 && f.diasVencido <= 60 ? Number(f.vencido || 0) : 0), 0),
-        d60: filas.reduce((a: number, f: any) => a + (f.diasVencido > 60 ? Number(f.vencido || 0) : 0), 0),
+        alDia: round2(agingCrudo.alDia),
+        d1_30: round2(agingCrudo.d1_30),
+        d31_60: round2(agingCrudo.d31_60),
+        d60: round2(agingCrudo.d60),
       };
 
       const worklist = filas
@@ -2428,9 +2547,13 @@ ${JSON.stringify(historicalData, null, 2)}`;
       const facturas = facturasTbl.filter((f: any) => f.clienteId === id);
       const tiquetes = ventasRutaTbl.filter((v: any) => v.clienteId === id && v.estado !== 'Anulada');
 
-      const facturasAbiertas = facturas.filter((f: any) => !['Pagada', 'Anulada'].includes(f.estado));
-      const pendientesCredito = facturasAbiertas.filter((f: any) => f.condicion_pago === 'Credito');
-      const vencidas = pendientesCredito.filter((f: any) => diasTranscurridos(f.fecha, fechaRef) > 0);
+      const facturasAbiertas = facturas.filter((f: any) => !estaSaldada(f.estado));
+      const pendientesCredito = facturasAbiertas.filter((f: any) => esCredito(f.condicion_pago));
+      const pagadoPorFactura = await mapaPagadoPorFactura(facturas as any[]);
+      // Vencida = pasado el vencimiento y con saldo. Antes era "más de 0 días
+      // desde la emisión", que daba por vencida lo que aún no se debía.
+      const vencidas = pendientesCredito.filter((f: any) =>
+        diasVencidoDe(f, fechaRef) > 0 && saldoDe(f, pagadoPorFactura.get(f.id) ?? 0) > 0);
       const facturas30d = facturas.filter((f: any) => new Date(f.fecha) >= iniMes && f.estado !== 'Anulada');
       const tiquetes30d = tiquetes.filter((v: any) => new Date(v.fechaHora) >= iniMes);
 
@@ -7035,6 +7158,46 @@ async function startServer() {
   }
   if (!facturaColNames.includes('camion_id')) {
     await client.execute("ALTER TABLE facturas ADD COLUMN camion_id TEXT");
+  }
+
+  // Auto-migrate: cobranza — fecha_vencimiento + tabla pagos.
+  // El aging se medía desde `fecha`, así que una factura a 30 días de crédito
+  // figuraba vencida desde el día 1. `fecha_vencimiento` se rellena con la
+  // fecha + los días que implica su `condicion_pago`.
+  if (!facturaColNames.includes('fecha_vencimiento')) {
+    await client.execute("ALTER TABLE facturas ADD COLUMN fecha_vencimiento TEXT");
+  }
+  await client.execute(`CREATE TABLE IF NOT EXISTS pagos (
+    id TEXT PRIMARY KEY,
+    factura_id TEXT NOT NULL REFERENCES facturas(id),
+    fecha TEXT NOT NULL,
+    monto REAL NOT NULL,
+    metodo TEXT,
+    usuario_id TEXT,
+    nota TEXT
+  )`);
+  await client.execute("CREATE INDEX IF NOT EXISTS idx_pagos_factura ON pagos(factura_id)");
+  // Backfill: solo facturas que aún no tienen vencimiento explícito.
+  // El plazo lo decide `diasDeCredito`, no un CASE en SQL: dos copias de la
+  // misma regla se apartan (un `LIKE '%8%'` antes que `%15%` le daba 8 días a
+  // un "Credito 18").
+  const facturasParaVencer = await client.execute(
+    `SELECT id, fecha, condicion_pago FROM facturas
+     WHERE (fecha_vencimiento IS NULL OR fecha_vencimiento = '') AND fecha IS NOT NULL`
+  );
+  for (const fila of facturasParaVencer.rows) {
+    const f = fila as any;
+    const vencimiento = fechaVencimientoDe({
+      fecha: String(f.fecha),
+      fechaVencimiento: null,
+      condicion_pago: f.condicion_pago ?? null,
+    });
+    if (vencimiento) {
+      await client.execute({
+        sql: `UPDATE facturas SET fecha_vencimiento = ? WHERE id = ?`,
+        args: [vencimiento, f.id],
+      });
+    }
   }
 
   // Auto-migrate: guias_despacho — columna F3 (fin_dia_fecha)

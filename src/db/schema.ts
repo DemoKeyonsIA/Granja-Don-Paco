@@ -161,6 +161,13 @@ export const facturas = sqliteTable('facturas', {
   id: text('id').primaryKey(),
   consecutivo: text('consecutivo').notNull(),
   fecha: text('fecha').notNull(),
+  /**
+   * Vencimiento real de la factura. Antes el aging se medía desde `fecha`, así
+   * que una factura a 30 días de crédito ya figuraba vencida desde el día 1.
+   * Se rellena al migrar y al crear la factura; si queda null se deriva de
+   * `fecha` + `condicion_pago` (ver `src/lib/cobranza.ts`).
+   */
+  fechaVencimiento: text('fecha_vencimiento'),
   clienteId: text('cliente_id').notNull().references(() => clientes.id),
   vendedorId: text('vendedor_id').notNull().references(() => users.id),
   subtotal: real('subtotal').notNull(),
@@ -180,6 +187,24 @@ export const detallesFactura = sqliteTable('detalles_factura', {
   cantidad: integer('cantidad').notNull(),
   precio_unitario: real('precio_unitario').notNull(),
   subtotal: real('subtotal').notNull(),
+});
+
+/**
+ * Historial de pagos aplicados a una factura.
+ *
+ * Antes `POST /api/pagos` ponía `estado = 'Pagada'` sin registrar nada: un pago
+ * parcial marcaba la factura entera como pagada y no quedaba rastro. El saldo
+ * pendiente es ahora `facturas.total - SUM(pagos.monto)`, no `facturas.total`.
+ */
+export const pagos = sqliteTable('pagos', {
+  id: text('id').primaryKey(),
+  facturaId: text('factura_id').notNull().references(() => facturas.id),
+  fecha: text('fecha').notNull(),
+  monto: real('monto').notNull(),
+  metodo: text('metodo'),
+  /** Usuario que registró el pago. Sin FK: el registro de pagos es append-only. */
+  usuarioId: text('usuario_id'),
+  nota: text('nota'),
 });
 
 export const gastos = sqliteTable('gastos', {
