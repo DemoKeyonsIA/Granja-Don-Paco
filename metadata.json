@@ -1,0 +1,6 @@
+{
+  "name": "Estela - Asistente de Rutas",
+  "description": "Asistente de inteligencia artificial para vendedores en ruta de Granja Don Paco admin, encargado de extraer información clave de mensajes y enviarla a los módulos de facturación, cobranza y gastos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

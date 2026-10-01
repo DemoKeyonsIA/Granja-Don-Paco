@@ -1,0 +1,17 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+.gstack/
+
+# Bases de datos SQLite: se regeneran en cada corrida de tests
+.test-*.db
+.test-*.db-journal
+
+# Base de datos de desarrollo (contiene datos reales, no versionable)
+local.db
+local.db-journal

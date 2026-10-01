@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boceto — Finanzas: picture unificado (Resumen · Documentos · Cobranza · Analítica) · v3</title>
+<style>
+  :root { --bg:#eef1f4; --card:#fff; --line:#d7dce2; --ink:#1a2332; --ink2:#5b6675; --ink3:#98a1ae;
+          --brand:#2f6f4f; --brand-tint:#e8f2ec; --amber:#e67e22; --green:#27ae60; --red:#c0392b; --blue:#2980b9; --dk:#22303f; }
+  * { box-sizing:border-box; }
+  body { font-family:'Segoe UI',system-ui,Arial,sans-serif; background:var(--bg); color:var(--ink); margin:0; padding:28px; line-height:1.5; }
+  .wrap { max-width:1120px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--ink2); font-size:13px; margin-bottom:20px; }
+  h2 { font-size:15px; margin:30px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--line); display:flex; align-items:center; gap:8px; }
+  h2 .tag { font-size:11px; background:var(--brand); color:#fff; border-radius:10px; padding:2px 8px; font-weight:600; }
+  h2 .tag.r { background:var(--red); } h2 .tag.o{background:var(--amber);}
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card p, .card li { font-size:13px; color:var(--ink2); }
+  .card li b { color:var(--ink); }
+  .card ul, .card ol { margin:6px 0 0 18px; padding:0; }
+  .grid { display:grid; gap:14px; } .cols2{grid-template-columns:1fr 1fr;} .cols3{grid-template-columns:repeat(3,1fr);}
+  @media (max-width:860px){.cols2,.cols3{grid-template-columns:1fr;}}
+  .note { font-size:12.5px; color:var(--ink2); border-left:3px solid var(--amber); background:#fdf3e5; border-radius:0 8px 8px 0; padding:8px 12px; margin-top:12px; }
+  .ok { border-left-color:var(--green); background:#e9f6ee; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; }
+  th, td { border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }
+  th { background:#f4f6f8; font-size:11px; text-transform:uppercase; letter-spacing:.03em; }
+  td.c, th.c { text-align:center; }
+  code { background:#eef1f4; border-radius:4px; padding:1px 6px; font-size:12px; }
+  .badge { font-size:10.5px; font-weight:700; border-radius:8px; padding:2px 8px; display:inline-block; }
+  .b-r{background:#fbeaea;color:#a52818;} .b-o{background:#fdf3e5;color:#b0640c;} .b-g{background:#e7f6ec;color:#1e7d3c;} .b-b{background:#e7f0fb;color:#1c5fa8;} .b-gr{background:#eef1f4;color:#5b6675;}
+  /* ===== capa de la APP real (tokens de index.css + clases .gcrm) ===== */
+  .app { display:flex; background:#F7F8FA; border:1px solid #E2E6EA; border-radius:14px; overflow:hidden; box-shadow:0 14px 34px rgba(15,25,35,.12); margin-top:8px; }
+  .side { width:196px; flex:none; background:#0F1923; display:flex; flex-direction:column; }
+  .side .logo { display:flex; gap:10px; align-items:center; padding:18px 16px 16px; }
+  .side .logo .egg { width:34px; height:34px; border-radius:10px; background:#3D7A4A; display:flex; align-items:center; justify-content:center; font-size:16px; box-shadow:0 2px 8px rgba(0,0,0,.3); }
+  .side .logo b { display:block; font-size:16px; font-weight:800; line-height:1; color:#fff; }
+  .side .logo span { display:block; font-size:11px; font-weight:700; color:#D4A017; }
+  .side .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.12em; color:#7C8A99; padding:0 16px 8px; }
+  .side .nav { display:flex; align-items:center; gap:9px; padding:8px 16px; font-size:12px; font-weight:600; color:#A9B6C4; white-space:nowrap; }
+  .side .nav.on { background:rgba(61,122,74,.15); color:#4E9A5E; }
+  .side .nav .ic { width:16px; text-align:center; }
+  .side .user { margin-top:auto; padding:12px 14px; border-top:1px solid rgba(255,255,255,.08); display:flex; gap:9px; align-items:center; }
+  .side .user .av { width:30px; height:30px; border-radius:8px; background:#3D7A4A; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; }
+  .side .user b { color:#fff; font-size:11.5px; display:block; }
+  .side .user span { color:#7C8A99; font-size:10px; }
+  .top { height:46px; background:#fff; border-bottom:1px solid #E2E6EA; display:flex; align-items:center; gap:10px; padding:0 12px; flex:none; }
+  .top .search { width:210px; height:30px; background:#F1F3F5; border:1px solid #E2E6EA; border-radius:8px; display:flex; align-items:center; gap:7px; padding:0 10px; font-size:11.5px; color:#8C95A0; }
+  .top .sp { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .top .nuevo { background:#3D7A4A; color:#fff; font-size:11.5px; font-weight:600; border-radius:8px; padding:7px 12px; box-shadow:0 2px 10px rgba(61,122,74,.35); }
+  .top .moon { color:#5F6B7A; font-size:14px; }
+  .top .est { width:24px; height:24px; border-radius:8px; background:#3D7A4A; color:#fff; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; }
+  .body { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .crumb { padding:14px 20px 0; font-size:11.5px; color:#8C95A0; display:flex; gap:6px; align-items:center; }
+  .crumb b { color:#1A1D21; font-weight:500; }
+  .content { padding:12px 20px 20px; }
+  .tabs { display:flex; gap:22px; border-bottom:1px solid #E2E6EA; }
+  .tabs button { padding:9px 0 11px; font-size:13px; font-weight:600; color:#8C95A0; border-bottom:2px solid transparent; white-space:nowrap; }
+  .tabs button.on { color:#3D7A4A; border-color:#3D7A4A; }
+  .tabs button.sep { margin-left:auto; }
+  .tabs button.cta { color:#B8860B; border-color:transparent; font-size:12px; }
+  .tabsrow2 { display:flex; gap:16px; border-bottom:1px solid #F1F3F5; margin-top:2px; }
+  .tabsrow2 button { padding:7px 0 8px; font-size:11.5px; font-weight:600; color:#8C95A0; border-bottom:2px solid transparent; white-space:nowrap; }
+  .tabsrow2 button.on { color:#2D5C38; border-color:#B8860B; }
+  .tabsrow2 .rowlabel { margin-right:2px; font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:#B0B7BF; align-self:center; padding-right:10px; border-right:1px solid #E2E6EA; }
+  /* filas tipo lista dentro de un panel (mismo patrón .gcrm que usa Cliente360/Office) */
+  .panelbar { display:flex; gap:8px; padding:10px 14px; border-bottom:1px solid #E2E6EA; align-items:center; }
+  .panelbar input { flex:1; max-width:200px; padding:6px 9px; border:1px solid #E2E6EA; border-radius:9px; font-size:11.5px; color:#8C95A0; }
+  .m { display:flex; gap:9px; align-items:center; padding:9px 14px; border-bottom:1px solid #F1F3F5; font-size:12px; }
+  .m.on { background:#F0FDF4; box-shadow:inset 3px 0 0 #3D7A4A; }
+  .m .txt { min-width:0; flex:1; }
+  .m .who { font-weight:700; }
+  .m .subj { color:#5F6B7A; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .m .chiplbl { font-weight:800; color:#1A1D21; white-space:nowrap; }
+  .m .hact { display:flex; gap:4px; }
+  .kv { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:11.5px; padding:6px 0; border-bottom:1px dashed #EEF2F7; }
+  .kv b { color:#1A1D21; }
+  .fmeta { display:flex; gap:12px; padding:9px 14px; border-top:1px solid #E2E6EA; background:#FAFBFC; font-size:11px; color:#5F6B7A; align-items:center; }
+  .fmeta b { color:#1A1D21; }
+  .viewhead { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-top:16px; }
+  .viewhead h1 { font-size:20px; font-weight:800; letter-spacing:-.02em; margin:0; }
+  .viewhead .sub { font-size:11.5px; color:#8C95A0; margin-top:2px; }
+  .btn { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:9px; border:1px solid #E2E6EA; background:#fff; font-size:11.5px; font-weight:700; color:#5F6B7A; }
+  .btn.brand { background:#3D7A4A; border-color:#3D7A4A; color:#fff; }
+  .btn.sm { height:24px; padding:0 9px; font-size:10.5px; border-radius:7px; }
+  .kpis { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:14px 0; }
+  .kpi { background:#fff; border:1px solid #E2E6EA; border-radius:14px; padding:12px 13px; box-shadow:0 1px 2px rgba(15,23,42,.05); }
+  .kpi .l { font-size:9.5px; color:#8C95A0; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+  .kpi .v { font-size:20px; font-weight:800; margin:3px 0 2px; letter-spacing:-.02em; }
+  .kpi .ins { font-size:10px; color:#5F6B7A; }
+  .up { color:#3D7A4A; font-weight:700; } .down { color:#DC2626; font-weight:700; }
+  .panel { background:#fff; border:1px solid #E2E6EA; border-radius:14px; box-shadow:0 1px 2px rgba(15,23,42,.05); overflow:hidden; margin-bottom:12px; }
+  .panel-head { display:flex; align-items:center; gap:10px; padding:11px 14px; border-bottom:1px solid #E2E6EA; }
+  .panel-title { font-weight:800; font-size:12.5px; }
+  .panel-head small { color:#8C95A0; font-size:10.5px; font-weight:400; }
+  .panel-head .tools { margin-left:auto; display:flex; gap:7px; align-items:center; }
+  table.t { width:100%; border-collapse:collapse; }
+  table.t th { text-align:left; font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; color:#8C95A0; padding:9px 14px; border-bottom:1px solid #E2E6EA; background:#F8FAFC; font-weight:700; }
+  table.t td { padding:9px 14px; border-bottom:1px solid #F1F5F9; font-size:11.5px; }
+  table.t tr:last-child td { border-bottom:0; }
+  table.t td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  table.t th.num { text-align:right; }
+  .chip { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; border-radius:999px; font-size:10px; font-weight:700; border:1px solid #E2E6EA; background:#F1F3F5; color:#5F6B7A; white-space:nowrap; }
+  .chip.green { background:#D1FAE5; color:#065F46; border-color:#A7F3D0; }
+  .chip.amber { background:#FEF3C7; color:#B45309; border-color:#FDE68A; }
+  .chip.red { background:#FEE2E2; color:#B91C1C; border-color:#FECACA; }
+  .chip.blue { background:#DBEAFE; color:#1D4ED8; border-color:#BFDBFE; }
+  .chip.gray { color:#8C95A0; }
+  .fc { display:flex; align-items:flex-end; gap:8px; height:112px; padding:8px 14px 0; }
+  .fc .col { flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; font-size:9.5px; color:#8C95A0; font-weight:700; }
+  .fc .bar { width:100%; height:92px; background:#F1F5F9; border-radius:7px; display:flex; flex-direction:column; justify-content:flex-end; overflow:hidden; }
+  .fc .bar > div { width:100%; background:#3D7A4A; border-radius:6px 6px 0 0; }
+  .fc .bar.muted > div { background:#CFE5D8; }
+  .tbar { margin:6px 0 9px; }
+  .tbar .bt { display:flex; justify-content:space-between; font-size:11px; color:#5F6B7A; margin-bottom:3px; }
+  .tbar .track { height:6px; background:#F1F3F5; border-radius:4px; overflow:hidden; }
+  .tbar .fill { height:100%; background:#B8860B; border-radius:4px; }
+  .attn { border:1px solid #E2E6EA; border-left:3px solid #3D7A4A; border-radius:12px; background:#fff; padding:10px 13px; font-size:11.5px; box-shadow:0 1px 2px rgba(15,23,42,.05); margin-bottom:9px; }
+  .attn.warn { border-left-color:#D97706; } .attn.crit { border-left-color:#DC2626; }
+  .attn b { color:#1A1D21; } .attn .a { color:#8C95A0; font-size:10.5px; display:block; margin-top:2px; }
+  .stackedbar { display:flex; height:9px; border-radius:5px; overflow:hidden; background:#F1F3F5; }
+  .leg { display:flex; gap:12px; flex-wrap:wrap; font-size:10px; color:#5F6B7A; margin-top:8px; }
+  .leg i { width:8px; height:8px; border-radius:2px; display:inline-block; margin-right:4px; }
+  .exec { display:grid; grid-template-columns:1fr 320px; gap:12px; align-items:start; }
+  .split { display:grid; grid-template-columns:1.35fr 1fr; gap:12px; align-items:start; }
+  .triple { background:#fff; border:1px dashed #C9D2DA; border-radius:10px; padding:11px; }
+  .triple .r { display:flex; gap:14px; border-bottom:1px solid #F1F5F9; padding:6px 0; font-size:11px; color:#8C95A0; }
+  .triple .r:last-child { border-bottom:0; }
+  .triple .r span { padding:2px 9px; border-radius:7px; background:#F1F3F5; color:#5F6B7A; font-weight:600; }
+  .triple .r span.on { background:#E8F5EC; color:#2D5C38; box-shadow:inset 0 -2px 0 #3D7A4A; }
+  .cycle { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin:14px 0 4px; }
+  .cycle .step { background:#fff; border:1px solid #E2E6EA; border-radius:12px; padding:9px 11px; box-shadow:0 1px 2px rgba(15,23,42,.05); }
+  .cycle .step .n { font-size:8.5px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:#B0B7BF; }
+  .cycle .step .t { font-size:11.5px; font-weight:800; margin:3px 0 2px; letter-spacing:-.01em; }
+  .cycle .step .d { font-size:9.5px; color:#8C95A0; line-height:1.45; min-height:26px; }
+  .cycle .step .k { margin-top:7px; font-size:11px; font-weight:800; color:#3D7A4A; }
+  .cycle .step.gap { border-style:dashed; border-color:#E6C88A; background:#fffdf7; }
+  .cycle .step.gap .k { color:#B45309; }
+  .need { display:inline-flex; align-items:center; gap:5px; font-size:9px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:#B45309; background:#FEF3C7; border:1px solid #FDE68A; border-radius:999px; padding:1px 8px; }
+  .cap { font-size:11.5px; color:var(--ink2); margin:10px 2px 0; }
+  .cap b { color:var(--ink); }
+  @media (max-width:1000px){ .side{display:none;} .kpis{grid-template-columns:repeat(2,1fr);} .exec,.split{grid-template-columns:1fr;} .cycle{grid-template-columns:repeat(2,1fr);} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Boceto v3 — Finanzas: un solo lugar para el dinero (Resumen · Documentos · Cobranza · Analítica)</h1>
+<div class="sub">Granja Don Paco · Análisis de la información real de la app + mejores prácticas (sin tocar código) · v3: el módulo baja de
+<b>3 filas de navegación a 1</b> con <b>4 tabs</b>, el <b>Centro de Mando se fusiona dentro de “Resumen”</b> y aparece el <b>ciclo del dinero</b> como
+banda central. Se conserva todo el análisis de las secciones 1–5 y 8–10 (evidencia, gaps, KPIs, FACELCR/Hacienda y prácticas de ERPs) · Los mocks usan
+el chrome real: sidebar <code>#0F1923</code>, topbar con <em>Buscar módulo…</em> y <em>Nuevo</em>, fila de tabs con subrayado verde <code>#3D7A4A</code>, migaja real</div>
+
+<h2>0. Veredicto rápido <span class="tag">resumen</span></h2>
+<div class="card"><p>
+El intento actual de fusión <b>no está bien hecho</b>: “Reportes” sigue siendo una repetición de las tarjetas de
+“Flujo de Caja” (y de “Cobranza”), y el “Centro de Mando” repite el P&amp;L por tercera vez. La duplicación no es cosmética:
+<b>los mismos indicadores se calculan en 3 lugares distintos</b> (Finanzas, Reportes y dashboard) y hay <b>un reporte roto</b>
+(Ventas por Ruta → 404) y <b>un flujo entero de venta sin medir</b> (la caja del vendedor/tiquetes). La corrección es un
+<b>picture unificado</b>: <b>4 tabs</b> —Resumen · Documentos · Cobranza · Analítica—, <b>un solo lugar calcula el P&amp;L</b> y el
+<b>Centro de Mando se disuelve dentro de “Resumen”</b>. Arriba el resultado, en medio el <b>ciclo del dinero</b> (venta en ruta → documento
+FE/NC → CxC → cobro → caja → resultado) y a la derecha <b>una sola bandeja</b> de señales. “Analítica” conserva las tendencias y comparativas
+nunca reimprimiendo las mismas tarjetas.</p></div>
+
+<h2>1. Duplicación detectada (evidencia) <span class="tag r">problema</span></h2>
+<table>
+  <tr><th>Indicador</th><th class="c">Dónde se calcula hoy</th><th class="c">Impacto</th></tr>
+  <tr><td><b>Ingresos / Ventas (pagadas)</b></td>
+    <td>1. <code>Finanzas.tsx:98</code> (cliente, suma <code>/api/facturas</code>) · 2. <code>server.ts:5897</code> (<code>/api/reportes/financiero</code>) · 3. <code>Reportes.tsx</code> KPI “Total Ventas”</td>
+    <td class="c"><span class="badge b-r">×3</span></td></tr>
+  <tr><td><b>Gastos Totales</b></td>
+    <td>1. <code>Finanzas.tsx:102</code> (cliente, <code>/api/gastos</code>) · 2. <code>server.ts:5899</code> · 3. <code>Reportes.tsx</code> KPI “Total Gastos”</td>
+    <td class="c"><span class="badge b-r">×3</span></td></tr>
+  <tr><td><b>Utilidad Neta</b></td>
+    <td>1. <code>Finanzas.tsx:104</code> · 2. <code>server.ts:5906</code> · 3. <code>Reportes.tsx</code> KPI “Utilidad Neta”</td>
+    <td class="c"><span class="badge b-r">×3</span></td></tr>
+  <tr><td><b>Margen %</b></td>
+    <td>1. <code>Finanzas.tsx:105</code> · 2. <code>server.ts:5908</code> · 3. <code>Reportes.tsx</code> KPI “Margen”</td>
+    <td class="c"><span class="badge b-r">×3</span></td></tr>
+  <tr><td><b>Cuentas por Cobrar</b></td>
+    <td>1. <code>Cobranza.tsx:93</code> · 2. <code>server.ts:5898</code> · 3. <code>Reportes.tsx</code> KPI “CxC”</td>
+    <td class="c"><span class="badge b-r">×3</span></td></tr>
+  <tr><td><b>Gastos por categoría</b></td>
+    <td>1. <code>server.ts:5900</code> (agregación) · 2. <code>Finanzas.tsx</code> vuelve a traer la lista <code>/api/gastos</code> en el cliente</td>
+    <td class="c"><span class="badge b-o">×2</span></td></tr>
+  <tr><td><b>Label “Flujo de Caja”</b></td>
+    <td>1. <code>App.tsx:691</code> (sub-tab) · 2. <code>Finanzas.tsx:118</code> (pestaña interna anidada)</td>
+    <td class="c"><span class="badge b-o">navegación duplicada</span></td></tr>
+  <tr><td><b>Reporte “Ventas por Ruta” <b style="color:var(--red)">roto</b></b></td>
+    <td>Cliente pide <code>/api/reportes/ventas-ruta</code> (<code>Reportes.tsx:7</code>) pero el server solo sirve <code>/api/reportes/ventas-por-ruta</code> (<code>server.ts:5794</code>)</td>
+    <td class="c"><span class="badge b-r">404 → toast error</span></td></tr>
+  <tr><td><b>Filtro de fechas ignorado en el financiero</b></td>
+    <td><code>server.ts:5891</code> no lee <code>fechaInicio/fechaFin</code> (los demás reportes sí); Finanzas no tiene fechas</td>
+    <td class="c"><span class="badge b-o">resumen global eterno</span></td></tr>
+</table>
+<div class="note"><b>Causa raíz:</b> no hay una única fuente de verdad del P&amp;L. Cada vista recalcula sobre las mismas
+tablas (facturas, gastos). <b>Corrección:</b> un solo endpoint de resumen (<code>/api/finanzas/resumen</code>) consumido por
+el nuevo “Resumen”, y Reportes consume <i>lo mismo</i> para análisis, jamás para repetir tarjetas.</div>
+
+<h2>2. Medición incompleta: dónde el sistema NO mide dinero <span class="tag r">gap</span></h2>
+<div class="card"><ul>
+  <li><b>La caja está fuera del P&amp;L.</b> Las ventas en ruta viven en <code>ventas_ruta</code> (tiquetes TQ-, con producto,
+  cartones, precio, total, cobro, facturaId) pero <b>ni</b> <code>/api/reportes/financiero</code> <b>ni</b> <code>ventas-por-ruta</code>
+  las contemplan: solo suman <code>facturas</code>. El flujo de venta #1 de una distribuidora (el camión que vende en la calle)
+  <b>no aparece en la utilidad</b> salvo que ya se haya convertido en factura. <span class="badge b-b">es el hallazgo más importante</span></li>
+  <li><b>“Ventas por Ruta” mide la ruta solo por facturas.</b> Para medir una ruta correctamente hay que sumar
+  tiquetes + facturas de esa ruta (vía <code>ventas_ruta.camionId</code> / <code>facturas.camionId</code> y cliente.ruta).</li>
+  <li><b>El desperdicio existe y tiene impacto financiero</b> (<code>desperdicios.impactoFinanciero</code>) pero nadie lo resta ni lo
+  reporta como % de producción.</li>
+  <li><b>La producción se mide en unidades, no en ₡</b> de costo de producción por cartón (ver sección 4).</li>
+  <li><b>Inventario sin valor monetario:</b> <code>inventario</code> tiene cantidad y unidad pero no precio → no se puede saber el ₡ inmovilizado ni la rotación.</li>
+  <li><b>Sin comparativos:</b> ningún reporte compara contra el período anterior ni contra objetivo.</li>
+</ul></div>
+
+<h2>3. Mejores prácticas de analytics financiero empleadas <span class="tag">investigación</span></h2>
+<div class="grid cols3">
+  <div class="card"><b>Jerarquía de KPIs (5-8-15)</b><ul>
+    <li>Regla de límite de memoria de trabajo: ~5 KPIs en la vista ejecutiva, ≤8 por dashboard funcional, ≤15 por pantalla operativa.</li>
+    <li>Pirámide: <b>Estratégico</b> (utilidad, margen, cartera) → <b>Operativo</b> (por ruta/camión/categoría) → <b>Diagnóstico</b> (por cliente/tiquete/factura).</li></ul></div>
+  <div class="card"><b>Leading vs lagging</b><ul>
+    <li>Lagging: utilidad, margen (confirman resultado).</li>
+    <li>Leading: días de cobro, % anulaciones de caja, cartones despachados vs producidos, saldo cartera &gt; límite → predicen el flujo antes de que pase.</li></ul></div>
+  <div class="card"><b>Unit economics y liquidez</b><ul>
+    <li>Margen <b>por producto</b> y por ruta (no solo total).</li>
+    <li>Ciclo de conversión de caja: <b>DSO</b> (días de cobro) + <b>DIO</b> (días de inventario).</li>
+    <li>Comparación <b>vs. período anterior</b> y <b>vs. objetivo/presupuesto</b> en cada KPI.</li></ul></div>
+</div>
+<div class="note ok">Estas prácticas se aplican como <b>capas</b>: Romper la fusión anterior (que mezclaba resumen operativo y listas analíticas en la misma pantalla) por una estructura de <i>resumen → documentos → cobranza → analítica</i>, con el <b>ciclo del dinero</b> como hilo visual del Resumen. Cada entidad real del sistema mapeó a sus KPIs (tabla 4).</div>
+
+<h2>4. Mapa de KPIs por ítem, proceso y flujo <span class="tag">diseño</span></h2>
+<table>
+  <tr><th>Ítem / Proceso / Flujo</th><th>KPIs a medir</th><th>Datos requeridos (esquema real)</th><th>Estado</th></tr>
+  <tr><td><b>Flujo global (P&amp;L)</b></td><td>Ingresos · Gastos · Utilidad neta · Margen % · Flujo del período</td><td><code>facturas</code> + <code>gastos</code></td><td><span class="badge b-b">existe ×3 (duplicado)</span></td></tr>
+  <tr><td><b>Venta en ruta (caja/tiquetes)</b></td><td>Total vendido en ruta · efectivo vs crédito · % anulaciones · tiquetes sin facturar</td><td><code>ventas_ruta</code></td><td><span class="badge b-r">no entra al P&amp;L</span></td></tr>
+  <tr><td><b>Ruta</b></td><td>Ventas ₡ · cartones · # facturas+tiquetes · ticket por ruta · capacidad usada</td><td><code>rutas</code> + <code>camiones.ruta_defecto</code> + cliente.ruta</td><td><span class="badge b-o">parcial (solo facturas) + 404</span></td></tr>
+  <tr><td><b>Camión</b></td><td>Cartones despachados · ventas del vendedor · % retornos · diferencia peso salida-llegada</td><td><code>guias_despacho</code> (pesoSalida/pesoLlegada) + <code>retornos_camion</code> + <code>ventas_ruta.camionId</code></td><td><span class="badge b-o">sin medir</span></td></tr>
+  <tr><td><b>Cliente</b></td><td>Ticket promedio · frecuencia de compra · % contado vs crédito · DSO por cliente · uso límite vs saldo · condición VIP/Alta</td><td><code>clientes</code> (saldo_pendiente, limite_credito, prioridad, promedio_compra, demanda_promedio_cartones) + <code>facturas</code></td><td><span class="badge b-o">datos existen, sin KPI</span></td></tr>
+  <tr><td><b>Producto / cartón</b></td><td>Unidades vendidas por tipo · precio promedio realizado · descuento concedido · margen por producto · rotación (días de stock)</td><td><code>detallesFactura</code> + <code>ventas_ruta</code> (producto, precioUnitario, cartones) + <code>inventario</code></td><td><span class="badge b-o">parcial (cantidades) · sin margen ni rotación</span></td></tr>
+  <tr><td><b>Producción</b></td><td>Cartones recogidos vs esperado · tasa de postura por ave · producción por granja/galerón</td><td><code>produccion_diaria</code> vs <code>galerones.produccion_diaria_esperada / aves_en_produccion</code></td><td><span class="badge b-b">reporte existe (unidades)</span></td></tr>
+  <tr><td><b>Costo de producción</b></td><td><b>Costo por cartón</b> y por unidad → margen bruto real</td><td>NO existe tabla de costos (alimento/insumos/aves) ni relación costo→producción/mano de obra</td><td><span class="badge b-r">falta registrar</span></td></tr>
+  <tr><td><b>Desperdicio</b></td><td>% de producción perdida · impacto ₡ · por motivo y origen</td><td><code>desperdicios</code> (cantidad, impactoFinanciero, motivo)</td><td><span class="badge b-b">existe · no se resta del P&amp;L</span></td></tr>
+  <tr><td><b>Gastos</b></td><td>Por categoría · % del ingreso · tendencia mensual · gasto diario promedio · planilla como %</td><td><code>gastos</code></td><td><span class="badge b-o">tarjeta total + lista; sin tendencia</span></td></tr>
+  <tr><td><b>Cobranza</b></td><td>Cartera total · vencida (&gt;15d) · antigüedad 30/60/90 · DSO · % cobrado en el período</td><td><code>facturas</code> estado Pendiente + fecha + condicion_pago</td><td><span class="badge b-b">existe en Cobranza</span></td></tr>
+  <tr><td><b>Despacho</b></td><td>Guías por estado (Preparada/Cargada/EnRuta/Cerrada) · cartones por guía · tiempo carga→cierre · cartones en bodega vs despachados</td><td><code>guias_despacho</code> + <code>guias_despacho_detalle</code> + <code>inventario</code></td><td><span class="badge b-o">sin KPI financiero</span></td></tr>
+  <tr><td><b>Vendedor</b></td><td>Ventas por vendedor · tiquetes emitidos · anulaciones · cobro efectivo vs crédito</td><td><code>ventas_ruta.vendedorId</code> + <code>facturas.vendedorId</code></td><td><span class="badge b-o">datos existen, sin ranking</span></td></tr>
+</table>
+<div class="note"><b>Dónde vive cada fila de este mapa en el picture de la sección 6:</b> <b>P&amp;L, gastos y desperdicio</b> → tarjetas de
+<b>Resumen</b> (Pantalla A); <b>venta en ruta, ruta, camión y vendedor</b> → banda de ventas por ruta en <b>Resumen</b> y su desglose completo en
+<b>Analítica › Ventas por Ruta</b> (Pantalla D); <b>producto, producción, costo y despacho</b> → <b>Analítica › Producción / Inventario</b> y el bloque
+<em>Salud del negocio</em> de la Pantalla A; <b>cliente y cobranza</b> → <b>Cobranza</b> (Pantalla C), y los documentos que los respaldan, en
+<b>Documentos</b> (Pantalla B). Ninguna fila quedó sin pantalla.</div>
+
+<h2>5. Lo que falta (acciones concretas) <span class="tag r">gaps</span></h2>
+<table>
+  <tr><th>#</th><th>Gap</th><th>Impacto si no se hace</th><th>Prioridad</th></tr>
+  <tr><td class="c">1</td><td>Ventas de caja (tiquetes) integradas al P&amp;L y a “Ventas por Ruta”</td><td>Utilidad y rutas incompletas; camión no mide su producción de ingresos</td><td><span class="badge b-r">Crítico</span></td></tr>
+  <tr><td class="c">2</td><td>Bug 404: <code>ventas-ruta</code> vs <code>ventas-por-ruta</code></td><td>El reporte VPR nunca carga (toast error)</td><td><span class="badge b-r">Crítico</span></td></tr>
+  <tr><td class="c">3</td><td>Un solo endpoint de resumen P&amp;L (<code>/api/finanzas/resumen</code>) y 1 set de tarjetas</td><td>Permite inconsistencias (3 cálculos) en ingresos/utilidad/margen</td><td><span class="badge b-o">Alta</span></td></tr>
+  <tr><td class="c">4</td><td>Comparativo vs. período anterior en cada KPI (Δ% Mes/Mes, Año/Mes)</td><td>No se puede saber si el negocio mejora o empeora</td><td><span class="badge b-o">Alta</span></td></tr>
+  <tr><td class="c">5</td><td>Filtro de fechas aplicable al resumen y tendencias</td><td>Hoy el financiero ignora fechas → “todo desde el inicio”</td><td><span class="badge b-o">Alta</span></td></tr>
+  <tr><td class="c">6</td><td>Costo de producción por cartón y por unidad (registro de costos)</td><td>No hay margen bruto real por producto ni punto de equilibrio</td><td><span class="badge b-o">Alta</span></td></tr>
+  <tr><td class="c">7</td><td>Tendencias gráficas (ventas/gastos/utilidad por mes, barras) + export CSV/PDF</td><td>Sin visualización temporal ni salida para contador/socio</td><td><span class="badge b-b">Media</span></td></tr>
+  <tr><td class="c">8</td><td>DSO, antigüedad de cartera 30/60/90 y % vencida</td><td>No se mide salud de cobro ni presión de caja futura</td><td><span class="badge b-b">Media</span></td></tr>
+  <tr><td class="c">9</td><td>Valor ₡ de inventario y rotación (días de stock)</td><td>Capital inmovilizado invisible</td><td><span class="badge b-b">Media</span></td></tr>
+  <tr><td class="c">10</td><td>Desperdicio como % de producción y resta del P&amp;L</td><td>Se pierde dinero sin explicación</td><td><span class="badge b-b">Media</span></td></tr>
+  <tr><td class="c">11</td><td>Ranking por cliente/vendedor/ruta (top N + 80/20) y alertas de umbral (saldo&gt;límite, vencida&gt;15d, margen a la baja)</td><td>Decisiones reactivas en vez de proactivas (leading indicators)</td><td><span class="badge b-gr">Baja/Med</span></td></tr>
+  <tr><td class="c">12</td><td>Presupuesto/objetivo vs real (tabla <code>presupuestos</code>) y punto de equilibrio</td><td>Sin meta, los KPIs no tienen “vs target”; no se sabe la barrera de rentabilidad</td><td><span class="badge b-gr">Baja</span></td></tr>
+<tr><td class="c">13</td><td><b>Tabla <code>pagos</code></b> (<code>id, factura_id, fecha, monto, metodo, usuario_id</code>): hoy <code>POST /api/pagos</code> (<code>server.ts:673</code>) marca <code>Pagada</code> siempre y no guarda el pago</td><td>Sin fecha ni monto de cobro no hay libro de caja, conciliación bancaria, historial ni proyección; el paso 4 del ciclo del dinero no existe</td><td><span class="badge b-r">Crítico</span></td></tr>
+  <tr><td class="c">14</td><td><b><code>facturas.fechaVencimiento</code></b> + <b>pago parcial</b>: hoy el vencimiento se cuenta desde la emisión y la factura se cobra entera</td><td>El aging, el DSO y la proyección están mal calculados; no se puede cobrar un abono ni aplicar un pago a varias facturas</td><td><span class="badge b-r">Crítico</span></td></tr>
+</table>
+<div class="note"><b>Los gaps 13 y 14 son la condición previa de la pantalla de Cobranza (C).</b> Se dibujó completa para fijar el destino, pero
+marcada en pantalla con <span class="need">requisito</span> en cada elemento que depende de ellos: así nadie confunde el diseño con algo que el
+sistema ya pueda hacer hoy.</div>
+<h2>6. Picture unificado en la app real <span class="tag">UI final</span></h2>
+<p style="font-size:12.5px;color:var(--ink2);margin:0 0 4px">
+<b>Regla de oro de la corrección:</b> las tarjetas de P&amp;L aparecen <b>una sola vez</b> (en “Resumen”) y se alimentan de
+<b>un solo endpoint</b>. “Documentos” es el registro fiscal (paso 2 del ciclo), “Cobranza” la operativa de cobro (pasos 3 y 4),
+“Analítica” las tendencias y comparativas <b>nunca repitiendo las tarjetas</b>. El “Registro de Gastos” deja de ser pestaña anidada y pasa a ser
+<b>acción</b> del botón “Nuevo”, y el “Centro de Mando” deja de ser módulo: se fusiona como el bloque “Salud del negocio” de “Resumen”.</p>
+<p class="cap" style="margin:0 0 6px">Los mocks usan el chrome real: sidebar <code>#0F1923</code> (<code>App.tsx:231-239</code>), topbar con <em>Buscar módulo…</em> y
+<em>Nuevo</em> (<code>App.tsx:336</code>), migaja <code>Finanzas › subtab</code> (<code>App.tsx:547-556</code>) y la fila de tabs con subrayado verde <code>#3D7A4A</code>
+(<code>space-x-6</code>, <code>border-b-2</code>). Contenido con las clases <code>.gcrm</code> que ya existen: <code>.viewhead</code>, <code>.kpis/.kpi</code>,
+<code>.panel</code>, <code>.chip</code>, <code>.fc</code>, <code>.tbar</code>, <code>.attn</code>; la banda del ciclo y las etiquetas
+<span class="need">requisito</span> son clases nuevas de este boceto.</p>
+
+<!-- ANTES / DESPUÉS DE LAS BARRAS -->
+<div class="cap"><b>El problema visible hoy: tres filas de navegación apiladas y dos dashboards con la misma historia</b> — y la propuesta: <b>una fila</b>.</div>
+<div class="grid cols2">
+  <div class="triple">
+    <b style="font-size:11.5px;color:var(--ink)">Antes (código actual)</b>
+    <div class="r"><span style="width:64px">App.tsx</span><span class="on">Resumen</span><span>Flujo de Caja</span><span>Cuentas por Cobrar</span><span>Reportes</span></div>
+    <div class="r"><span style="width:64px">Finanzas.tsx</span><span class="on">Flujo de Caja</span><span>Registro de Gastos</span></div>
+    <div class="r"><span style="width:64px">Reportes.tsx</span><span class="on">Ventas por Ruta</span><span>Producción</span><span>Inventario</span><span>Desperdicios</span><span>Financiero</span></div>
+    <div class="r"><span style="width:64px">DashboardEnterprise</span><span class="on">KPIs General</span><span>Producción</span><span>Finanzas</span><span>Logística</span></div>
+    <div style="font-size:10.5px;color:#b0640c;margin-top:7px">4 filas para decidir dónde estás, P&amp;L repetido en Resumen + Reportes + dashboard, y “Centro de Mando” con su propia bandeja de alertas.</div>
+  </div>
+  <div class="triple" style="border-color:#3D7A4A;background:#F0FDF4">
+    <b style="font-size:11.5px;color:var(--ink)">Después (propuesta)</b>
+    <div class="r"><span style="width:64px">App.tsx</span><span class="on">Resumen</span><span>Documentos</span><span>Cobranza</span><span>Analítica</span></div>
+    <div class="r"><span style="width:64px">Analítica</span><span style="background:#fff">Ventas por Ruta</span><span style="background:#fff">Producción</span><span style="background:#fff">Inventario</span><span style="background:#fff">Desperdicios</span><span style="background:#fff">Financiero</span><span style="background:#fff">Flujo de caja</span></div>
+    <div class="r"><span style="width:64px">Acción</span><span style="background:#fff">+ Nuevo → Registrar gasto · Emitir documento · Registrar cobro</span></div>
+    <div style="font-size:10.5px;color:#1e7d3c;margin-top:7px">1 fila de tabs del módulo + sub-fila de tipos dentro de “Analítica”. El “Centro de Mando” desaparece del sidebar: sus señales viven en la única bandeja de “Resumen”.</div>
+  </div>
+</div>
+
+<!-- PANTALLA A · FINANZAS / RESUMEN (P&L + Centro de Mando fusionado) -->
+<div class="cap" style="margin-top:20px"><b>Pantalla A · <code>Finanzas › Resumen</code></b> — el nuevo hogar del P&amp;L <b>y del Centro de Mando</b>.
+Es lo primero que ve el usuario al pulsar “Finanzas” en el sidebar. Arriba el <b>resultado del mes</b>, en medio el <b>ciclo del dinero</b>
+completo y a la derecha <b>una sola bandeja</b> de señales tempranas — nada de dos dashboards que cuentan la misma historia.</div>
+<div class="app">
+  <div class="side">
+    <div class="logo"><span class="egg">🥚</span><span><b>Granja</b><span>Don Paco</span></span></div>
+    <div class="lbl">Modulos</div>
+    <div class="nav on"><span class="ic">$</span> Finanzas</div>
+    <div class="nav"><span class="ic">⚙</span> Admin</div>
+    <div class="nav"><span class="ic">✉</span> Office</div>
+    <div class="nav"><span class="ic">📦</span> Operaciones y Bodegas</div>
+    <div class="nav"><span class="ic">👥</span> Clientes</div>
+    <div class="user"><span class="av">P</span><span><b>Paco Soto</b><span>Administrador</span></span></div>
+  </div>
+  <div class="body">
+    <div class="top"><span class="search">🔍 Buscar módulo...</span><span class="sp"><span class="moon">🌙</span><span class="nuevo">+ Nuevo</span><span class="est">ES</span></span></div>
+    <div class="crumb">Finanzas <span>›</span> <b>Resumen</b></div>
+    <div class="content">
+      <div class="tabs">
+        <button class="on">Resumen</button><button>Documentos</button><button>Cobranza</button><button>Analítica</button>
+        <button class="sep cta">↻ Actualizar</button>
+      </div>
+      <div class="viewhead"><div><h1>Resumen del período</h1><div class="sub">1–30 sep 2026 · comparado vs ago · fuente única: <code>/api/finanzas/resumen</code></div></div>
+        <div style="display:flex;gap:7px"><span class="btn">Este mes ▾</span><span class="btn">Comparar ▾</span><span class="btn brand">+ Nuevo</span></div></div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Ingresos</div><div class="v">₡400.000</div><div class="ins"><span class="up">▲ +12%</span> vs ago</div></div>
+        <div class="kpi"><div class="l">Gastos</div><div class="v">₡80.000</div><div class="ins"><span class="down">▲ +20%</span> · 20% de ingresos</div></div>
+        <div class="kpi"><div class="l">Utilidad neta</div><div class="v">₡320.000</div><div class="ins"><span class="up">▲ +10%</span> vs ago</div></div>
+        <div class="kpi"><div class="l">Margen</div><div class="v">80%</div><div class="ins">objetivo 75% · <span class="up">+5 pts</span></div></div>
+        <div class="kpi"><div class="l">Cartera</div><div class="v">₡15.000</div><div class="ins"><span class="down">2 vencidas &gt;15 d</span></div></div>
+      </div>
+
+      <div class="cycle">
+        <div class="step"><div class="n">1 · Venta</div><div class="t">Venta en ruta</div><div class="d">Tiquetes TQ- del camión en la calle</div><div class="k">₡463.400 · 16 tiquetes</div><div class="need" style="margin-top:6px">no entra al P&amp;L</div></div>
+        <div class="step"><div class="n">2 · Documento</div><div class="t">FE / TC / NC / ND</div><div class="d">Consecutivo, firma y respuesta de Hacienda</div><div class="k">31 emitidos · 3 rechazados</div></div>
+        <div class="step gap"><div class="n">3 · Cartera</div><div class="t">CxC / vencimiento</div><div class="d">Facturas abiertas por cliente</div><div class="k">23 facturas · ₡418.900</div><div class="need" style="margin-top:6px">sin fecha de vencimiento</div></div>
+        <div class="step gap"><div class="n">4 · Cobro</div><div class="t">Cobro</div><div class="d">Pagos con fecha, monto y método</div><div class="k">₡238.500 · 11 pagos</div><div class="need" style="margin-top:6px">no hay tabla pagos</div></div>
+        <div class="step"><div class="n">5 · Caja</div><div class="t">Caja</div><div class="d">Saldo por cuenta y movimientos del período</div><div class="k">₡1.840.000 · 3 cuentas</div></div>
+        <div class="step"><div class="n">6 · Resultado</div><div class="t">Resumen del mes</div><div class="d">Ingresos − gastos = utilidad</div><div class="k">₡320.000 · 80%</div></div>
+      </div>
+
+      <div class="exec">
+        <div>
+          <div class="panel">
+            <div class="panel-head"><span class="panel-title">Ventas por ruta</span><small> mismo dato que Analítica, sin repetir tarjetas</small><span class="tools"><span class="btn sm">Ver en Analítica →</span></span></div>
+            <table class="t">
+              <tr><th>Ruta</th><th>Tiquetes</th><th>Facturas</th><th class="num">Ventas</th><th class="num">Δ</th><th>Estado</th></tr>
+              <tr><td><b>Ruta 9</b> · Super Chepe</td><td>3</td><td>1</td><td class="num">₡142.000</td><td class="num"><span class="up">+18%</span></td><td><span class="chip green">al día</span></td></tr>
+              <tr><td><b>Ruta 10</b> · Grupo Naco</td><td>2</td><td>1</td><td class="num">₡98.500</td><td class="num"><span class="up">+6%</span></td><td><span class="chip amber">1 vencida</span></td></tr>
+              <tr><td><b>Ruta 11</b> · Huevos Pollo Feliz</td><td>3</td><td>2</td><td class="num">₡159.500</td><td class="num"><span class="down">-4%</span></td><td><span class="chip red">1 vencida &gt;15 d</span></td></tr>
+              <tr><td><b>Mostrador</b></td><td>8</td><td>0</td><td class="num"><span class="down">₡0</span></td><td class="num">—</td><td><span class="chip red">8 tiquetes sin facturar</span></td></tr>
+            </table>
+          </div>
+          <div class="split">
+            <div class="panel">
+              <div class="panel-head"><span class="panel-title">Tendencia 6 meses</span><small> ingresos ₡/mes</small><span class="tools"><span class="btn sm">Ver en Analítica →</span></span></div>
+              <div class="fc">
+                <div class="col"><div class="bar muted"><div style="height:30%"></div></div>Abr</div>
+                <div class="col"><div class="bar muted"><div style="height:45%"></div></div>May</div>
+                <div class="col"><div class="bar muted"><div style="height:38%"></div></div>Jun</div>
+                <div class="col"><div class="bar muted"><div style="height:60%"></div></div>Jul</div>
+                <div class="col"><div class="bar muted"><div style="height:72%"></div></div>Ago</div>
+                <div class="col"><div class="bar"><div style="height:88%"></div></div>Sep</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><span class="panel-title">Gastos por categoría</span><small> sep</small></div>
+              <div style="padding:12px 14px">
+                <div class="tbar"><div class="bt"><span>Planilla</span><span>₡32.000</span></div><div class="track"><div class="fill" style="width:40%"></div></div></div>
+                <div class="tbar"><div class="bt"><span>Diésel</span><span>₡24.000</span></div><div class="track"><div class="fill" style="width:30%"></div></div></div>
+                <div class="tbar"><div class="bt"><span>Mantenimiento</span><span>₡16.000</span></div><div class="track"><div class="fill" style="width:20%"></div></div></div>
+                <div class="tbar"><div class="bt"><span>Otros</span><span>₡8.000</span></div><div class="track"><div class="fill" style="width:10%"></div></div></div>
+                <div style="font-size:10.5px;color:#8C95A0;margin-top:4px">Solo el agregado; el detalle transaccional vive en <b>Analítica › Flujo de caja</b>.</div>
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="panel-title">Caja del período</span><small> entradas, salidas y saldos</small><span class="tools"><span class="btn sm">Ver libro de movimientos →</span></span></div>
+            <div style="padding:10px 14px">
+              <div class="kv"><span>Entradas</span><b style="color:#1e7d3c">₡463.400 · 18 cobros</b></div>
+              <div class="kv"><span>Salidas</span><b style="color:#a52818">₡204.000 · 31 pagos · 9 categorías</b></div>
+              <div class="kv"><span>Flujo neto</span><b>₡259.400 · <span class="up">+12%</span> vs ago</b></div>
+              <div class="kv"><span>Saldo en caja</span><b>₡1.840.000 · BNCR corriente ₡1.240.000 · Rollerama ₡420.000 · caja física ₡180.000</b></div>
+              <div class="kv"><span>Conciliación</span><b style="color:#B8860B">3 movimientos de sep sin match en el estado de cuenta</b></div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="panel-head" style="border-radius:14px 14px 0 0;background:#F8FAFC"><span class="panel-title">Requiere atención</span><small> una sola bandeja para todo el negocio</small></div>
+          <div style="padding:12px 12px 2px">
+            <div class="attn crit"><b>8 tiquetes sin factura</b><span class="a">Mostrador · sep · ₡63.400 · 3 días de retraso</span></div>
+            <div class="attn crit"><b>1 factura vencida &gt;15 días</b><span class="a">Huevos Pollo Feliz · ₡31.200 · cobrar antes del cierre</span></div>
+            <div class="attn crit"><b>1 diferencia de recepción</b><span class="a">TQ-441 · 48 esperados / 46 recibidos · <span style="color:#3D7A4A">Operaciones › Bodega › Recibir</span></span></div>
+            <div class="attn warn"><b>Margen de Ruta 11 en 62%</b><span class="a">bajo el objetivo de 75% · revisar precio y Yield de empaque</span></div>
+            <div class="attn warn"><b>Desperdicio 3.2%</b><span class="a">vs objetivo 2% · concentrado en cartons XL</span></div>
+            <div class="attn"><b>Gastos +20%</b><span class="a">principalmente diésel · verificar si es estacionalidad</span></div>
+          </div>
+          <div class="panel" style="margin-top:10px">
+            <div class="panel-head"><span class="panel-title">Salud del negocio</span><small> desde el Centro de Mando</small></div>
+            <div style="padding:12px 14px">
+              <div class="stackedbar"><div style="width:38%;background:#3D7A4A"></div><div style="width:24%;background:#B8860B"></div><div style="width:22%;background:#2563EB"></div><div style="width:16%;background:#8C95A0"></div></div>
+              <div class="leg">
+                <span><i style="background:#3D7A4A"></i>Alistado 38%</span>
+                <span><i style="background:#B8860B"></i>Cargando 24%</span>
+                <span><i style="background:#2563EB"></i>En ruta 22%</span>
+                <span><i style="background:#8C95A0"></i>Entregado 16%</span>
+              </div>
+              <div class="kv" style="margin-top:8px"><span>Producción hoy</span><b>800 cartones · <span style="color:#3D7A4A">Operaciones › Granja › Producción</span></b></div>
+              <div class="kv"><span>En bodega</span><b>75 cartones · 6 lotes · <span style="color:#3D7A4A">Operaciones › Bodega › Almacén</span></b></div>
+              <div class="kv"><span>Documentos rechazados</span><b style="color:#a52818">3 · <span style="color:#3D7A4A">Documentos</span></b></div>
+              <div style="font-size:10.5px;color:#8C95A0;margin-top:8px">Fuentes: <code>/api/operaciones/resumen</code> + <code>/api/granja/resumen</code> · el detalle se resuelve en su módulo.</div>
+            </div>
+          </div>
+          <div class="panel" style="margin-top:10px">
+            <div class="panel-head"><span class="panel-title">Lo que se eliminó aquí</span></div>
+            <div style="padding:10px 14px;font-size:11px;color:#5F6B7A;line-height:1.6">
+              ✗ El módulo <b>Centro de Mando</b> del sidebar<br>
+              ✗ Su drill-down de Producción (granja → galerón → lote)<br>
+              ✗ Sus tabs internas de Finanzas / Logística<br>
+              ✗ Recalcular el consolidado en el dashboard<br>
+              ✗ <code>Dashboard.tsx</code> y <code>DashboardAdmin.tsx</code> (nunca importados)<br>
+              ✓ Cada dato <b>enlaza</b> al módulo donde se resuelve
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="cap"><b>Cómo se lee:</b> las 5 tarjetas de arriba son el P&amp;L (<b>una sola vez</b>). La banda del medio es el <b>ciclo del dinero</b>
+completo —de la venta en ruta al resultado del mes— y deja ver <b>dónde se rompe la cadena</b>: hoy tres de los seis pasos están marcados como
+requisito de backend, y por eso la bandeja de la derecha los señala en vez de esconderlos. A la derecha, <b>“Requiere atención”</b> es una sola
+bandeja (no dos, una en Finanzas y otra en el dashboard): no son alertas rojas de sistema, son <b>señales tempranas de negocio</b>.</p>
+<div class="note ok"><b>El Centro de Mando deja de existir como módulo.</b> Se conserva lo único que aportaba —la salud del negocio con enlaces
+a su módulo— y se fusiona como el bloque <b>“Salud del negocio”</b> de esta pantalla. Ninguna cifra se recalcula: todo son lecturas de
+<code>/api/finanzas/resumen</code>, <code>/api/operaciones/resumen</code> y <code>/api/granja/resumen</code>.</div>
+
+<!-- PANTALLA B · FINANZAS / DOCUMENTOS -->
+<div class="cap" style="margin-top:20px"><b>Pantalla B · <code>Finanzas › Documentos</code></b> — <b>tab nuevo</b>, pero sin trabajo nuevo:
+es la <b>vista de registro</b> que hoy está enterrada como sub-vista dentro de <code>Resumen</code> en <code>Facturacion.tsx</code>
+(listas en <code>:702-890</code>). Sube de nivel para que toda la cadena sea auditable: <b>facturas, tiquetes y notas de crédito</b> en un solo lugar,
+con su estado real de Hacienda.</div>
+<div class="app">
+  <div class="side">
+    <div class="logo"><span class="egg">🥚</span><span><b>Granja</b><span>Don Paco</span></span></div>
+    <div class="lbl">Modulos</div>
+    <div class="nav on"><span class="ic">$</span> Finanzas</div>
+    <div class="nav"><span class="ic">⚙</span> Admin</div>
+    <div class="nav"><span class="ic">✉</span> Office</div>
+    <div class="nav"><span class="ic">📦</span> Operaciones y Bodegas</div>
+    <div class="nav"><span class="ic">👥</span> Clientes</div>
+    <div class="user"><span class="av">P</span><span><b>Paco Soto</b><span>Administrador</span></span></div>
+  </div>
+  <div class="body">
+    <div class="top"><span class="search">🔍 Buscar módulo...</span><span class="sp"><span class="moon">🌙</span><span class="nuevo">+ Nuevo</span><span class="est">ES</span></span></div>
+    <div class="crumb">Finanzas <span>›</span> <b>Documentos</b></div>
+    <div class="content">
+      <div class="tabs">
+        <button>Resumen</button><button class="on">Documentos</button><button>Cobranza</button><button>Analítica</button>
+        <button class="sep cta">+ Emitir documento</button>
+      </div>
+      <div class="tabsrow2">
+        <span class="rowlabel">Tipo</span>
+        <button class="on">Todos</button><button>Facturas</button><button>Tiquetes</button><button>Notas de crédito</button><button>Notas de débito</button>
+        <button class="sep" style="margin-left:auto">Ambiente: <b>Producción ▾</b></button>
+      </div>
+      <div class="viewhead"><div><h1>Documentos fiscales</h1><div class="sub">Septiembre 2026 · 31 emitidos · 3 rechazados · consecutivos: FAC 0012 · TC 0088 · NC 0004 · ND 0001</div></div>
+        <div style="display:flex;gap:7px"><span class="btn">Estado ▾</span><span class="btn">Reenviar seleccionados</span><span class="btn brand">+ Nota de crédito</span></div></div>
+      <div class="panel" style="margin-top:10px">
+        <div class="panelbar"><input placeholder="Buscar por consecutivo, cliente o clave…"><span class="chip">Todos los estados ▾</span><span class="chip red">3 rechazados</span></div>
+        <table>
+          <tr><th>Consecutivo</th><th>Tipo</th><th>Cliente</th><th>Fecha</th><th class="c">Total</th><th>Estado</th><th>Clave / detalle</th><th>Acuse</th></tr>
+          <tr><td><b>FAC-0012</b></td><td>Factura</td><td>Huevos Pollo Feliz</td><td>03 sep</td><td class="c">₡97.000</td><td><span class="badge b-g">Aceptado</span></td><td><code>506…</code> · 50 dígitos</td><td><span class="chip green">CR 06:12</span></td></tr>
+          <tr><td><b>TC-0088</b></td><td>Tiquete</td><td>Cliente final Ruta 10</td><td>03 sep</td><td class="c">₡22.400</td><td><span class="badge b-b">Pendiente</span></td><td>consolidado en FAC-0012</td><td>—</td></tr>
+          <tr><td><b>NC-0004</b></td><td>Nota de crédito</td><td>Distribuidora El Palo</td><td>08 sep</td><td class="c">₡18.500</td><td><span class="badge b-g">Aceptado</span></td><td>ref. FAC-0108 · <span class="chip amber">motivo sin guardar</span></td><td><span class="chip green">CR 10:41</span></td></tr>
+          <tr><td><b>FAC-0013</b></td><td>Factura</td><td>Grupo Naco</td><td>12 sep</td><td class="c">₡141.500</td><td><span class="badge b-r">Rechazado</span></td><td><code>506…</code> · <span style="color:#a52818"> Cédula del receptor inválida</span></td><td><span class="chip red">CR 09:02</span></td></tr>
+          <tr><td><b>FAC-0014</b></td><td>Factura</td><td>Super Chepe</td><td>14 sep</td><td class="c">₡62.400</td><td><span class="badge b-o">Enviado</span></td><td><code>506…</code> · esperando respuesta</td><td>—</td></tr>
+          <tr><td><b>FAC-0015</b></td><td>Factura</td><td>Mini Súper La Esquina</td><td>—</td><td class="c">₡38.500</td><td><span class="badge b-gr">Borrador</span></td><td>sin XML · sin clave</td><td>—</td></tr>
+          <tr><td><b>ND-0001</b></td><td>Nota de débito</td><td>Huevos Pollo Feliz</td><td>—</td><td class="c">₡5.200</td><td><span class="badge b-gr">Borrador</span></td><td>no implementado en UI</td><td>—</td></tr>
+        </table>
+        <div class="fmeta"><span>31 documentos · 24 aceptados · 3 rechazados · 1 pendiente · 1 enviado · 2 en borrador</span><span style="margin-left:auto;color:#3D7A4A;font-weight:700">Exportar ▾</span></div>
+      </div>
+      <div class="cols2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Trazabilidad del documento</span></div>
+          <div style="padding:10px 14px">
+            <div class="kv"><span>Etapa</span><b>Rechazado por Hacienda</b></div>
+            <div class="kv"><span>Motivo</span><b style="color:#a52818">Cédula jurídica del receptor no cumple formato</b></div>
+            <div class="kv"><span>XML</span><b>Generado ✓ · Firmado ✓</b></div>
+            <div class="kv"><span>Respuesta</span><b>XML de acuse almacenado</b></div>
+            <div class="kv"><span>Reintentos</span><b>0 de 3</b></div>
+            <div class="kv"><span>Acción</span><b>Corregir receptor → refirmar → reenviar</b></div>
+            <div style="margin-top:10px;display:flex;gap:6px"><span class="btn brand sm" style="flex:1;justify-content:center">Corregir y reenviar</span><span class="btn sm" style="flex:1;justify-content:center">Ver XML</span></div>
+            <div style="margin-top:6px"><span class="btn sm" style="width:100%;justify-content:center">Anular (NC) — no borra, crea nota</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Relación entre documentos</span></div>
+          <div style="padding:10px 14px">
+            <div class="kv"><span>Origen</span><b>8 tiquetes · Ruta 10</b></div>
+            <div class="kv"><span>Consolidado en</span><b>FAC-0012</b></div>
+            <div class="kv"><span>Criterio</span><b>Por consumidor final</b></div>
+            <div class="kv"><span>Estado guía</span><b>Cerrada</b></div>
+            <div class="kv"><span>NC sobre</span><b>FAC-0108 (anterior)</b></div>
+            <div class="kv"><span>Regla</span><b>Ningún documento se borra</b></div>
+            <div style="font-size:10.5px;color:#8C95A0;margin-top:8px">Un tiquete no se factura dos veces: la consolidación lo marca y el sistema impide reconsolidar la misma guía (<code>409</code>).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="cap"><b>Regla fiscal que sostiene esta pantalla:</b> en Costa Rica <b>ningún documento electrónico se anula borrándolo</b> — se corrige con una
+<b>nota de crédito</b> o <b>nota de débito</b>, que referencian el original y conservan su clave. El estado real ya está modelado en
+<code>facturas_electronicas.estado</code> (<code>schema.ts:385</code>): <code>Borrador · Pendiente · Enviado · Aceptado · Rechazado · Error</code>, y cada
+documento guarda <code>clave</code>, <code>xmlGenerado</code>, <code>xmlFirmado</code>, <code>respuestaHacienda</code>, <code>fechaEnvio</code>,
+<code>fechaRespuesta</code> y <code>motivoRechazo</code> — la fila de arriba solo los muestra, que es justo lo que falta hoy. En el picture unificado
+esta pantalla es el <b>paso 2 del ciclo del dinero</b>: es donde la venta en ruta se convierte en comprobante.</p>
+<div class="note"><b>Tres huecos reales que esta pantalla deja visibles:</b> (1) <code>server.ts:4155-4221</code> recibe el <code>motivo</code> de la nota de crédito y
+<b>no lo guarda</b> en ninguna columna — el motivo es obligatorio en el XML y hoy se pierde; (2) la NC se crea con <code>ambiente:'Pruebas'</code> fijo y
+<code>impuestos</code> sin IVA (<code>:4208-4213</code>); (3) el selector de <code>Facturacion.tsx:12</code> solo ofrece <code>Factura | Tiquete</code>, aunque
+<code>NotaCredito</code> ya existe en la API — la UI no puede emitir lo que el backend sí soporta.</div>
+
+<!-- PANTALLA C · FINANZAS / COBRANZA -->
+<div class="cap" style="margin-top:20px"><b>Pantalla C · <code>Finanzas › Cobranza</code></b> — tab que ya existe
+(<code>App.tsx:692</code> → <code>Cobranza.tsx</code>), solo renombrada desde “Cuentas por Cobrar”. Hoy cuenta <code>facturas.estado==='Pendiente'</code> y marca
+vencidas contando días desde la <em>emisión</em>, no desde el vencimiento; cobra la factura entera y no deja historial de pagos. Aquí se reemplaza por
+<b>aging por vencimiento, cobranza por cliente y registro de pagos reales</b> — con los requisitos de backend marcados en pantalla.</div>
+<div class="app">
+  <div class="side">
+    <div class="logo"><span class="egg">🥚</span><span><b>Granja</b><span>Don Paco</span></span></div>
+    <div class="lbl">Modulos</div>
+    <div class="nav on"><span class="ic">$</span> Finanzas</div>
+    <div class="nav"><span class="ic">⚙</span> Admin</div>
+    <div class="nav"><span class="ic">✉</span> Office</div>
+    <div class="nav"><span class="ic">📦</span> Operaciones y Bodegas</div>
+    <div class="nav"><span class="ic">👥</span> Clientes</div>
+    <div class="user"><span class="av">P</span><span><b>Paco Soto</b><span>Administrador</span></span></div>
+  </div>
+  <div class="body">
+    <div class="top"><span class="search">🔍 Buscar módulo...</span><span class="sp"><span class="moon">🌙</span><span class="nuevo">+ Nuevo</span><span class="est">ES</span></span></div>
+    <div class="crumb">Finanzas <span>›</span> <b>Cobranza</b></div>
+    <div class="content">
+      <div class="tabs">
+        <button>Resumen</button><button>Documentos</button><button class="on">Cobranza</button><button>Analítica</button>
+        <button class="sep cta">+ Registrar pago</button>
+      </div>
+      <div class="viewhead"><div><h1>Cobranza</h1><div class="sub">Al 30 sep 2026 · 9 clientes · ₡418.900 por cobrar · fuente real: <code>/api/facturas</code> + <code>/api/clientes</code></div></div>
+        <div style="display:flex;gap:7px"><span class="btn">Todos los clientes ▾</span><span class="btn">Solo vencidas</span><span class="btn brand">Enviar recordatorio</span></div></div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Total por cobrar</div><div class="v">₡418.900</div><div class="ins">23 facturas</div></div>
+        <div class="kpi"><div class="l">Vencido</div><div class="v">₡96.400</div><div class="ins"><span class="badge b-r">23% del total</span> <span class="need">requiere vencimiento</span></div></div>
+        <div class="kpi"><div class="l">DSO</div><div class="v">34 días</div><div class="ins">meta ≤ 30 <span class="need">derivado</span></div></div>
+        <div class="kpi"><div class="l">Pagado este mes</div><div class="v">₡238.500</div><div class="ins">11 pagos <span class="need">requiere tabla pagos</span></div></div>
+        <div class="kpi"><div class="l">Promesa de pago</div><div class="v">₡72.000</div><div class="ins">2 clientes · vence esta semana</div></div>
+      </div>
+      <div class="panel" style="margin-top:12px">
+        <div class="panel-head"><span class="panel-title">Aging por vencimiento</span><span class="need">requiere facturas.fechaVencimiento — hoy no existe</span><span class="chip" style="margin-left:auto">Al 30 sep ▾</span></div>
+        <table>
+          <tr><th>Bucket</th><th class="c">Días</th><th class="c">Facturas</th><th class="c">Monto</th><th class="c">%</th><th>Acción</th></tr>
+          <tr><td><span class="badge b-g">Al día</span></td><td class="c">0–30</td><td class="c">14</td><td class="c">₡262.500</td><td class="c">62.6%</td><td>—</td></tr>
+          <tr><td><span class="badge b-o">1–30 vencida</span></td><td class="c">1–30</td><td class="c">4</td><td class="c">₡38.900</td><td class="c">9.3%</td><td>Recordatorio automático (1er nivel)</td></tr>
+          <tr><td><span class="badge b-o">31–60</span></td><td class="c">31–60</td><td class="c">3</td><td class="c">₡41.000</td><td class="c">9.8%</td><td>Recordatorio + llamada</td></tr>
+          <tr><td><span class="badge b-r">61–90</span></td><td class="c">61–90</td><td class="c">1</td><td class="c">₡12.500</td><td class="c">3.0%</td><td>Bloquear despacho a crédito</td></tr>
+          <tr><td><span class="badge b-r">&gt;90</span></td><td class="c">91+</td><td class="c">1</td><td class="c">₡4.000</td><td class="c">1.0%</td><td>Contar a pérdida / nota de crédito</td></tr>
+        </table>
+        <div class="fmeta"><span>Hoy el código cuenta los días desde <b>la emisión</b> (<code>facturas.fecha</code>), no desde el vencimiento</span><span style="margin-left:auto;color:#B8860B;font-weight:700">Bucket configurable ▾</span></div>
+      </div>
+      <div class="cols2" style="display:grid;grid-template-columns:1fr 340px;gap:12px;margin-top:12px">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Cuentas por cliente</span><span class="chip">Ordenar: mayor saldo ▾</span></div>
+          <div class="panelbar"><input placeholder="Buscar cliente…"><span class="chip amber">3 con promesa vencida</span></div>
+          <div class="m"><span class="txt"><span class="who">Grupo Naco</span> <span class="subj">F-0121, F-0128 · vence 12 oct</span></span><span class="chip green">al día</span><span class="chiplbl">₡141.500</span><span class="hact"><span class="btn sm">Cobrar</span><span class="btn sm">⋯</span></span></div>
+          <div class="m"><span class="txt"><span class="who">Huevos Pollo Feliz</span> <span class="subj">F-0119 · venció 18 sep</span></span><span class="chip red">41 días</span><span class="chiplbl">₡97.000</span><span class="hact"><span class="btn sm">Cobrar</span><span class="btn sm">⋯</span></span></div>
+          <div class="m"><span class="txt"><span class="who">Super Chepe</span> <span class="subj">F-0124 · vence 03 oct</span></span><span class="chip">al día</span><span class="chiplbl">₡62.400</span><span class="hact"><span class="btn sm">Cobrar</span><span class="btn sm">⋯</span></span></div>
+          <div class="m"><span class="txt"><span class="who">Distribuidora El Palo</span> <span class="subj">F-0116 · venció 04 sep</span></span><span class="chip amber">promesa vencida</span><span class="chiplbl">₡58.000</span><span class="hact"><span class="btn sm">Cobrar</span><span class="btn sm">⋯</span></span></div>
+          <div class="m"><span class="txt"><span class="who">Mini Súper La Esquina</span> <span class="subj">F-0126 · vence 28 sep</span></span><span class="chip red">2 días</span><span class="chiplbl">₡38.500</span><span class="hact"><span class="btn sm">Cobrar</span><span class="btn sm">⋯</span></span></div>
+          <div class="fmeta"><span>Mostrando 5 de 9 clientes</span><span style="margin-left:auto;color:#3D7A4A;font-weight:700">Ver todos →</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Detalle · F-0119</span></div>
+          <div style="padding:10px 14px">
+            <div class="kv"><span>Cliente</span><b>Huevos Pollo Feliz</b></div>
+            <div class="kv"><span>Total factura</span><b>₡97.000</b></div>
+            <div class="kv"><span>Emitida</span><b>28 ago 2026</b></div>
+            <div class="kv"><span>Vence</span><b style="color:#a52818">18 sep 2026 · 41 días <span class="need">derivado de condición de pago</span></b></div>
+            <div class="kv"><span>Pagado</span><b>₡0 <span class="need">sin historial de pagos</span></b></div>
+            <div class="kv"><span>Saldo</span><b style="color:#a52818">₡97.000</b></div>
+            <div class="kv"><span>Límite de crédito</span><b>₡150.000</b></div>
+            <div class="kv"><span>Uso</span><b><span class="badge b-o">65%</span></b></div>
+            <div style="margin-top:10px;display:flex;gap:6px"><span class="btn brand sm" style="flex:1;justify-content:center">Registrar pago</span><span class="btn sm" style="flex:1;justify-content:center">Nota de crédito</span></div>
+            <div style="margin-top:6px;display:flex;gap:6px"><span class="btn sm" style="flex:1;justify-content:center">Recordar</span><span class="btn sm" style="flex:1;justify-content:center">Bloquear crédito</span></div>
+            <div style="margin-top:8px"><span class="need">el pago parcial requiere la tabla pagos</span></div>
+          </div>
+          <div class="fmeta"><span>Pagos: <b>0</b></span><span>Historial: <b>vacio</b></span><span style="margin-left:auto;color:#B8860B;font-weight:700">Ver factura →</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="cap"><b>Por qué así:</b> el <b>aging se cuenta desde el vencimiento</b>, no desde la emisión (práctica estándar de
+SAP Business One, NetSuite y Dynamics: “Age By = Due Date”), y los buckets 1–30 / 31–60 / 61–90 / &gt;90 disparan
+<b>escalones de cobranza</b> (dunning) en vez de un único “vencido”. El detalle por factura permite <b>pago parcial</b> y deja
+<b>historial</b>, que hoy no existe porque <code>POST /api/pagos</code> solo cambia el estado.</p>
+<div class="note"><b>Requisitos de backend antes de poder implementar esta pantalla tal cual:</b> (1) agregar
+<code>facturas.fechaVencimiento</code> — hoy <code>fechaVencimiento</code> existe en <code>etiquetas</code> (<code>schema.ts:343</code>), no en facturas;
+(2) crear la tabla <code>pagos</code> (<code>id, factura_id, fecha, monto, metodo, usuario_id</code>) porque hoy <code>POST /api/pagos</code>
+(<code>server.ts:673</code>) pone <code>estado:'Pagada'</code> siempre (<code>:681</code>) sin guardar el pago; (3) permitir el pago <b>parcial</b>, que
+hoy se rechaza por completo. Sin (1) y (2) esta pantalla no es implementable: se dibujó aquí para fijar el destino, no para prometer que ya existe.</div>
+
+<!-- PANTALLA D · FINANZAS / ANALITICA -->
+<div class="cap" style="margin-top:20px"><b>Pantalla D · <code>Finanzas › Analítica</code></b> — el ex-“Reportes”, reubicado como el <b>cuarto tab</b> del
+módulo. Conserva sus tipos de análisis como sub-fila, <b>no</b> repite las tarjetas del Resumen, y ahora también recibe el <b>libro de caja</b>
+que antes era una tab aparte.</div>
+<div class="app">
+  <div class="side">
+    <div class="logo"><span class="egg">🥚</span><span><b>Granja</b><span>Don Paco</span></span></div>
+    <div class="lbl">Modulos</div>
+    <div class="nav on"><span class="ic">$</span> Finanzas</div>
+    <div class="nav"><span class="ic">⚙</span> Admin</div>
+    <div class="nav"><span class="ic">✉</span> Office</div>
+    <div class="nav"><span class="ic">📦</span> Operaciones y Bodegas</div>
+    <div class="nav"><span class="ic">👥</span> Clientes</div>
+    <div class="user"><span class="av">P</span><span><b>Paco Soto</b><span>Administrador</span></span></div>
+  </div>
+  <div class="body">
+    <div class="top"><span class="search">🔍 Buscar módulo...</span><span class="sp"><span class="moon">🌙</span><span class="nuevo">+ Nuevo</span><span class="est">ES</span></span></div>
+    <div class="crumb">Finanzas <span>›</span> <b>Analítica</b></div>
+    <div class="content">
+      <div class="tabs">
+        <button>Resumen</button><button>Documentos</button><button>Cobranza</button><button class="on">Analítica</button>
+        <button class="sep cta">↻ Actualizar</button>
+      </div>
+      <div class="tabsrow2">
+        <span class="rowlabel">Análisis</span>
+        <button class="on">Ventas por Ruta</button><button>Producción</button><button>Inventario</button><button>Desperdicios</button><button>Financiero</button><button>Flujo de caja</button>
+        <button class="sep" style="margin-left:auto;color:#8C95A0">Periodo ▾</button>
+      </div>
+      <div class="viewhead"><div><h1>Analítica</h1><div class="sub">Ventas por Ruta · sep 2026 · los datos vienen del mismo endpoint que el Resumen</div></div>
+        <div style="display:flex;gap:7px"><span class="btn">Semana ▾</span><span class="btn">Ruta ▾</span></div></div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Detalle por ruta</span><small> con desglose de tiquetes vs facturas</small></div>
+        <table class="t">
+          <tr><th>Ruta / Cliente</th><th class="num">Tiquetes</th><th class="num">Facturas</th><th class="num">Ventas</th><th class="num">Costo</th><th class="num">Margen</th><th class="num">Δ vs mes ant.</th><th>Semáforo</th></tr>
+          <tr><td><b>Ruta 9</b> · Super Chepe</td><td class="num">3</td><td class="num">1</td><td class="num">₡142.000</td><td class="num">₡34.000</td><td class="num"><b>76%</b></td><td class="num"><span class="up">+18%</span></td><td><span class="chip green">ok</span></td></tr>
+          <tr><td><b>Ruta 10</b> · Grupo Naco</td><td class="num">2</td><td class="num">1</td><td class="num">₡98.500</td><td class="num">₡29.400</td><td class="num"><b>70%</b></td><td class="num"><span class="up">+6%</span></td><td><span class="chip amber">vigilar</span></td></tr>
+          <tr><td><b>Ruta 11</b> · Huevos Pollo Feliz</td><td class="num">3</td><td class="num">2</td><td class="num">₡159.500</td><td class="num">₡60.600</td><td class="num"><b style="color:#DC2626">62%</b></td><td class="num"><span class="down">-4%</span></td><td><span class="chip red">bajo objetivo</span></td></tr>
+          <tr><td><b>Mostrador</b></td><td class="num">8</td><td class="num" style="color:#DC2626">0</td><td class="num">₡63.400</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td><span class="chip red">sin facturar</span></td></tr>
+          <tr style="background:#F8FAFC"><td><b>Total</b></td><td class="num"><b>16</b></td><td class="num"><b>4</b></td><td class="num"><b>₡463.400</b></td><td class="num"><b>₡124.000</b></td><td class="num"><b>73%</b></td><td class="num"><span class="up">+11%</span></td><td></td></tr>
+        </table>
+      </div>
+      <div class="split">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Producción vs venta (mismo mes)</span></div>
+          <table class="t">
+            <tr><th>Producto</th><th class="num">Producidos</th><th class="num">Vendidos</th><th class="num">Desperdicio</th><th>Estado</th></tr>
+            <tr><td>Cartón mediano</td><td class="num">420</td><td class="num">402</td><td class="num">1.2%</td><td><span class="chip green">ok</span></td></tr>
+            <tr><td>Cartón grande</td><td class="num">260</td><td class="num">241</td><td class="num">2.8%</td><td><span class="chip amber">vigilar</span></td></tr>
+            <tr><td>Cartón XL</td><td class="num">120</td><td class="num">108</td><td class="num">3.2%</td><td><span class="chip red">revisar</span></td></tr>
+          </table>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Desglose del mes</span></div>
+          <div style="padding:12px 14px">
+            <div class="tbar"><div class="bt"><span>Ventas netas</span><span>₡463.400</span></div><div class="track"><div class="fill" style="width:100%;background:#3D7A4A"></div></div></div>
+            <div class="tbar"><div class="bt"><span>Costo producción</span><span>₡124.000</span></div><div class="track"><div class="fill" style="width:27%"></div></div></div>
+            <div class="tbar"><div class="bt"><span>Gastos operación</span><span>₡80.000</span></div><div class="track"><div class="fill" style="width:17%"></div></div></div>
+            <div class="tbar" style="margin-top:12px"><div class="bt"><span><b>Utilidad neta</b></span><span><b>₡259.400 · 56%</b></span></div><div class="track"><div class="fill" style="width:56%;background:#3D7A4A"></div></div></div>
+            <div style="font-size:10.5px;color:#8C95A0;margin-top:4px">El agregado va en <b>Resumen</b>; el movimiento por movimiento, en la sub-fila <b>Flujo de caja</b>.</div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Proyección de caja · 30 días</span><span class="need">requiere facturas.fechaVencimiento</span><span class="tools"><span class="chip">según CxC vigente</span></span></div>
+        <div style="padding:12px 14px">
+          <div class="tbar"><div class="bt"><span><b>Entradas previstas</b> · 14 facturas que vencen antes del 31 oct</span><span style="color:#1e7d3c">+₡512.000</span></div><div class="track"><div class="fill" style="width:100%;background:#3D7A4A"></div></div></div>
+          <div class="tbar" style="margin-top:10px"><div class="bt"><span><b>Salidas previstas</b> · gastos recurrentes + alimentación</span><span style="color:#a52818">−₡203.000</span></div><div class="track"><div class="fill" style="width:40%;background:#a52818"></div></div></div>
+          <div class="tbar" style="margin-top:14px"><div class="bt"><span><b>Resultado proyectado</b></span><span style="color:#1e7d3c;font-weight:800">+₡309.000</span></div><div class="track"><div class="fill" style="width:60%;background:#3D7A4A"></div></div></div>
+          <div class="fmeta"><span>Hoy el vencimiento se cuenta desde la emisión, así que esta proyección <b>no es calculable</b> hasta crear <code>facturas.fechaVencimiento</code></span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Libro de caja</span><small> la tab “Flujo de Caja” que hoy ocupa su propio lugar en la barra</small><span class="tools"><span class="btn sm">Conciliar banco</span></span></div>
+        <div style="padding:0 12px 8px">
+          <div class="tbar"><div class="bt"><span><b>1 sep</b> · Cierre de ruta Ruta 10</span><span style="color:#1e7d3c">+₡186.000</span></div><div class="track"><div class="fill" style="width:100%;background:#3D7A4A"></div></div></div>
+          <div class="tbar"><div class="bt"><span><b>2 sep</b> · Compra alimento · Naco</span><span style="color:#a52818">−₡92.400</span></div><div class="track"><div class="fill" style="width:50%;background:#a52818"></div></div></div>
+          <div class="tbar"><div class="bt"><span><b>5 sep</b> · Cobro Grupo Naco (2 facturas)</span><span style="color:#1e7d3c">+₡141.500</span></div><div class="track"><div class="fill" style="width:76%;background:#3D7A4A"></div></div></div>
+          <div class="tbar"><div class="bt"><span><b>14 sep</b> · Servicios (luz, agua, internet)</span><span style="color:#a52818">−₡24.700</span></div><div class="track"><div class="fill" style="width:13%;background:#a52818"></div></div></div>
+          <div class="tbar"><div class="bt"><span><b>22 sep</b> · Cobro Huevos Pollo Feliz</span><span style="color:#1e7d3c">+₡97.000</span></div><div class="track"><div class="fill" style="width:52%;background:#3D7A4A"></div></div></div>
+        </div>
+        <div class="fmeta"><span>Entradas: <b style="color:#1e7d3c">₡463.400</b></span><span>Salidas: <b style="color:#a52818">₡204.000</b></span><span>Saldo en caja: <b>₡1.840.000</b></span><span style="margin-left:auto;color:#3D7A4A;font-weight:700">Ver 49 movimientos →</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="cap"><b>Regla:</b> si una cifra necesita “bajarla a una línea” (ver el gasto, ver la factura, ver el pago), pertenece a
+<b>Documentos</b> o <b>Cobranza</b>. Si sirve para <b>comparar y decidir</b>, pertenece a <b>Analítica</b>. Y si es el
+resultado del mes, vive en el <b>Resumen</b> como tarjeta.</p>
+<div class="note"><b>Bloqueo real (código, no diseño):</b> el “Libro de caja” no es implementable todavía. <code>POST /api/pagos</code>
+(<code>server.ts:673</code>) <b>no guarda el pago</b>: pone <code>estado:'Pagada'</code> siempre (línea 681), descuenta <code>clientes.saldo_pendiente</code> y escribe un log, pero
+<b>no inserta en una tabla <code>pagos</code></b> (esa tabla no existe en <code>schema.ts</code>). Sin ese registro no hay forma de
+saber <b>cuándo</b> entró el dinero ni <b>cuánto</b>. La primera acción de implementación es crear <code>pagos</code>
+(id, factura_id, fecha, monto, metodo, usuario_id) — y es lo que hace posible esta pantalla y la proyección de 30 días.</div>
+
+<h2>6b. Cómo encaja en el código real <span class="tag">integración</span></h2>
+<table>
+  <tr><th>Punto de integración</th><th>Archivo / línea</th><th>Cambio</th></tr>
+  <tr><td>Etiquetas de los tabs</td><td><code>App.tsx:705-707</code> <code>finanzasTabs</code></td><td>Reducir a <b>4 tabs</b>: <code>resumen · documentos · cobranza · analítica</code>. <em>Reportes → Analítica</em>, <em>Flujo de Caja</em> deja de ser tab y pasa a tipo de análisis, <em>Cuentas por Cobrar → Cobranza</em>, y <em>Documentos fiscales</em> sube de sub-vista de “Resumen” a tab propio. La sub-fila de tipos de análisis <b>solo</b> cuelga de “Analítica”</td></tr>
+  <tr><td>Render del tab “Resumen”</td><td><code>App.tsx:687-710</code></td><td>Mantener las 5 tarjetas, añadir la <b>banda del ciclo del dinero</b> y la <b>bandeja única</b> “Requiere atención”, y absorber el bloque “Salud del negocio”</td></tr>
+  <tr><td>Nuevo tab “Documentos”</td><td><code>src/components/Facturacion.tsx:702-890</code></td><td>Extraer las 5 listas de documentos a un tab propio y añadir las dos bandejas de trazabilidad; el botón “+ Nuevo” añade <em>Nota de crédito</em> (hoy la UI no la ofrece)</td></tr>
+  <tr><td>Renombrar “Reportes”</td><td><code>App.tsx:705</code> + <code>src/components/Reportes.tsx</code></td><td>El tab pasa a renderizar <code>Reportes.tsx</code> como <b>Analítica</b>, conservando sus tipos como sub-fila y <b>añadiendo “Flujo de caja”</b> como sexto tipo (ahí vive el libro de movimientos)</td></tr>
+  <tr><td>Eliminar la doble barra</td><td><code>Reportes.tsx:35-40</code> + <code>Finanzas.tsx:118</code></td><td>Borrar la fila interna de tabs de <code>Reportes.tsx</code> y la pestaña anidada “Registro de Gastos”; “Registro de Gastos” pasa a acción del <code>+ Nuevo</code></td></tr>
+  <tr><td>Quitar “Centro de Mando” del sidebar</td><td><code>App.tsx:231-239</code> + <code>559-560</code></td><td>Borrar la entrada del módulo: <code>DashboardEnterprise.tsx</code> deja de ser ruta propia y su contenido vive dentro de “Resumen” (Salud del negocio + bandeja de señales). Añadir redirección de la URL vieja al tab <code>finanzas/resumen</code></td></tr>
+  <tr><td>Botón “Nuevo” contextual</td><td><code>App.tsx:167-192</code> <code>nuevoItems</code></td><td>Ya existen líneas para <em>Registrar gasto</em> y <em>Emitir factura</em> (líneas 179-181): convertirlas en el desplegable de “Nuevo” y borrar la pestaña “Registro de Gastos”</td></tr>
+  <tr><td>Migaja</td><td><code>App.tsx:547-551</code> <code>subLabels</code></td><td><code>finanzas:'Finanzas'</code> + el tab activo (<code>Resumen</code>, <code>Documentos</code>, <code>Cobranza</code>, <code>Analítica</code>) para que la migaja no quede como hoy (vacía)</td></tr>
+  <tr><td>Una sola fuente de datos</td><td><code>server.ts:5460</code> <code>/api/dashboard/enterprise</code></td><td>Dejar de recalcular el consolidado en el dashboard: consumir <code>/api/finanzas/resumen</code>, <code>/api/granja/resumen</code> y <code>/api/operaciones/resumen</code></td></tr>
+  <tr><td><b>Prerrequisitos de la pantalla C</b></td><td><code>schema.ts</code> + <code>server.ts:673</code></td><td>Crear la tabla <code>pagos</code> y agregar <code>facturas.fechaVencimiento</code>; sin esto el aging por vencimiento y el pago parcial no se pueden implementar (gaps 13 y 14)</td></tr>
+  <tr><td>Código muerto</td><td><code>src/components/Dashboard.tsx</code>, <code>DashboardAdmin.tsx</code></td><td>No los importa la app real (verificado). Retirar y borrar los scripts <code>add_tab_component.cjs</code>, <code>update_dashboard.cjs</code>, <code>rewrite_app.cjs</code> que lostocan</td></tr>
+</table>
+<div class="note"><b>Riesgo de integración: medio.</b> La parte de navegación es barata (renombrar tabs, mover “Registro de Gastos” a una acción,
+fusionar el Centro de Mando), pero la pantalla de <b>Cobranza</b> sí necesita backend nuevo: tabla <code>pagos</code>,
+<code>facturas.fechaVencimiento</code> y pago parcial. Los tres endpoints de resumen que consume “Resumen” ya existen.</div>
+
+<h2>6c. Cómo elimina la duplicación <span class="tag">recap</span></h2>
+<p style="font-size:12.5px;color:var(--ink2)">Las 5 tarjetas (ingresos, gastos, utilidad, margen, cartera) viven <b>solo</b> en “Resumen”, con Δ vs
+período anterior y la banda del ciclo del dinero que las conecta con el resto del módulo. “Documentos” = el registro fiscal y el estado real de
+Hacienda. “Cobranza” = operativa de cobranza (aging por vencimiento y registro de pagos). “Analítica” (ex-“Reportes”) = tendencias,
+comparativas, rankings y desgloses derivados, <b>sin repetir tarjetas</b>, más el libro de caja como tipo de análisis. Y el “Centro de Mando”
+<b>ya no es un módulo</b>: su salud del negocio y su bandeja de señales viven dentro de “Resumen”, y ya no calcula nada — solo enlaza.</p>
+
+<h2>7. Orden de trabajo sugerido <span class="tag">implementación</span></h2>
+<div class="card"><ol style="margin-left:16px">
+  <li><b>Crítico (bugs):</b> arreglar el 404 de <code>ventas-ruta</code>; unificar resumen P&amp;L en <code>/api/finanzas/resumen</code> y que todas las vistas lo consuman.</li>
+  <li><b>Prerrequisitos de Cobranza:</b> crear la tabla <code>pagos</code>, agregar <code>facturas.fechaVencimiento</code> y permitir el pago parcial (gaps 13 y 14). Sin esto la pantalla C queda en diseño.</li>
+  <li><b>Flujo de venta:</b> incluir <code>ventas_ruta</code> en utilidad y en “Ventas por Ruta” (tiquetes + facturas).</li>
+  <li><b>Estructura UI:</b> tabs <code>Resumen | Documentos | Cobranza | Analítica</code>; “Flujo de caja” como tipo de Analítica; “Registro de Gastos” a acción/botón; Centro de Mando fusionado en Resumen.</li>
+  <li><b>Analytics:</b> Δ vs período anterior, filtro de fechas real, tendencia mensual, DSO y antigüedad de cartera.</li>
+  <li><b>Costo:</b> registrar costos de producción por cartón → margen por producto, valor de inventario, punto de equilibrio.</li>
+</ol></div>
+
+<h2>8. El Centro de Mando: fusionado dentro de “Resumen” <span class="tag r">nuevo</span></h2>
+<div class="card"><p>
+<b>Veredicto:</b> el defecto de “Reportes” se repite en el dashboard. El Centro de Mando actual
+(<code>DashboardEnterprise</code>, el único que la app usa: import en <code>App.tsx:23</code>, render <code>App.tsx:559-560</code>)
+<b>recalcula por su cuenta</b> lo que ya saben los módulos y además <b>embebe detalle</b> que duplica a Granja,
+Finanzas y Operaciones. Por eso <b>no se arregla: se disuelve</b>. Deja de ser una entrada del sidebar y pasa a ser la
+<b>columna derecha de “Resumen”</b>: el bloque “Salud del negocio” (tarjetas de producción y logística) y su bandeja de señales, que se
+fusiona con la de “Requiere atención” para que exista <b>una sola bandeja</b> en todo el módulo. El resultado es la pirámide de KPIs
+que ya se dibujó en la pantalla A, sin un cuarto nivel.</p></div>
+
+<table>
+  <tr><th>Lo que muestra hoy</th><th class="c">Duplica a / misma cifra en</th><th class="c">Evidencia</th><th class="c">Impacto</th></tr>
+  <tr><td><b>KPIs “General”</b> (ingresos hoy, gastos, utilidad, cartera)</td>
+    <td>Finanzas (Resumen P&amp;L) y Cobranza</td>
+    <td><code>server.ts:5460</code> <code>/api/dashboard/enterprise</code> vuelve a sumar <code>facturas</code> + <code>gastos</code> desde cero (misma fuente que la sección 1)</td>
+    <td class="c"><span class="badge b-r">P&amp;L calculado ×2 (y ×3 con Reportes)</span></td></tr>
+  <tr><td><b>Drill-down Producción</b> (granja → galerón → lote)</td>
+    <td>Módulo Granja</td>
+    <td>el endpoint consulta <code>produccion_diaria</code>, <code>galerones</code>, <code>lotes</code>, <code>vacunaciones</code>, <code>recepciones</code>… (navegación espejo del módulo)</td>
+    <td class="c"><span class="badge b-o">2 caminos al mismo dato</span></td></tr>
+  <tr><td><b>Tabs internas del dashboard</b> (Finanzas / Logística)</td>
+    <td>Módulos Finanzas y Operaciones y Bodegas</td>
+    <td>sub-nav anidada dentro de <code>DashboardEnterprise</code> reproduce módulos enteros</td>
+    <td class="c"><span class="badge b-o">el usuario no sabe dónde vive</span></td></tr>
+  <tr><td><b>Farm de datos por carga</b></td>
+    <td>—</td>
+    <td>un solo resumen consulta ~12 tablas (facturas, gastos, producción, inventario, lotes, vacunas, órdenes, desperdicios, clientes, rutas, galerones, recepciones)</td>
+    <td class="c"><span class="badge b-o">costo &gt; valor</span></td></tr>
+  <tr><td><b>Dashboards muertos</b> (<code>Dashboard.tsx</code>, <code>DashboardAdmin.tsx</code>)</td>
+    <td>nada en producción</td>
+    <td>no se importan en la app real; <code>Dashboard.tsx</code> trae datos fijos de una clínica “ILCASU” (resto de otro sistema); solo aparecen en scripts/copia</td>
+    <td class="c"><span class="badge b-r">eliminar (limpia navegación y deuda)</span></td></tr>
+</table>
+<div class="note"><b>Corrección (misma regla que sección 1):</b> fuentes únicas de resumen
+(<code>/api/finanzas/resumen</code>, <code>/api/granja/resumen</code>, <code>/api/operaciones/resumen</code>) y “Resumen” solo las <b>consume</b>.
+Se elimina la tab interna Finanzas/Logística y la entrada del sidebar; cada tarjeta hace <i>clic → navegación</i> al módulo que ya dibujó el dato.
+Se borran los dashboards muertos.</div>
+<div class="note"><b>Dónde quedó cada pieza:</b> las 4 primeras filas viven ahora en la <b>banda del ciclo del dinero</b> y en las tarjetas de “Resumen”;
+la fila de Producción y Logística alimenta el bloque “Salud del negocio” del lado derecho de la pantalla A; y la fila de alertas se mezcló con la
+bandeja única “Requiere atención”. Ninguna tarjeta se pierde — solo deja de tener una segunda ruta de navegación.</div>
+
+<table>
+  <tr><th>Tarjeta del Centro de Mando (≤8, regla 5-8-15)</th><th>Fuente única</th><th>Al hacer clic →</th></tr>
+  <tr><td>Ingresos · Gastos · Utilidad · Margen del día</td><td><code>/api/finanzas/resumen</code></td><td>Finanzas / Resumen</td></tr>
+  <tr><td>Cartera y vencidas &gt;15d</td><td><code>/api/finanzas/resumen</code> (bloque CxC)</td><td>Finanzas / Cobranza</td></tr>
+   <tr><td>Ventas del día <b>tiquetes + facturas</b></td><td><code>/api/finanzas/resumen</code> (incluye <code>ventas_ruta</code>, gap #1)</td><td>Finanzas / Analítica › Ventas por Ruta</td></tr>
+  <tr><td>Producción hoy vs esperado</td><td><code>/api/granja/resumen</code></td><td>Granja / Producción</td></tr>
+  <tr><td>Guías y despacho del día</td><td><code>/api/operaciones/resumen</code></td><td>Operaciones y Bodegas / Despacho</td></tr>
+  <tr><td>Alertas (desperdicio, anulaciones, saldo &gt; límite, vencida &gt;15d)</td><td>reglas sobre las fuentes anteriores</td><td>módulo que originó la alerta</td></tr>
+</table>
+
+<h2>9. Facturación y tiquetes de crédito — mejores prácticas (FACELCR + normativa CR v4.4) <span class="tag r">nuevo</span></h2>
+<div class="card"><p>
+Se analizó el flujo de emisión de <b>FACELCR</b> (facelcr.com, proveedor CR de factura electrónica / firma digital /
+recaudación: sitio de compra con flujo “elegir emisor → armar comprobante → emitir con firma y envío a Hacienda”),
+cruzado con la normativa vigente de Hacienda <b>v4.4</b> (<code>MH-DGT-RES-0027-2024</code>, Código Tributario art. 122,
+Anexos y Estructuras v4.4) y las prácticas de emisores líderes (FacturaEncR, FacturaYA).
+Resultado: qué deben adoptar nuestra Facturación y nuestros tiquetes (TQ-) para ser <b>comprobantes fiscales reales</b>
+y no solo folios internos.</p></div>
+
+<table>
+  <tr><th>Práctica (origen)</th><th>Qué exige / cómo lo hacen</th><th>Qué adoptar en Granja Don Paco</th></tr>
+  <tr><td><b>Consecutivo por tipo de comprobante</b> (Hacienda art. 2; FACELCR le asigna al emitir)</td><td>Numeración automática, consecutiva e <b>inalterable</b>, separada por tipo (FE / TE / NC / ND).</td><td>Mantener <code>F-</code> y <code>TQ-</code> por tipo, pero <b>sin huecos ni reuso</b>; pasar la “anulación” a invalidación controlada.</td></tr>
+  <tr><td><b>No se anula, se corrige con NC</b> (v4.4; FacturaEncR)</td><td>“Los comprobantes válidamente emitidos no se pueden anular directamente… sus efectos se anulan con nota de crédito/débito que referencia el original” y <b>precarga sus datos</b>.</td><td>Modelar <b>NC/ND con precarga</b> para errores, en lugar de editar/borrar el documento emitido.</td></tr>
+  <tr><td><b>Estados de validación en tiempo real</b> (FacturaYA / FacturaEncR; mensaje de aceptación)</td><td>El comprobante no tiene valor fiscal <b>sin el mensaje de Hacienda</b> (aceptado/rechazado); si rechazada, es inválida.</td><td>Columna de <b>estado Hacienda</b> por documento (Borrador → Firmado → Enviado → Aceptado/Rechazado) + bandeja “Pendientes de respuesta”.</td></tr>
+  <tr><td><b>Clave y firma digital</b> (Cód. Trib. art. 122; certificado ATV)</td><td>Clave de acceso y firma digital <b>XAdES-EPES</b> con la llave criptográfica del emisor; guardar XML firmado + acuse (≥5 años, CNPT art. 109).</td><td>Al integrar: firmar y <b>conservar/exportar el XML firmado + respuesta</b> para el contador.</td></tr>
+  <tr><td><b>CAByS + tarifa IVA por línea</b> (v4.4; FacturaYA sugiere con IA)</td><td>Cada línea lleva el código CAByS de 13 dígitos y su tarifa de IVA.</td><td>Agregar <code>cabys</code> e <code>iva</code> al catálogo de productos (hoy hay precio y unidad); el tiquete de caja los completa.</td></tr>
+  <tr><td><b>Plazo de crédito y medio de pago</b> (v4.4, nodos en el resumen)</td><td>Plazo de crédito expresado en <b>días</b> y medio de pago en el resumen del comprobante.</td><td>Ya existe <code>condicion_pago</code> (0/8/15 días): mapear directo al XML.</td></tr>
+  <tr><td><b>Flujo guiado + reuso</b> (FACELCR / FacturaEncR)</td><td>“Elegís el emisor → armás la factura con clientes y productos guardados → emitís”, totales e IVA automáticos; varias cédulas en un clic.</td><td>El módulo Facturación mantiene esa “piel”: <b>bandeja de documentos + “Nuevo documento” (wizard)</b> reutilizando clientes y productos existentes.</td></tr>
+  <tr><td><b>El tiquete de caja es un comprobante</b> (v4.4 TE; punto de venta)</td><td>“El ticket de caja de toda la vida”: tiquete electrónico, hasta 1000 líneas de detalle.</td><td>Los <code>TQ-</code> de <code>ventas_ruta</code> deben poder emitirse como <b>tiquete electrónico</b>; al convertir a factura (nace <code>facturaId</code>) conservar la trazabilidad TQ→factura y emitir NC si se corrige.</td></tr>
+</table>
+<div class="note ok"><b>Conexión con la sección 2:</b> hoy los TQ- no miden dinero en el P&amp;L (gap #1); con esta sección además
+<u>ni siquiera serían comprobantes fiscales</u>. El orden de trabajo une ambos: 1) incluirlos en la utilidad y en “Ventas por Ruta”,
+2) darles estado fiscal (consecutivo, firma, envío, aceptación) cuando se facturen. Ver “flujo de emisión FACELCR”: emisor → comprobante → firma → Hacienda → estado.</div>
+
+<h2>10. Buenas prácticas tomadas de ERPs y CRMs líderes <span class="tag r">nuevo</span></h2>
+<div class="cap">Todo lo de las pantallas B, C y D no es invención: son patrones que los ERPs y CRMs de referencia ya implementan. Esta tabla
+declara <b>de quién se toma cada decisión</b> y qué queda fuera a propósito. Se consultó la documentación oficial de SAP Business One,
+SAP S/4HANA, Oracle NetSuite, Microsoft Dynamics 365 Finance y los patrones de cobranza de Salesforce/HubSpot.</div>
+<table>
+  <tr><th>Práctica</th><th>Referencia y cómo lo hace</th><th>Adoptado en este boceto</th><th>Estado hoy en la app</th></tr>
+  <tr>
+    <td><b>Aging por fecha de vencimiento</b></td>
+    <td>SAP Business One: el reporte <i>Customer Receivables Aging</i> tiene un selector <code>Age By</code> = <b>Due Date</b> (o posting/document date), con buckets configurables por defecto <b>30/60/90/120</b>. NetSuite A/R Aging usa <b>1–30 / 31–60 / 61–90 / &gt;90</b>. Dynamics define <i>Aging period definitions</i> como configuración, no código.</td>
+    <td>Pantalla C · buckets <b>Al día · 1–30 · 31–60 · 61–90 · &gt;90</b>, calculados desde <b>fechaVencimiento</b>, con el bucket configurable.</td>
+    <td><span class="badge b-r">incorrecto</span> hoy cuenta días desde <code>facturas.fecha</code> (emisión), no desde el vencimiento</td>
+  </tr>
+  <tr>
+    <td><b>Escalones de cobranza (dunning)</b></td>
+    <td>SAP: <i>Dunning procedures</i>, <i>dunning levels</i> y <i>dunning blocks</i> — cada cliente tiene un nivel y se puede <b>pausar</b> la cobranza con motivo. NetSuite: <i>Dunning Dashboard</i> con “Customers with Paused Dunning”.</td>
+    <td>Cada bucket dispara una <b>acción</b> (recordatorio → recordatorio+llamada → bloquear despacho a crédito → contar a pérdida), y el detalle por factura permite <b>pausar</b> la cobranza.</td>
+    <td><span class="badge b-r">no existe</span> los botones de recordatorio no tienen handler (<code>Cobranza.tsx:64</code>)</td>
+  </tr>
+  <tr>
+    <td><b>Pagos parciales y asignación múltiple</b></td>
+    <td>Dynamics 365: <i>Payment</i> + <i>Payment allocation</i> reparte un pago entre varias facturas/open items. NetSuite muestra pagos “no aplicados” en el aging.</td>
+    <td>El drawer de la factura permite <b>registrar un pago parcial</b> y ver el <b>saldo restante</b>; el aging muestra “aplicado vs no aplicado”.</td>
+    <td><span class="badge b-r">no existe</span> <code>POST /api/pagos</code> marca la factura <code>Pagada</code> siempre, sin importar el monto (<code>server.ts:681</code>)</td>
+  </tr>
+  <tr>
+    <td><b>Límite de crédito y bloqueo automático</b></td>
+    <td>SAP: <i>Credit Management</i> con *credit limit* por socio y *blocked orders*; los pedidos que exceden el límite quedan <b>bloqueados</b> sin intervención manual.</td>
+    <td>Pantalla C, en el detalle de la factura, muestra <b>uso del límite</b> (65% de ₡150.000) y la acción <b>Bloquear crédito</b>, que impide despachar a crédito.</td>
+    <td><span class="badge b-o">parcial</span> existe <code>clientes.limite_credito</code> y <code>saldo_pendiente</code> pero no hay bloqueo en el despacho</td>
+  </tr>
+  <tr>
+    <td><b>Libro de caja, no suma de facturas</b></td>
+    <td>Todos los ERPs: cash book / bank ledger con <b>asiento por movimiento</b> (cuenta, fecha, contrapartida, referencia), y <b>saldo acumulado</b> por cuenta y dimensional.</td>
+    <td>Pantalla D · sub-fila <b>“Flujo de caja”</b> muestra <b>entradas/salidas datadas con su origen</b>, <b>saldo por cuenta</b> (3 cuentas) y saldos de cierre.</td>
+    <td><span class="badge b-r">bloqueado</span> <code>gastos</code> no tiene cuenta ni comprobante (<code>schema.ts:185</code>); los cobros no se registran en ninguna tabla</td>
+  </tr>
+  <tr>
+    <td><b>Conciliación bancaria</b></td>
+    <td>SAP <i>Bank Statement</i> / <i>Manual Reconciliation</i>, NetSuite <i>Bank Reconciliation</i>: se.importa el estado de cuenta y se empareja con los movimientos; los no emparejados quedan en bandeja.</td>
+    <td>El <b>Libro de caja</b> de la Pantalla D tiene botón <b>Conciliar banco</b> y una alerta de “3 movimientos sin match en el estado de cuenta”.</td>
+    <td><span class="badge b-r">no existe</span> sin <code>pagos</code> no hay nada que conciliar</td>
+  </tr>
+  <tr>
+    <td><b>Proyección de flujo de caja</b></td>
+    <td>NetSuite Cash Flow Forecast y SAP Cash and Liquidity Management: proyectan entradas por <b>CxC con fecha de vencimiento</b> y salidas por <b>cuentas por pagar + gastos recurrentes</b>.</td>
+    <td>Pantalla D · panel <b>Proyección de caja 30 días</b> (₡512.000 en entradas − ₡203.000 en salidas = ₡309.000), marcado explícitamente como “según CxC vigente” y con el requisito de backend a la vista.</td>
+    <td><span class="badge b-r">no existe</span> depende de CxC con vencimiento real</td>
+  </tr>
+  <tr>
+    <td><b>Vista 360° del cliente</b></td>
+    <td>CRM (Salesforce/HubSpot): una ficha con saldo, facturas abiertas, contactos, correos y activities de cobranza en el mismo lugar.</td>
+    <td>El drawer de CxC combina saldo, facturas, límite y acciones de cobranza; el módulo <b>Office</b> (§6 de su boceto) aporta el hilo de correo del cliente.</td>
+    <td><span class="badge b-o">parcial</span> hay ficha de cliente, sin bandeja de cobranza ni historial de contactos</td>
+  </tr>
+  <tr>
+    <td><b>DSO y provisión de incobrable</b></td>
+    <td>NetSuite: el aging alimenta la <b>estimación de incobrables</b> multiplicando cada bucket por un porcentaje; el DSO se monitorea como KPI con objetivo.</td>
+    <td>Pantalla C muestra el KPI <b>DSO 34 días contra meta ≤30</b>, y el bucket &gt;90 ofrece “contar a pérdida / nota de crédito”.</td>
+    <td><span class="badge b-r">no existe</span> no hay meta de DSO ni política de provisión</td>
+  </tr>
+  <tr>
+    <td><b>Inmutabilidad del documento fiscal</b></td>
+    <td>FACELCR, Hacienda v4.4 y los ERPs con <i>reverse document</i>: el documento emitido no se edita ni se borra; se corrige con <b>credit/debit memo</b> que lo referencia.</td>
+    <td>Pantalla B · fila por documento con <b>estado real</b>, <b>motivo de rechazo</b>, y la acción “Anular (NC) — no borra, crea nota”.</td>
+    <td><span class="badge b-o">parcial</span> la NC existe (<code>server.ts:4155</code>) pero <b>no guarda el motivo</b> ni el IVA</td>
+  </tr>
+  <tr>
+    <td><b>Consolidación y trazabilidad</b></td>
+    <td>Práctica de punto de venta/ERP: los tiquetes de una ruta se consolidan <b>una sola vez</b> por consumidor final; la guía queda bloqueada contra reconsolidación.</td>
+    <td>Pantalla B · panel “Relación entre documentos” (8 tiquetes → FAC-0012) y el código ya devuelve <code>409</code> si se reintenta.</td>
+    <td><span class="badge b-g">ya funciona</span> <code>/api/facturacion/consolidar-ruta</code> valida guía cerrada y no consolidada</td>
+  </tr>
+  <tr>
+    <td><b>Roles y segregación de funciones</b></td>
+    <td>SAP/NetSuite: quien emite no es quien aprueba ni quien cobra. Dynamics separa <i>Credit and collections</i> de <i>Invoicing</i>.</td>
+    <td>Hoy <code>Resumen</code> y <code>Cobranza</code> son <b>solo Admin</b> en <code>App.tsx:691-692</code> (y <code>Facturar</code>, Admin/Comercial, pasa a ser el tab <code>Documentos</code>): el corte por rol ya existe y se conserva.</td>
+    <td><span class="badge b-g">ya correcto</span> el corte por rol ya existe en el código; solo hay que renombrar los tabs, no revisar permisos</td>
+  </tr>
+</table>
+<div class="note"><b>Lo que deliberadamente NO se copió:</b> multi-sociedad y multi-moneda (una sola granja, solo colones), cuentas por pagar y
+tesorería avanzada (no hay módulo de proveedores en la app), y automatización de cobranza por IA. Copiar esas piezas sin el maestro de
+clientes y el libro de caja las haría decorativas: por eso el orden de trabajo empieza por <code>pagos</code> + <code>fechaVencimiento</code>.</div>
+
+</div>
+</body>
+</html>

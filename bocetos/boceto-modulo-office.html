@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boceto — Office integrado en la app (Correo + Drive)</title>
+<style>
+  /* ===== capa del documento (boceto) ===== */
+  :root { --bg:#eef1f4; --line:#d7dce2; --ink:#1a2332; --ink2:#5b6675; --ink3:#98a1ae; --amber:#e67e22; }
+  * { box-sizing:border-box; }
+  body { font-family:'Segoe UI',system-ui,Arial,sans-serif; background:var(--bg); color:var(--ink); margin:0; padding:28px; line-height:1.5; }
+  .wrap { max-width:1220px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--ink2); font-size:13px; margin-bottom:20px; }
+  h2 { font-size:15px; margin:32px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--line); }
+  h2 .tag { font-size:11px; background:#2f6f4f; color:#fff; border-radius:10px; padding:2px 8px; margin-left:8px; font-weight:600; }
+  h2 .tag.b { background:#2980b9; } h2 .tag.g{background:#e67e22;}
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card p, .card li { font-size:13px; color:var(--ink2); }
+  .card ul, .card ol { margin:6px 0 0 18px; padding:0; }
+  .card li b { color:var(--ink); }
+  .grid { display:grid; gap:14px; } .cols2{grid-template-columns:1fr 1fr;}
+  @media (max-width:880px){.cols2{grid-template-columns:1fr;}}
+  .note { font-size:12.5px; color:var(--ink2); border-left:3px solid #2f6f4f; background:#e8f2ec; border-radius:0 8px 8px 0; padding:8px 12px; margin-top:12px; }
+  table.bt { border-collapse:collapse; width:100%; font-size:12.5px; }
+  table.bt th, table.bt td { border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }
+  table.bt th { background:#f4f6f8; font-size:11px; text-transform:uppercase; letter-spacing:.03em; }
+  code { background:#eef1f4; border-radius:4px; padding:1px 6px; font-size:12px; }
+  .cap { font-size:11.5px; color:var(--ink2); margin:6px 2px 0; }
+  .cap b { color:var(--ink); }
+
+  /* ===== capa de la APP real (tokens de index.css + clases .gcrm) ===== */
+  .app { display:flex; background:#F7F8FA; border:1px solid #E2E6EA; border-radius:14px; overflow:hidden; box-shadow:0 14px 34px rgba(15,25,35,.12); margin-top:8px; }
+  /* sidebar (App.tsx:318 w-64, bg #0F1923) */
+  .side { width:190px; flex:none; background:#0F1923; display:flex; flex-direction:column; }
+  .side .logo { display:flex; gap:10px; align-items:center; padding:18px 16px 16px; }
+  .side .logo .egg { width:34px; height:34px; border-radius:10px; background:#3D7A4A; display:flex; align-items:center; justify-content:center; font-size:16px; box-shadow:0 2px 8px rgba(0,0,0,.3); }
+  .side .logo b { display:block; font-size:16px; font-weight:800; line-height:1; color:#fff; }
+  .side .logo span { display:block; font-size:11px; font-weight:700; color:#D4A017; }
+  .side .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.12em; color:#7C8A99; padding:0 16px 8px; }
+  .side .nav { display:flex; align-items:center; gap:9px; padding:8px 16px; font-size:12px; font-weight:600; color:#A9B6C4; white-space:nowrap; }
+  .side .nav.on { background:rgba(61,122,74,.15); color:#4E9A5E; }
+  .side .nav.new::after { content:'nuevo'; font-size:8px; font-weight:800; letter-spacing:.06em; background:#B8860B; color:#fff; border-radius:4px; padding:1px 5px; }
+  .side .nav .ic { width:16px; text-align:center; }
+  .side .user { margin-top:auto; padding:12px 14px; border-top:1px solid rgba(255,255,255,.08); display:flex; gap:9px; align-items:center; }
+  .side .user .av { width:30px; height:30px; border-radius:8px; background:#3D7A4A; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; }
+  .side .user b { color:#fff; font-size:11.5px; display:block; }
+  .side .user span { color:#7C8A99; font-size:10px; }
+  /* topbar (App.tsx:336) */
+  .top { height:46px; background:#fff; border-bottom:1px solid #E2E6EA; display:flex; align-items:center; gap:10px; padding:0 12px; flex:none; }
+  .top .search { width:200px; height:30px; background:#F1F3F5; border:1px solid #E2E6EA; border-radius:8px; display:flex; align-items:center; gap:7px; padding:0 10px; font-size:11.5px; color:#8C95A0; }
+  .top .sp { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .top .nuevo { background:#3D7A4A; color:#fff; font-size:11.5px; font-weight:600; border-radius:8px; padding:7px 12px; box-shadow:0 2px 10px rgba(61,122,74,.35); }
+  .top .moon { color:#5F6B7A; font-size:14px; }
+  .top .est { width:24px; height:24px; border-radius:8px; background:#3D7A4A; color:#fff; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; }
+  /* cuerpo */
+  .body { flex:1; min-width:0; display:flex; flex-direction:column; position:relative; }
+  .crumb { padding:14px 20px 0; font-size:11.5px; color:#8C95A0; display:flex; gap:6px; align-items:center; }
+  .crumb b { color:#1A1D21; font-weight:500; }
+  .content { padding:12px 20px 20px; }
+  .tabs { display:flex; gap:22px; border-bottom:1px solid #E2E6EA; }
+  .tabs button { padding:9px 0 11px; font-size:13px; font-weight:600; color:#8C95A0; border-bottom:2px solid transparent; white-space:nowrap; }
+  .tabs button.on { color:#3D7A4A; border-color:#3D7A4A; }
+  .tabs button.cta { margin-left:auto; color:#B8860B; border-color:transparent; }
+  .viewhead { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-top:16px; }
+  .viewhead h1 { font-size:20px; font-weight:800; letter-spacing:-.02em; margin:0; }
+  .viewhead .sub { font-size:11.5px; color:#8C95A0; margin-top:2px; }
+  .btn { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:9px; border:1px solid #E2E6EA; background:#fff; font-size:11.5px; font-weight:700; color:#5F6B7A; }
+  .btn.brand { background:#3D7A4A; border-color:#3D7A4A; color:#fff; }
+  .btn.sm { height:24px; padding:0 9px; font-size:10.5px; border-radius:7px; }
+  .cols { display:grid; grid-template-columns:210px 1fr; gap:14px; align-items:start; margin-top:14px; }
+  .cols-docs { grid-template-columns:180px 1fr; }
+  .sect h4 { font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; color:#8C95A0; margin:0 0 8px; font-weight:800; }
+  .acct { display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:9px; font-size:12px; color:#5F6B7A; cursor:default; }
+  .acct.on { background:#E8F5EC; color:#2D5C38; font-weight:700; }
+  .acct .dotc { width:8px; height:8px; border-radius:50%; flex:none; }
+  .acct .b { margin-left:auto; font-size:10px; font-weight:700; color:#8C95A0; }
+  .panel { background:#fff; border:1px solid #E2E6EA; border-radius:14px; box-shadow:0 1px 2px rgba(15,23,42,.05); overflow:hidden; }
+  .panel-head { display:flex; align-items:center; gap:10px; padding:11px 14px; border-bottom:1px solid #E2E6EA; }
+  .panel-title { font-weight:800; font-size:12.5px; }
+  .panel-head .tools { margin-left:auto; display:flex; gap:7px; align-items:center; }
+  .panelbar { display:flex; gap:8px; padding:10px 14px; border-bottom:1px solid #E2E6EA; align-items:center; }
+  .panelbar input { flex:1; max-width:200px; padding:6px 9px; border:1px solid #E2E6EA; border-radius:9px; font-size:11.5px; color:#8C95A0; }
+  .m { display:flex; gap:9px; align-items:center; padding:9px 14px; border-bottom:1px solid #F1F5F9; font-size:12px; }
+  .m.on { background:#F0FDF4; box-shadow:inset 3px 0 0 #3D7A4A; }
+  .m .av { width:26px; height:26px; border-radius:8px; flex:none; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:10px; }
+  .m .txt { min-width:0; flex:1; }
+  .m .who { font-weight:700; }
+  .m .subj { color:#5F6B7A; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .m.un .subj { color:#1A1D21; font-weight:600; }
+  .m .ti { font-size:10px; color:#8C95A0; white-space:nowrap; }
+  .hact { display:flex; gap:4px; opacity:0; }
+  .m:hover .hact { opacity:1; }
+  .chip { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; border-radius:999px; font-size:10px; font-weight:700; border:1px solid #E2E6EA; background:#F1F3F5; color:#5F6B7A; white-space:nowrap; }
+  .chip.green { background:#D1FAE5; color:#065F46; border-color:#A7F3D0; }
+  .chip.blue { background:#DBEAFE; color:#1D4ED8; border-color:#BFDBFE; }
+  .chip.amber { background:#FEF3C7; color:#B45309; border-color:#FDE68A; }
+  .chip.red { background:#FEE2E2; color:#B91C1C; border-color:#FECACA; }
+  .empty { text-align:center; color:#8C95A0; font-size:11.5px; padding:28px 10px; line-height:1.6; }
+  .empty .ico { font-size:20px; display:block; margin-bottom:8px; opacity:.5; }
+  /* drawer: reusa el patrón existente de la app (gcrm.css .drawer-fixed/.drawer) */
+  .scrim { position:absolute; inset:0; background:rgba(15,23,42,.38); }
+  .drawer { position:absolute; top:0; right:0; bottom:0; width:52%; min-width:340px; background:#F7F8FA; box-shadow:-12px 0 32px rgba(15,23,42,.18); display:flex; flex-direction:column; }
+  .drawer .identity { background:#fff; border-bottom:1px solid #E2E6EA; padding:12px 16px; }
+  .drawer .identity .t { font-weight:800; font-size:12.5px; }
+  .drawer .identity .m { font-size:10.5px; color:#8C95A0; margin-top:2px; }
+  .drawer .drawer-body { flex:1; overflow-y:auto; padding:14px 16px; }
+  .kv { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:11.5px; padding:6px 0; border-bottom:1px dashed #EEF2F7; }
+  .kv b { color:#1A1D21; }
+  .docrow { display:flex; gap:9px; align-items:center; padding:9px 10px; background:#fff; border:1px solid #E2E6EA; border-radius:10px; margin-bottom:8px; font-size:11.5px; }
+  .docrow .ic2 { width:26px; height:26px; border-radius:7px; color:#fff; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:800; flex:none; }
+  .docrow .g { margin-left:auto; display:flex; gap:6px; align-items:center; }
+  .msg { background:#fff; border:1px solid #E2E6EA; border-radius:10px; padding:9px 11px; font-size:11.5px; color:#5F6B7A; margin-bottom:8px; }
+  .msg b { color:#1A1D21; }
+  .foot { padding:10px 16px; border-top:1px solid #E2E6EA; background:#fff; display:flex; gap:7px; }
+  /* Docs */
+  .tree { font-size:11.5px; }
+  .tree .f { display:flex; gap:7px; align-items:center; padding:6px 8px; border-radius:7px; color:#5F6B7A; white-space:nowrap; }
+  .tree .f.on { background:#E8F5EC; color:#2D5C38; font-weight:700; }
+  .tree .f.warn { color:#B45309; }
+  .fmeta { display:flex; gap:12px; padding:9px 14px; border-top:1px solid #E2E6EA; background:#FAFBFC; font-size:11px; color:#5F6B7A; align-items:center; }
+  .fmeta b { color:#1A1D21; }
+  @media (max-width:1000px){ .side{display:none;} .cols{grid-template-columns:1fr;} .drawer{width:100%;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Boceto — Módulo “Office” integrado en la app (Correo + Drive)</h1>
+<div class="sub">Granja Don Paco · Boceto, sin tocar el código · Los mocks usan el chrome real (<code>App.tsx</code> sidebar <code>#0F1923</code>, topbar, tabs <code>space-x-6</code> con subrayado verde) y el sistema <code>.gcrm</code> (<code>viewhead/kpi/panel/chip/drawer</code>) · Corrección v2: correo y documentos en <b>espacios separados</b> · Corrección v3: <b>la tab Vinculaciones sale de Office y pasa a Admin</b> (§6), y Granja se integra a Operaciones</div>
+
+<h2>1. Qué resuelve <span class="tag">problema</span></h2>
+<div class="card"><p>La oficina está dispersa en varias cuentas Gmail, con bandejas, adjuntos y carpetas Drive separadas.
+<b>Office</b> las centraliza: bandeja unificada por cuenta, carpetas Drive vinculadas y trazabilidad
+<b>adjunto ↔ hilo ↔ carpeta</b> mediante un índice. Es un módulo <b>nuevo</b> (hoy no existe en la app), por eso el
+mockup incluye su lugar exacto en la navegación real.</p></div>
+
+<h2>2. Principios de UI/UX aplicados <span class="tag b">investigación</span></h2>
+<div class="grid cols2">
+  <div class="card"><b>Contextos separados (eM Client · Zoho Workplace · iManage)</b>
+    <ul><li>Los clientes líderes no apilan correo y archivos: cada espacio tiene su módulo y se cambia con el <b>mismo patrón de tabs</b> que ya usa la app.</li>
+    <li>Lista liviana (remitente + asunto + avance) en vez de filas con muchos íconos (Zoho: menos densidad visual).</li></ul>
+  </div>
+  <div class="card"><b>Disclosure progresivo (NNG · IBM) + drawer existente</b>
+    <ul><li>“Noscy overwhelm de entrada; revela al interactuar”.</li>
+    <li>El detalle (hilo + documentos) se abre en el <b>drawer de 800px que la app ya usa</b> en Cliente360 (<code>gcrm.css:155-159</code>): patrón probado, cero UI nueva.</li>
+    <li>Acciones al <b>hover</b> (Zoho/Outlook) en vez de botones permanentes.</li></ul>
+  </div>
+</div>
+
+<h2>3. Mockup integrado — Pantalla 1: <code>Office / Correo</code> <span class="tag g">final</span></h2>
+<div class="cap"><b>Dónde entra en la app:</b> nuevo ítem de <code>macroModules</code> entre <b>Admin</b> y <b>Operaciones y Bodegas</b> (roles Admin/Socio/Comercial). El tab bar es el mismo de Finanzas; el drawer lateral es el mismo de Cliente360. <b>Office queda con 2 tabs (Correo · Documentos)</b> — la pestaña <b>Vinculaciones</b> se movió a <b>Admin</b> (ver §6), porque es configuración global y no correo.</div>
+<div class="app">
+  <div class="side">
+    <div class="logo"><span class="egg">🥚</span><span><b>Granja</b><span>Don Paco</span></span></div>
+    <div class="lbl">Modulos</div>
+    <div class="nav"><span class="ic">▦</span> Centro de Mando</div>
+    <div class="nav"><span class="ic">$</span> Finanzas</div>
+    <div class="nav"><span class="ic">⚙</span> Admin</div>
+    <div class="nav on new"><span class="ic">✉</span> Office</div>
+    <div class="nav"><span class="ic">📦</span> Operaciones y Bodegas</div>
+    <div class="nav"><span class="ic">👥</span> Clientes</div>
+    <div class="user"><span class="av">P</span><span><b>Paco Soto</b><span>Administrador</span></span></div>
+  </div>
+  <div class="body">
+    <div class="top">
+      <span class="search">🔍 Buscar módulo...</span>
+      <span class="sp"><span class="moon">🌙</span><span class="nuevo">+ Nuevo</span><span class="est">ES</span></span>
+    </div>
+    <div class="crumb">Office <span>›</span> <b>Correo</b></div>
+    <div class="content">
+      <div class="tabs">
+        <button class="on">Correo</button>
+        <button>Documentos</button>
+        <button class="cta">⚙ Conectar cuenta</button>
+      </div>
+      <div class="viewhead">
+        <div><h1>Correo</h1><div class="sub">4 cuentas conectadas · sincronizado hace 2 min · 20 sin leer</div></div>
+        <div style="display:flex;gap:7px"><span class="btn">↻ Actualizar</span><span class="btn sm">Filtrar ▾</span></div>
+      </div>
+      <div class="cols">
+        <div>
+          <div class="sect"><h4>Cuentas</h4>
+            <div class="acct on"><span class="dotc" style="background:#3D7A4A"></span> Gerencia <span class="b">3</span></div>
+            <div class="acct"><span class="dotc" style="background:#B8860B"></span> Proveedores <span class="b">12</span></div>
+            <div class="acct"><span class="dotc" style="background:#2980b9"></span> Contabilidad <span class="b">0</span></div>
+            <div class="acct"><span class="dotc" style="background:#7C3AED"></span> Ventas <span class="b">5</span></div>
+          </div>
+          <div class="sect" style="margin-top:16px"><h4>Vistas</h4>
+            <div class="acct">Todos</div>
+            <div class="acct">Con documentos <span class="b">2</span></div>
+            <div class="acct">Sin responder <span class="b">4</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panelbar"><input placeholder="Buscar en el correo…"><span class="chip">Todos los remitentes</span><span class="chip amber">Con adjuntos ▾</span></div>
+          <div class="m on un"><span class="av" style="background:#B8860B">P</span><span class="txt"><span class="who">Huevos Pollo Feliz</span> <span class="subj">RE: Factura 0123 – cartones extra grandes</span></span><span class="chip blue">2 adjuntos</span><span class="ti">10:12</span><span class="hact"><span class="btn sm">Vincular</span><span class="btn sm">⋯</span></span></div>
+          <div class="m un"><span class="av" style="background:#3D7A4A">B</span><span class="txt"><span class="who">Banco Nacional</span> <span class="subj">Estado de cuenta septiembre</span></span><span class="chip blue">1 adjunto</span><span class="ti">09:04</span><span class="hact"><span class="btn sm">Vincular</span><span class="btn sm">⋯</span></span></div>
+          <div class="m"><span class="av" style="background:#7C3AED">V</span><span class="txt"><span class="who">Super Chepe</span> <span class="subj">Pedido #410 – 50 cartones medianos</span></span><span class="ti">Ayer</span><span class="hact"><span class="btn sm">Vincular</span><span class="btn sm">⋯</span></span></div>
+          <div class="m un"><span class="av" style="background:#B8860B">P</span><span class="txt"><span class="who">Grupo Naco</span> <span class="subj">Cotización gallinaza a granel</span></span><span class="chip blue">1 adjunto</span><span class="ti">Lun</span><span class="hact"><span class="btn sm">Vincular</span><span class="btn sm">⋯</span></span></div>
+          <div class="m"><span class="av" style="background:#3D7A4A">C</span><span class="txt"><span class="who">CCSS</span> <span class="subj">Planilla setiembre</span></span><span class="ti">Lun</span><span class="hact"><span class="btn sm">Vincular</span><span class="btn sm">⋯</span></span></div>
+        </div>
+      </div>
+    </div>
+    <!-- drawer (patrón existente) abierto por selección de fila -->
+    <div class="scrim"></div>
+    <div class="drawer">
+      <div class="identity">
+        <div class="t">RE: Factura 0123 – cartones extra grandes</div>
+        <div class="m">Huevos Pollo Feliz · proveedores@gdp.cr · hoy 10:12 · 2 adjuntos</div>
+      </div>
+      <div class="drawer-body">
+        <div class="kv"><span>Hilo</span><b>3 mensajes</b></div>
+        <div class="kv"><span>Cuenta</span><b>Proveedores</b></div>
+        <div class="kv"><span>Vinculado a</span><b>Drive/Finanzas/Proveedores</b></div>
+        <div class="sect" style="margin-top:16px"><h4>Mensajes</h4>
+          <div class="msg"><b>Elena R. · 09:58</b><br>Adjuntamos la factura 0123 corregida con el precio acordado.</div>
+          <div class="msg"><b>Usted · 10:05</b><br>Recibido, la paso a archivo. Gracias.</div>
+          <div class="msg"><b>Elena R. · 10:12</b><br>Perfecto. Adjunto también el acuse de recibo.</div>
+        </div>
+        <div class="sect" style="margin-top:16px"><h4>Documentos vinculados</h4>
+          <div class="docrow"><span class="ic2" style="background:#DC2626">PDF</span><span><b>Factura 0123.pdf</b><br><span style="color:#8C95A0;font-size:10px">03/09 · 184 KB · Drive/Finanzas/Proveedores</span></span><span class="g"><span class="chip blue">de hilo</span><span class="btn sm">Abrir</span></span></div>
+          <div class="docrow"><span class="ic2" style="background:#D97706">PDF</span><span><b>Acuse de recibo.pdf</b><br><span style="color:#8C95A0;font-size:10px">10:12 · 42 KB · Drive/Finanzas/Proveedores</span></span><span class="g"><span class="chip blue">de hilo</span><span class="btn sm">Abrir</span></span></div>
+        </div>
+      </div>
+      <div class="foot"><span class="btn brand sm">Vista previa</span><span class="btn sm">Descargar</span><span class="btn sm">Vincular a carpeta…</span><span class="btn sm" style="margin-left:auto">Ir a Documentos →</span></div>
+    </div>
+  </div>
+</div>
+<p class="cap"><b>Cómo se lee:</b> la pantalla de entrada es solo la <b>bandeja liviana</b> (5 filas, sin columnas extra). Al hacer clic en una fila se abre el
+<b>drawer</b> (el mismo componente de Cliente360) con hilo + documentos + acciones. “Ir a Documentos” salta al otro espacio sin perder contexto.</p>
+
+<h2>4. Mockup integrado — Pantalla 2: <code>Office / Documentos</code> <span class="tag g">final</span></h2>
+<div class="cap">Mismo módulo, segundo espacio. <b>Nunca se ven los dos a la vez</b> (es lo que saturaba la v1).</div>
+<div class="app">
+  <div class="side">
+    <div class="logo"><span class="egg">🥚</span><span><b>Granja</b><span>Don Paco</span></span></div>
+    <div class="lbl">Modulos</div>
+    <div class="nav"><span class="ic">▦</span> Centro de Mando</div>
+    <div class="nav"><span class="ic">$</span> Finanzas</div>
+    <div class="nav"><span class="ic">⚙</span> Admin</div>
+    <div class="nav on new"><span class="ic">✉</span> Office</div>
+    <div class="nav"><span class="ic">📦</span> Operaciones y Bodegas</div>
+    <div class="nav"><span class="ic">👥</span> Clientes</div>
+    <div class="user"><span class="av">P</span><span><b>Paco Soto</b><span>Administrador</span></span></div>
+  </div>
+  <div class="body">
+    <div class="top">
+      <span class="search">🔍 Buscar módulo...</span>
+      <span class="sp"><span class="moon">🌙</span><span class="nuevo">+ Nuevo</span><span class="est">ES</span></span>
+    </div>
+    <div class="crumb">Office <span>›</span> <b>Documentos</b></div>
+    <div class="content">
+      <div class="tabs">
+        <button>Correo</button>
+        <button class="on">Documentos</button>
+        <button class="cta">⬆ Subir documento</button>
+      </div>
+      <div class="viewhead">
+        <div><h1>Documentos</h1><div class="sub">Finanzas / Proveedores · 4 archivos · 1 huérfano</div></div>
+        <div style="display:flex;gap:7px"><span class="btn">Ordenar ▾</span><span class="btn sm">Vista ▾</span></div>
+      </div>
+      <div class="cols cols-docs">
+        <div class="tree">
+          <div class="f">📁 Finanzas</div>
+          <div class="f on">📁 Proveedores</div>
+          <div class="f">📁 Hacienda</div>
+          <div class="f">📁 Bancos</div>
+          <div class="f warn">⚠ Faltante (1)</div>
+          <div class="f" style="margin-top:10px">📁 Comercial</div>
+          <div class="f">📁 Pedidos</div>
+          <div class="f">📁 Clientes</div>
+        </div>
+        <div class="panel">
+          <div class="panelbar"><input placeholder="Buscar en carpeta…"><span class="chip">Todos los tipos ▾</span><span class="chip">Cuenta: todas ▾</span></div>
+          <div class="m on"><span class="ic2" style="background:#D97706;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:800">PDF</span><span class="txt"><span class="who">Cotización gallinaza.pdf</span> <span class="subj">22/08 · 96 KB · proveedores@</span></span><span class="chip blue">de hilo ×1</span><span class="hact"><span class="btn sm">Vista previa</span><span class="btn sm">⋯</span></span></div>
+          <div class="m"><span class="ic2" style="background:#DC2626;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:800">PDF</span><span class="txt"><span class="who">Factura 0123.pdf</span> <span class="subj">03/09 · 184 KB · proveedores@</span></span><span class="chip blue">de hilo ×1</span><span class="hact"><span class="btn sm">Vista previa</span><span class="btn sm">⋯</span></span></div>
+          <div class="m"><span class="ic2" style="background:#3D7A4A;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:800">XLS</span><span class="txt"><span class="who">Orden de precios Naco.xlsx</span> <span class="subj">28/08 · 41 KB · subido manual</span></span><span class="chip amber">huérfano</span><span class="hact"><span class="btn sm">Vincular</span><span class="btn sm">⋯</span></span></div>
+          <div class="m"><span class="ic2" style="background:#7C3AED;width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:800">IMG</span><span class="txt"><span class="who">Foto etiqueta recibida.jpg</span> <span class="subj">15/08 · 1.2 MB · gerencia@</span></span><span class="chip">sin hilo</span><span class="hact"><span class="btn sm">Vincular</span><span class="btn sm">⋯</span></span></div>
+          <div class="fmeta"><span>Ubicación: <b>Drive/Finanzas/Proveedores</b></span><span>Cuenta: <b>proveedores@</b></span><span>Vínculo: <b style="color:#3D7A4A">automático (asunto ↔ carpeta)</b></span><span style="margin-left:auto;color:#3D7A4A;font-weight:700">Ver hilo →</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="cap"><b>Metadata compacta:</b> en vez de un panel de detalle pesado, una <b>barra inferior</b> con ubicación, cuenta, regla de vínculo y “Ver hilo”
+(que devuelve al espacio Correo con el hilo abierto en el drawer). Las excepciones (<span class="chip amber">huérfano</span>, carpeta
+<span class="chip amber">Faltante</span>) se reservan para lo que requiere acción.</p>
+
+<h2>5. Cómo encaja en el código real <span class="tag">integración</span></h2>
+<table class="bt">
+  <tr><th>Punto de integración</th><th>Archivo / línea</th><th>Cambio</th></tr>
+  <tr><td>Nuevo ítem de navegación</td><td><code>App.tsx:231-239</code> <code>macroModules</code></td><td>Añadir <code>{ id:'office', label:'Office', icon:Mail, roles:['Admin','Socio','Comercial'] }</code> entre Admin y Operaciones</td></tr>
+  <tr><td>Bottom nav móvil</td><td><code>App.tsx:719-739</code></td><td>Etiqueta corta: <code>Office</code> (ya se toma del label: <code>'Office'.split(' ')[0]</code>)</td></tr>
+  <tr><td>Búsqueda global “Buscar módulo...”</td><td><code>App.tsx:194-229</code> <code>handleSearch</code></td><td>Reglas: <code>correo|email|gmail|bandeja → office/correo</code> · <code>drive|documento|carpeta|adjunto → office/documentos</code> · <code>vínculo|regla|integración → admin/vinculaciones</code> (ya no resuelve a Office)</td></tr>
+  <tr><td>Botón “Nuevo” contextual</td><td><code>App.tsx:167-192</code> <code>nuevoItems</code></td><td>Si <code>activeTab==='office'</code>: Conectar cuenta · Subir documento. Si <code>activeTab==='admin' &amp;&amp; subTab==='vinculaciones'</code>: Nueva regla · Probar reglas</td></tr>
+  <tr><td>Migaja del contenido</td><td><code>App.tsx:547-551</code> <code>subLabels</code></td><td>Añadir <code>office:'Office', correo:'Correo', documentos:'Documentos'</code>. <code>vinculos:'Vinculaciones'</code> se resuelve bajo <b>Admin</b>, no bajo Office</td></tr>
+  <tr><td>Render del módulo</td><td><code>App.tsx:712</code> (junto a Clientes)</td><td><code>{activeTab === 'office' && &lt;Office currentUser={currentUser} /&gt;}</code></td></tr>
+  <tr><td><b>Tab de Vinculaciones</b></td><td><code>Admin.tsx:12-18</code> <code>TABS</code> + <code>AdminTab</code></td><td>Añadir <code>{ id:'vinculaciones', label:'Vinculaciones', icon:Link2 }</code> y el tipo a <code>'productos'|'infraestructura'|'vinculaciones'|'usuarios'</code></td></tr>
+  <tr><td><b>Render de Vinculaciones</b></td><td><code>Admin.tsx:44-48</code></td><td><code>{tab === 'vinculaciones' && &lt;OfficeVinculos currentUser={currentUser} /&gt;}</code> — mismo drawer/patrón, pero dentro de Admin</td></tr>
+  <tr><td>Permisos</td><td><code>AdminUsuarios</code> (patrón existente)</td><td>Reglas de correlación = solo <code>Admin</code>. <code>Socio</code> y <code>Comercial</code> no ven la tab, pero sí ven el documento ya vinculado en Office</td></tr>
+  <tr><td>Componente nuevo</td><td><code>src/components/Office.tsx</code></td><td>Reutiliza clases <code>.gcrm</code> (<code>gcrm.css</code>) y el <b>drawer existente</b> (mismo patrón que <code>Cliente360.tsx</code>); 2 sub-espacios internos (correo/documentos) con tabs, sin librerías nuevas</td></tr>
+</table>
+<div class="note"><b>Riesgo de integración:</b> ninguno de alto — el módulo es aditivo (no toca finanzas, granjas ni logística). El único
+punto sensible es la búsqueda global y el <b>refresh token</b> por cuenta (ver seguridad).</div>
+
+<h2>6. Vinculaciones — movido a <b>Admin</b> <span class="tag">config</span></h2>
+<div class="cap">Antes era la 3ª tab de Office. Es <b>configuración global del sistema</b> (qué carpeta de Drive corresponde a qué cuenta/criterio), no una vista de correo: por eso vive en <code>Admin</code> como tab de primer nivel, junto a Productos, Infraestructura y Usuarios. Office conserva Correo + Documentos.</div>
+
+<div class="app" style="margin-top:12px">
+  <div class="side">
+    <div class="logo"><span class="egg">🥚</span><span><b>Granja</b><span>Don Paco</span></span></div>
+    <div class="lbl">Modulos</div>
+    <div class="nav"><span class="ic">▦</span> Centro de Mando</div>
+    <div class="nav"><span class="ic">$</span> Finanzas</div>
+    <div class="nav on new"><span class="ic">⚙</span> Admin</div>
+    <div class="nav"><span class="ic">✉</span> Office</div>
+    <div class="nav"><span class="ic">📦</span> Operaciones y Bodegas</div>
+    <div class="nav"><span class="ic">👥</span> Clientes</div>
+    <div class="user"><span class="av">P</span><span><b>Paco Soto</b><span>Administrador</span></span></div>
+  </div>
+  <div class="body">
+    <div class="top">
+      <span class="search">🔍 Buscar módulo...</span>
+      <span class="sp"><span class="moon">🌙</span><span class="nuevo">+ Nuevo</span><span class="est">ES</span></span>
+    </div>
+    <div class="crumb">Admin <span>›</span> <b>Vinculaciones</b></div>
+    <div class="content">
+      <div class="tabs">
+        <button>Productos</button>
+        <button>Infraestructura</button>
+        <button class="on">Vinculaciones</button>
+        <button>Usuarios</button>
+        <button class="cta">+ Nueva regla</button>
+      </div>
+      <div class="viewhead">
+        <div><h1>Vinculaciones</h1><div class="sub">4 reglas activas · 1 cuenta sin carpeta · Auto-clasifica adjuntos de correo y documentos electrónicos</div></div>
+        <div style="display:flex;gap:7px"><span class="btn">Probar reglas</span><span class="btn sm">Orden ▾</span></div>
+      </div>
+      <div class="panel">
+        <div class="panelbar"><input placeholder="Buscar regla, cuenta o carpeta…"><span class="chip">Todas las cuentas ▾</span><span class="chip amber">1 sin carpeta</span></div>
+        <div class="m on"><span class="txt"><span class="who">proveedores@gdp.cr</span> <span class="subj">→ Drive/Finanzas/Proveedores</span></span><span class="chip">Remitente o asunto con “factura”/“orden”</span><span class="chip blue">auto</span><span class="hact"><span class="btn sm">Probar</span><span class="btn sm">⋯</span></span></div>
+        <div class="m"><span class="txt"><span class="who">contabilidad@gdp.cr</span> <span class="subj">→ Drive/Finanzas/Hacienda</span></span><span class="chip">Etiqueta Gmail “hacienda”</span><span class="chip blue">auto</span><span class="hact"><span class="btn sm">Probar</span><span class="btn sm">⋯</span></span></div>
+        <div class="m"><span class="txt"><span class="who">ventas@gdp.cr</span> <span class="subj">→ Drive/Comercial/Pedidos</span></span><span class="chip">Etiqueta Gmail “pedidos”</span><span class="chip blue">auto</span><span class="hact"><span class="btn sm">Probar</span><span class="btn sm">⋯</span></span></div>
+        <div class="m"><span class="txt"><span class="who">gerencia@gdp.cr</span> <span class="subj">→ <b style="color:#B8860B">sin carpeta destino</b></span></span><span class="chip amber">manual</span><span class="chip amber">requiere acción</span><span class="hact"><span class="btn sm">Asignar</span><span class="btn sm">⋯</span></span></div>
+        <div class="fmeta"><span>Criterio: <b>etiqueta Gmail · remitente · asunto</b></span><span>Destino: <b>carpeta Drive</b></span><span>Efecto: <b style="color:#3D7A5E">indexa archivo ↔ hilo ↔ entidad</b></span><span style="margin-left:auto;color:#3D7A4A;font-weight:700">Ver log →</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="cap"><b>Por qué aquí:</b> en un ERP, las reglas de correlación correo↔documento↔entidad son <b>configuración administrable</b> (SAP: customizing; NetSuite: saved searches + workflows; Dynamics: business rules), nunca una bandeja de entrada. Visible para <b>Admin</b>, oculta a <b>Socio/Comercial</b>, que solo ven el resultado en Office.</p>
+
+<table class="bt">
+  <tr><th>Cuenta Gmail</th><th>Carpeta Drive</th><th>Criterio</th><th>Automático</th></tr>
+  <tr><td>proveedores@gdp.cr</td><td>Drive/Finanzas/Proveedores</td><td>Remitente o asunto con “factura”/“orden”</td><td>Adjunto → carpeta + índice</td></tr>
+  <tr><td>contabilidad@gdp.cr</td><td>Drive/Finanzas/Hacienda</td><td>Etiqueta Gmail “hacienda”</td><td>Doc electrónico → carpeta</td></tr>
+  <tr><td>ventas@gdp.cr</td><td>Drive/Comercial/Pedidos</td><td>Etiqueta Gmail “pedidos”</td><td>Correo → hilo de pedido</td></tr>
+  <tr><td>gerencia@gdp.cr</td><td>— (pendiente)</td><td>Manual</td><td>—</td></tr>
+</table>
+
+
+<h2>7. Arquitectura, seguridad y costo <span class="tag">técnico</span></h2>
+<div class="grid cols2">
+  <div class="card"><b>Modelo de datos</b>
+    <ul>
+      <li><code>office_accounts</code>: id, user_id, email, provider, refresh_token (cifrado), scope, estado, last_sync</li>
+      <li><code>office_links</code>: account_id, drive_folder_id, criterio (label/from/subject), destino</li>
+      <li><code>office_messages</code>: cache ligera (thread_id, remitente, asunto, label_ids, dni)</li>
+      <li><code>office_drive_index</code>: archivo ↔ mensaje ↔ carpeta (trazabilidad)</li>
+    </ul>
+    <p style="margin-top:8px"><b>Flujo OAuth:</b> conectar cuenta → consentimiento (solo lectura) → canje de <code>code</code> + cifrado del refresh token → worker con <code>messages.list</code> + <code>watch</code> → revocación muestra “desconectado”.</p>
+  </div>
+  <div class="card"><b>Seguridad</b>
+    <ul>
+      <li>Scopes mínimos: <code>gmail.readonly</code> + <code>drive.file</code>; escritura en Drive solo al subir desde la app.</li>
+      <li>Refresh tokens cifrados en DB con clave gestionada; nunca al frontend.</li>
+      <li>Multi-cuenta ≠ multiusuario: Admin ve todo; Comercial solo cuentas comerciales.</li>
+      <li>Log de vinculaciones, accesos y subidas.</li>
+      <li>Si Gmail falla: banner <code>office_offline</code>, sin bloquear el resto de la app.</li>
+    </ul>
+    <p style="margin-top:8px"><b>Costo:</b> M OAuth + cuentas · M worker + bandeja · M espacio Documentos · L panel de Vinculaciones.</p>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Boceto · Desglose de Existencias — Bodega (versión propuesta)</title>
+<style>
+  :root {
+    --brand-primary: #16a34a;
+    --bg: #f5f5f4;
+    --card: #ffffff;
+    --border: #e5e7eb;
+    --text: #171717;
+    --text-muted: #737373;
+    --green-50: #f0fdf4;
+    --green-100: #dcfce7;
+    --green-700: #15803d;
+    --green-600: #16a34a;
+    --amber-50: #fffbeb;
+    --amber-100: #fef3c7;
+    --amber-700: #b45309;
+    --red-50: #fef2f2;
+    --red-100: #fee2e2;
+    --red-700: #b91c1c;
+    --blue-50: #eff6ff;
+    --blue-100: #dbeafe;
+    --blue-700: #1d4ed8;
+    --purple-50: #faf5ff;
+    --purple-100: #f3e8ff;
+    --purple-700: #7e22ce;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Inter, sans-serif; background: var(--bg); color: var(--text); padding: 24px; }
+  .wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 18px; }
+
+  /* Encabezado del boceto */
+  .note { background: #fff7ed; border: 1px dashed #fdba74; border-radius: 12px; padding: 14px 16px; font-size: 13px; color: #9a3412; line-height: 1.5; }
+  .note strong { color: #7c2d12; }
+  .nav { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  .nav button { border: none; background: none; font-size: 14px; font-weight: 700; color: var(--text-muted); padding: 6px 14px; border-bottom: 2px solid transparent; cursor: pointer; }
+  .nav button.active { color: var(--green-700); border-bottom-color: var(--green-600); }
+  .nav button .badge { background: var(--red-100); color: var(--red-700); font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 999px; margin-left: 4px; }
+
+  /* Título de sección */
+  .section-title { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+  .section-title svg { width: 16px; height: 16px; }
+
+  .grid { display: grid; grid-template-columns: 420px 1fr; gap: 18px; align-items: start; }
+
+  /* Card de producto (header) */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); overflow: hidden; }
+  .row { border-bottom: 1px solid var(--border); }
+  .row:last-child { border-bottom: none; }
+  .prod { width: 100%; display: flex; align-items: center; gap: 12px; padding: 16px; text-align: left; background: none; border: none; cursor: pointer; }
+  .chev { color: var(--text-muted); font-size: 14px; }
+  .prod-main { flex: 1; min-width: 0; }
+  .prod-name { font-weight: 700; font-size: 15px; }
+  .prod-sub { font-size: 12px; color: var(--text-muted); }
+  .prod-right { text-align: right; margin-right: 8px; }
+  .prod-qty { font-size: 24px; font-weight: 900; line-height: 1; }
+  .prod-unit { font-size: 10px; color: var(--text-muted); font-weight: 500; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
+  .chip.green { background: var(--green-100); color: var(--green-700); }
+  .chip.amber { background: var(--amber-100); color: var(--amber-700); }
+  .chip.red { background: var(--red-100); color: var(--red-700); }
+  .chip.blue { background: var(--blue-100); color: var(--blue-700); }
+  .chip.purple { background: var(--purple-100); color: var(--purple-700); }
+  .chip.gray { background: #f5f5f5; color: #525252; }
+  .chip.dark { background: #262626; color: #fff; }
+
+  /* Cuerpo expandido */
+  .detail { border-top: 1px solid #f5f5f4; background: #fafafa; padding: 14px 16px; }
+
+  /* Franja de alistamiento */
+  .ready-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--green-50); border: 1px solid var(--green-100); border-radius: 10px; padding: 10px 12px; }
+  .ready-strip .big { font-size: 13px; font-weight: 800; color: var(--green-700); }
+  .ready-strip .sub { font-size: 12px; color: var(--text-muted); }
+  .divider-v { width: 1px; height: 28px; background: var(--green-100); }
+
+  /* Grupos de lotes */
+  .group { margin-top: 14px; }
+  .group-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .group-title { font-size: 12px; font-weight: 800; color: var(--text); }
+  .group-title .count { color: var(--text-muted); font-weight: 500; }
+  .group-action { font-size: 12px; font-weight: 700; color: var(--green-600); background: none; border: none; cursor: pointer; }
+
+  /* Tabla de lotes */
+  .lote-table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .lote-table th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700; padding: 8px 10px; background: #fafafa; border-bottom: 1px solid var(--border); }
+  .lote-table td { padding: 9px 10px; font-size: 13px; border-bottom: 1px solid #f5f5f4; vertical-align: middle; }
+  .lote-table tr:last-child td { border-bottom: none; }
+  .mono { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; color: #404040; }
+  .qty { font-weight: 800; text-align: right; white-space: nowrap; }
+  .soft { color: var(--text-muted); font-size: 12px; }
+  .badge-fefo { background: var(--green-600); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+  .cuantos { font-size: 11px; font-weight: 800; color: var(--text-muted); }
+
+  .foot-note { margin-top: 10px; padding: 10px 12px; background: var(--blue-50); border: 1px solid var(--blue-100); border-radius: 10px; font-size: 12px; color: var(--blue-700); line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="note">
+    <strong>Boceto — NO toca código.</strong> Propuesta para el desglose de existencias por producto cuando se expande.
+    Objetivo: que sea fácil ver <strong>qué está listo para alistarse en la próxima ruta</strong>, cuándo llegó, de dónde llegó y cuánto tiempo lleva en bodega.
+    Datos ilustrativos tomados de la BD real (Huevos Grande 142 cartones). Al final hay un listado de la lógica propuesta + costo.
+  </div>
+
+  <div class="nav">
+    <button>Bodega</button>
+    <button class="active">Control</button>
+  </div>
+
+  <div class="section-title">
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+    Existencias por producto
+  </div>
+
+  <div class="grid">
+    <!-- Columna izq: columnas actuales (contexto) -->
+    <div class="space-y-4">
+      <div class="card">
+        <div class="prod" style="cursor:default">
+          <span class="chev">▸</span>
+          <div class="prod-main">
+            <div class="prod-name">Huevos - Mediano</div>
+            <div class="prod-sub">stock agregado (sin etiqueta)</div>
+          </div>
+          <div class="prod-right">
+            <div class="prod-qty">13</div>
+            <div class="prod-unit">cartones</div>
+          </div>
+          <span class="chip amber">pronto</span>
+        </div>
+      </div>
+
+      <!-- Columna RECIBIR (contexto) -->
+      <div class="card" style="padding:16px">
+        <div class="section-title" style="margin-bottom:12px">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
+          Recibir
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Traslados en camino · tocá Recepcionar para procesar</div>
+        <div class="lote-table" style="border-radius:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid #f5f5f4">
+            <div>
+              <div style="font-size:13px;font-weight:700">Camión Jhon</div>
+              <div class="soft">Salió 11:03</div>
+            </div>
+            <span class="chip blue">En tránsito</span>
+          </div>
+          <div style="padding:8px 12px;font-size:12px;color:var(--text-muted)">
+            <strong style="color:#404040">Desde:</strong> Granja Concepción
+          </div>
+          <div style="padding:8px 12px;display:flex;justify-content:space-between;font-size:13px;border-top:1px solid #f5f5f4">
+            <span>Huevos - Grande</span><span class="qty">1</span>
+          </div>
+          <div style="padding:8px 12px;display:flex;justify-content:space-between;font-size:13px">
+            <span>Huevos - Mediano</span><span class="qty">1</span>
+          </div>
+        </div>
+        <button style="width:100%;margin-top:10px;border:1px solid var(--green-100);background:#fff;color:var(--green-700);font-size:13px;font-weight:700;padding:9px;border-radius:8px">Recepcionar</button>
+        <div style="margin-top:8px;text-align:center;font-size:11px;color:var(--text-muted)">
+          ¿Llegó producto sin traslado? <span style="font-weight:700;color:var(--text-muted)">Registralo como ingreso manual</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Columna der: producto expandido (PROPUESTA) -->
+    <div class="card">
+      <div class="prod">
+        <span class="chev">▾</span>
+        <div class="prod-main">
+          <div class="prod-name">Huevos - Grande</div>
+          <div class="prod-sub"><span class="chip green" style="margin-right:4px">●</span> 3 lotes etiquetados + 129 agregados · expandido</div>
+        </div>
+        <div class="prod-right">
+          <div class="prod-qty">142</div>
+          <div class="prod-unit">cartones</div>
+        </div>
+        <span class="chip amber">pronto</span>
+      </div>
+
+      <div class="detail">
+        <!-- Franja de alistamiento -->
+        <div class="ready-strip">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#16a34a" stroke-width="2.2"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>
+          <div>
+            <span class="big">43 listos para alistar</span>
+            <div class="sub">para la próxima ruta · 3 sin fecha asignable</div>
+          </div>
+          <div class="divider-v"></div>
+          <div>
+            <div class="big" style="font-size:13px">1º a salir</div>
+            <div class="sub mono">ETQ-20260909-BOD-…5311-1 · vence en 16d</div>
+          </div>
+        </div>
+
+        <!-- Grupo 1: listos para alistar -->
+        <div class="group">
+          <div class="group-head">
+            <div class="group-title">Listos para alistar <span class="count">(3 etiquetas)</span></div>
+            <button class="group-action">Alistar en ruta →</button>
+          </div>
+          <table class="lote-table">
+            <thead>
+              <tr>
+                <th style="width:34px"></th>
+                <th>Código / Lote</th>
+                <th>De dónde llegó</th>
+                <th>Llegó (hace)</th>
+                <th>En bodega</th>
+                <th>Vence</th>
+                <th style="text-align:right">Cant.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="badge-fefo">1º</span></td>
+                <td><span class="mono">ETQ-20260909-BOD-…5311-1</span></td>
+                <td><span class="chip blue">Granja Concepción</span></td>
+                <td>09 sep <span class="soft">· hace 15 d</span></td>
+                <td><span class="chip amber">15 días</span></td>
+                <td>25 sep <span class="soft">· 16 d</span></td>
+                <td class="qty">25</td>
+              </tr>
+              <tr>
+                <td><span class="badge-fefo">2º</span></td>
+                <td><span class="mono">ETQ-20260909-BOD-…1938-1</span></td>
+                <td><span class="chip blue">Granja Concepción</span></td>
+                <td>09 sep <span class="soft">· hace 15 d</span></td>
+                <td><span class="chip amber">15 días</span></td>
+                <td>25 sep <span class="soft">· 16 d</span></td>
+                <td class="qty">30</td>
+              </tr>
+              <tr>
+                <td><span class="badge-fefo">3º</span></td>
+                <td><span class="mono">ETQ-20260909-BOD-…1514-1</span></td>
+                <td><span class="chip blue">Granja Concepción</span></td>
+                <td>09 sep <span class="soft">· hace 15 d</span></td>
+                <td><span class="chip amber">15 días</span></td>
+                <td>25 sep <span class="soft">· 16 d</span></td>
+                <td class="qty">20</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Grupo 2: sin FEFO asignable -->
+        <div class="group" style="margin-top:14px">
+          <div class="group-head">
+            <div class="group-title">Sin fecha asignable <span class="count">(129 agregados)</span></div>
+            <span class="chip gray">no van a ruta hasta etiquetar</span>
+          </div>
+          <table class="lote-table">
+            <thead>
+              <tr>
+                <th style="width:34px"></th>
+                <th>Código / Lote</th>
+                <th>De dónde llegó</th>
+                <th>Llegó (hace)</th>
+                <th>En bodega</th>
+                <th>Vence</th>
+                <th style="text-align:right">Cant.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td></td>
+                <td class="soft">stock agregado (sin etiqueta)</td>
+                <td><span class="chip blue">Granja Concepción</span></td>
+                <td>09 sep <span class="soft">· hace 15 d</span></td>
+                <td><span class="chip red">15 días</span></td>
+                <td class="soft">sin fecha</td>
+                <td class="qty">129</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pie: sugerencia de acción -->
+        <div class="foot-note">
+          <strong>Idea:</strong> en la misma tarjeta un botón "Alistar en ruta →" que abre el panel de Despacho preseleccionando estos lotes por FEFO, para no saltar entre módulos.
+          El chip "En bodega" usa colores: <span class="chip green">verde</span> &lt;7 días · <span class="chip amber">ámbar</span> 7–14 · <span class="chip red">rojo</span> &gt;14 (cada lote puede llevarse la tendencia 7/14 d).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note" style="background:#f0f9ff;border-color:#bae6fd;color:#075985">
+    <strong>Lógica propuesta (back-end, sin implementar):</strong>
+    <ol style="margin:6px 0 0 18px;padding-left:10px">
+      <li>"Listos para alistar" = lote <code>estado=EnBodega</code> + con <code>fechaVencimiento</code> + no asignado a una guía de despacho activa (se deduce de <code>ubicacion_actual = Bodega Central</code> y sin guía pendiente).</li>
+      <li>"Sin fecha asignable" = agregados sin etiqueta (<code>tipo=agregado</code>) hasta que se escaneen como etiqueta.</li>
+      <li>De dónde llegó: resolver <code>granja_origen</code> de la etiqueta (o <code>traslados.granja_origen_id → granjas.nombre</code> para movimientos).</li>
+      <li>"Llegó hace X días": hoy − <code>fechaRecepcion</code>, con fallback a <code>fechaProduccion</code> cuando la recepción no esté registrada.</li>
+      <li>Badge <span class="badge-fefo">1º</span> usa el <code>ordenFEFO</code> ya calculado en <code>/api/bodega/stock</code>.</li>
+    </ol>
+    <div style="margin-top:8px"><strong>Costo aproximado:</strong> agrega columnas al endpoint <code>/api/bodega/stock</code> (colaFEFO ya tiene gran parte), sin nuevas tablas. Cambia solo la vista expandida + 1 botón de acción.</div>
+  </div>
+</div>
+</body>
+</html>

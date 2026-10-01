@@ -1,0 +1,751 @@
+import React, { useState, useEffect } from 'react';
+import { Activity, ShieldAlert, Scale, ThermometerSun, Zap, Droplet, Wrench, ListChecks, CheckCircle2, ChevronRight, PackageCheck, AlertTriangle, Building, X, ChevronLeft, CalendarPlus, HeartCrack, Edit, Archive, Plus, Package, Database, Inbox } from 'lucide-react';
+import { User } from '../types';
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+type ProduccionProps = {
+  currentUser: User;
+};
+
+type Granja = {
+  id: string;
+  nombre: string;
+  ubicacion: string;
+  encargadoId: string;
+  estado?: string;
+};
+
+type Galeron = {
+  id: string;
+  granjaId: string;
+  nombre: string;
+  capacidad_maxima: number;
+  estado_fisico: string;
+  estado?: string;
+};
+
+type LoteAves = {
+  id: string;
+  galeronId: string;
+  fecha_ingreso: string;
+  cantidad_inicial: number;
+  linea_genetica: string;
+  estado: string; // Activo / Finalizado
+};
+
+export default function Produccion({ currentUser }: ProduccionProps) {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'recoleccion' | 'mortalidad' | 'configuracion'>('dashboard');
+  
+  // Drill-down State
+  const [granjas, setGranjas] = useState<Granja[]>([]);
+  const [galerones, setGalerones] = useState<Galeron[]>([]);
+  const [lotes, setLotes] = useState<LoteAves[]>([]);
+  const [historialProduccion, setHistorialProduccion] = useState<any[]>([]);
+  
+  const [selectedGranja, setSelectedGranja] = useState<Granja | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Configuracion State
+  const [configSelectedGranja, setConfigSelectedGranja] = useState<Granja | null>(null);
+
+  // Form states for Granjas
+  const [showGranjaForm, setShowGranjaForm] = useState(false);
+  const [editingGranja, setEditingGranja] = useState<Granja | null>(null);
+  const [granjaForm, setGranjaForm] = useState({ nombre: '', ubicacion: '', encargadoId: currentUser.id });
+
+  // Form states for Galerones
+  const [showGaleronForm, setShowGaleronForm] = useState(false);
+  const [editingGaleron, setEditingGaleron] = useState<Galeron | null>(null);
+  const [galeronForm, setGaleronForm] = useState({ nombre: '', capacidad_maxima: '', estado_fisico: 'Óptimo' });
+
+  // State for recoleccion form
+  const [galeronSeleccionadoRecoleccion, setGaleronSeleccionadoRecoleccion] = useState('');
+  const [huevosGrandes, setHuevosGrandes] = useState(0);
+  const [huevosMedianos, setHuevosMedianos] = useState(0);
+  const [gallinazaSacos, setGallinazaSacos] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isAdminOrOperario = currentUser.role === 'Admin' || currentUser.role === 'Operario';
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const [resGranjas, resGalerones, resLotes, resHistorial] = await Promise.all([
+        fetch('/api/granjas'),
+        fetch('/api/galerones'),
+        fetch('/api/lotes'),
+        fetch('/api/produccion/historial')
+      ]);
+      if (resGranjas.ok) setGranjas(await resGranjas.json());
+      if (resGalerones.ok) setGalerones(await resGalerones.json());
+      if (resLotes.ok) setLotes(await resLotes.json());
+      if (resHistorial && resHistorial.ok) setHistorialProduccion(await resHistorial.json());
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleRecoleccion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (huevosGrandes <= 0 && huevosMedianos <= 0 && gallinazaSacos <= 0) return;
+
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        galeron: galeronSeleccionadoRecoleccion,
+        detalles: [
+          { tamano: 'Grande', cantidad: huevosGrandes },
+          { tamano: 'Mediano', cantidad: huevosMedianos },
+          { tamano: 'Gallinaza', cantidad: gallinazaSacos }
+        ]
+      };
+
+      const res = await fetch('/api/produccion/recoleccion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Error registrando recolección');
+      }
+
+      alert('Recolección registrada exitosamente. El inventario ha sido actualizado.');
+      setHuevosGrandes(0);
+      setHuevosMedianos(0);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveGranja = async () => {
+    try {
+      const isEdit = !!editingGranja;
+      const url = isEdit ? `/api/granjas/${editingGranja.id}` : '/api/granjas';
+      const method = isEdit ? 'PUT' : 'POST';
+      
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(granjaForm)
+      });
+      if (!res.ok) throw new Error("Error guardando granja");
+      
+      setShowGranjaForm(false);
+      setEditingGranja(null);
+      setGranjaForm({ nombre: '', ubicacion: '', encargadoId: currentUser.id });
+      fetchData();
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
+  const handleArchiveGranja = async (granja: Granja) => {
+    if(!confirm("¿Archivar granja?")) return;
+    try {
+      const res = await fetch(`/api/granjas/${granja.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado: 'Archivado' })
+      });
+      if (res.ok) fetchData();
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
+  const handleSaveGaleron = async () => {
+    try {
+      if (!configSelectedGranja) return;
+      const isEdit = !!editingGaleron;
+      const url = isEdit ? `/api/galerones/${editingGaleron.id}` : '/api/galerones';
+      const method = isEdit ? 'PUT' : 'POST';
+      
+      const payload = {
+        ...galeronForm,
+        granjaId: configSelectedGranja.id
+      };
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error("Error guardando galerón");
+      
+      setShowGaleronForm(false);
+      setEditingGaleron(null);
+      setGaleronForm({ nombre: '', capacidad_maxima: '', estado_fisico: 'Óptimo' });
+      fetchData();
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
+  const handleArchiveGaleron = async (galeron: Galeron) => {
+    if(!confirm("¿Archivar galerón?")) return;
+    try {
+      const res = await fetch(`/api/galerones/${galeron.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado: 'Archivado' })
+      });
+      if (res.ok) fetchData();
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in pb-20">
+      
+      {/* Header */}
+      <div>
+        <h2 className="text-2xl font-bold text-neutral-800 tracking-tight">Módulo de Producción</h2>
+        <p className="text-neutral-500 text-sm">Control biológico y operativo de galerones</p>
+      </div>
+
+      {/* Internal Navigation Tabs */}
+      <div className="flex border-b border-neutral-200 space-x-8 overflow-x-auto">
+        {[
+          { id: 'dashboard', label: 'Dashboard de Granjas' },
+          { id: 'recoleccion', label: 'Recolección Diaria' },
+          { id: 'mortalidad', label: 'Mortalidad' },
+          { id: 'configuracion', label: 'Configuración de Infraestructura' },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={cn(
+              "pb-3 text-sm font-bold transition-colors relative whitespace-nowrap",
+              activeTab === tab.id ? "text-blue-600" : "text-neutral-500 hover:text-neutral-800"
+            )}
+          >
+            {tab.label}
+            {activeTab === tab.id && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content */}
+      <div className="pt-2">
+        {activeTab === 'historial' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-sm flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600">
+                  <Package className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-neutral-500">Total Cartones Hoy</p>
+                  <p className="text-2xl font-bold text-neutral-800">
+                    {historialProduccion
+                      .filter(p => new Date(p.fecha).toDateString() === new Date().toDateString())
+                      .filter(p => p.tipo_producto.includes('Huevos'))
+                      .reduce((acc, curr) => acc + curr.cantidad, 0)}
+                  </p>
+                </div>
+              </div>
+              <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-sm flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center text-green-600">
+                  <Database className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-neutral-500">Total Gallinaza Hoy (Sacos)</p>
+                  <p className="text-2xl font-bold text-neutral-800">
+                    {historialProduccion
+                      .filter(p => new Date(p.fecha).toDateString() === new Date().toDateString())
+                      .filter(p => p.tipo_producto.includes('Gallinaza'))
+                      .reduce((acc, curr) => acc + curr.cantidad, 0)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-neutral-200 bg-neutral-50 flex justify-between items-center">
+                <h3 className="font-bold text-lg text-neutral-800">Registros de Productividad</h3>
+              </div>
+              
+              {historialProduccion.length === 0 ? (
+                <div className="p-12 text-center flex flex-col items-center">
+                  <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mb-4 text-neutral-400">
+                    <Inbox className="w-8 h-8" />
+                  </div>
+                  <h4 className="text-lg font-bold text-neutral-700 mb-1">Sin Registros</h4>
+                  <p className="text-neutral-500">No hay producción registrada en el sistema.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-neutral-50 border-b border-neutral-200 text-sm">
+                        <th className="p-4 font-semibold text-neutral-600">Fecha</th>
+                        <th className="p-4 font-semibold text-neutral-600">Granja / Galerón</th>
+                        <th className="p-4 font-semibold text-neutral-600">Producto</th>
+                        <th className="p-4 font-semibold text-neutral-600">Cantidad</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-sm divide-y divide-neutral-100">
+                      {[...historialProduccion].sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()).map((prod: any) => {
+                        const loteInfo = lotes.find(l => l.id === prod.loteId);
+                        const galeronInfo = loteInfo ? galerones.find(g => g.id === loteInfo.galeronId) : null;
+                        const granjaInfo = galeronInfo ? granjas.find(gr => gr.id === galeronInfo.granjaId) : null;
+                        
+                        return (
+                          <tr key={prod.id} className="hover:bg-neutral-50 transition-colors">
+                            <td className="p-4 text-neutral-800">
+                              {new Date(prod.fecha).toLocaleString()}
+                            </td>
+                            <td className="p-4 text-neutral-800 font-medium">
+                              {granjaInfo?.nombre || 'Desconocida'} / {galeronInfo?.nombre || 'Desconocido'}
+                            </td>
+                            <td className="p-4">
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${prod.tipo_producto.includes('Gallinaza') ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                {prod.tipo_producto}
+                              </span>
+                            </td>
+                            <td className="p-4 text-neutral-800 font-bold">
+                              {prod.cantidad} <span className="font-normal text-neutral-500 text-xs">{prod.unidad}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6">
+            {isLoading ? (
+              <div className="flex items-center justify-center min-h-[30vh]">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : !selectedGranja ? (
+              // Nivel 1: Lista de Granjas
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+                <h3 className="font-bold text-neutral-800">Seleccione una Granja</h3>
+                {granjas.filter(g => g.estado !== 'Archivado').length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {granjas.filter(g => g.estado !== 'Archivado').map(granja => (
+                      <button
+                        key={granja.id}
+                        onClick={() => setSelectedGranja(granja)}
+                        className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-sm hover:border-blue-300 hover:shadow-md transition-all text-left group"
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="bg-blue-50 text-blue-600 p-3 rounded-xl group-hover:bg-blue-100 transition-colors">
+                            <Building className="w-6 h-6" />
+                          </div>
+                          <ChevronRight className="w-5 h-5 text-neutral-400 group-hover:text-blue-500 transition-colors" />
+                        </div>
+                        <h4 className="text-lg font-bold text-neutral-800 mb-1">{granja.nombre}</h4>
+                        <p className="text-sm text-neutral-500">{granja.ubicacion}</p>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white p-10 rounded-2xl border border-neutral-200 shadow-sm text-center">
+                    <Building className="w-12 h-12 text-neutral-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-bold text-neutral-800 mb-2">No hay granjas</h3>
+                    <p className="text-neutral-500 max-w-sm mx-auto">Vaya a Configuración de Infraestructura para crear granjas.</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Nivel 2: Galerones de la Granja Seleccionada
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                <button
+                  onClick={() => setSelectedGranja(null)}
+                  className="flex items-center text-sm font-bold text-neutral-500 hover:text-neutral-800 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" />
+                  Volver a Granjas
+                </button>
+                
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-xl font-bold text-neutral-800">{selectedGranja.nombre}</h3>
+                    <p className="text-sm text-neutral-500">Galerones y Lotes</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {galerones.filter(g => g.granjaId === selectedGranja.id && g.estado !== 'Archivado').map(galeron => {
+                    const loteActivo = lotes.find(l => l.galeronId === galeron.id && l.estado === 'Activo');
+                    const ocupacion = loteActivo ? (loteActivo.cantidad_inicial / galeron.capacidad_maxima) * 100 : 0;
+                    
+                    return (
+                      <div key={galeron.id} className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden flex flex-col">
+                        <div className="p-5 flex-1">
+                          <div className="flex justify-between items-start mb-4">
+                            <h4 className="text-lg font-bold text-neutral-800">{galeron.nombre}</h4>
+                            <span className={cn(
+                              "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                              loteActivo ? "bg-emerald-50 text-emerald-700" : "bg-neutral-100 text-neutral-600",
+                              galeron.estado_fisico === 'Mantenimiento' && "bg-orange-50 text-orange-700"
+                            )}>
+                              {galeron.estado_fisico === 'Mantenimiento' ? 'Mantenimiento' : loteActivo ? 'Lote Activo' : 'Vacío Sanitario'}
+                            </span>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div>
+                              <div className="flex justify-between text-sm font-bold mb-2">
+                                <span className={cn(loteActivo ? "text-blue-700" : "text-neutral-500")}>
+                                  {loteActivo ? `${loteActivo.cantidad_inicial.toLocaleString()} aves` : '0 aves'}
+                                </span>
+                                <span className="text-neutral-500">Capacidad: {galeron.capacidad_maxima.toLocaleString()}</span>
+                              </div>
+                              <div className="w-full bg-neutral-100 rounded-full h-3">
+                                <div 
+                                  className={cn("h-3 rounded-full transition-all", loteActivo ? "bg-blue-600" : "bg-neutral-300")}
+                                  style={{ width: `${Math.min(ocupacion, 100)}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                            
+                            {loteActivo && (
+                              <div className="bg-neutral-50 p-3 rounded-xl border border-neutral-100 flex items-center justify-between">
+                                <div>
+                                  <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Línea Genética</p>
+                                  <p className="text-sm font-bold text-neutral-800">{loteActivo.linea_genetica}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Ingreso</p>
+                                  <p className="text-sm font-bold text-neutral-800">{new Date(loteActivo.fecha_ingreso).toLocaleDateString()}</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Acciones Rápidas */}
+                        {isAdminOrOperario && (
+                          <div className="grid grid-cols-3 border-t border-neutral-100 divide-x divide-neutral-100 bg-neutral-50/50">
+                            {!loteActivo ? (
+                              <button className="flex flex-col items-center justify-center p-3 text-blue-600 hover:bg-blue-50 transition-colors col-span-3 font-bold text-sm">
+                                <CalendarPlus className="w-5 h-5 mb-1" />
+                                Ingresar Lote
+                              </button>
+                            ) : (
+                              <>
+                                <button className="flex flex-col items-center justify-center p-3 text-emerald-600 hover:bg-emerald-50 transition-colors font-bold text-[11px] uppercase tracking-wide">
+                                  <PackageCheck className="w-4 h-4 mb-1" />
+                                  Recolección
+                                </button>
+                                <button className="flex flex-col items-center justify-center p-3 text-red-600 hover:bg-red-50 transition-colors font-bold text-[11px] uppercase tracking-wide">
+                                  <HeartCrack className="w-4 h-4 mb-1" />
+                                  Mortalidad
+                                </button>
+                                <button className="flex flex-col items-center justify-center p-3 text-orange-600 hover:bg-orange-50 transition-colors font-bold text-[11px] uppercase tracking-wide">
+                                  <Wrench className="w-4 h-4 mb-1" />
+                                  Mantenimiento
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {galerones.filter(g => g.granjaId === selectedGranja.id && g.estado !== 'Archivado').length === 0 && (
+                    <div className="col-span-full bg-white p-10 rounded-2xl border border-neutral-200 shadow-sm text-center">
+                      <p className="text-neutral-500">No hay galerones registrados en esta granja.</p>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'configuracion' && (
+          <div className="space-y-6">
+            {!configSelectedGranja ? (
+              <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-sm">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-bold text-neutral-800">Listado de Granjas</h3>
+                  <button
+                    onClick={() => {
+                      setEditingGranja(null);
+                      setGranjaForm({ nombre: '', ubicacion: '', encargadoId: currentUser.id });
+                      setShowGranjaForm(true);
+                    }}
+                    className="flex items-center text-sm font-bold bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Nueva Granja
+                  </button>
+                </div>
+
+                {showGranjaForm && (
+                  <div className="mb-6 bg-neutral-50 p-5 rounded-2xl border border-neutral-200">
+                    <h4 className="font-bold text-neutral-800 mb-4">{editingGranja ? 'Editar Granja' : 'Crear Granja'}</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <input 
+                        type="text" 
+                        placeholder="Nombre de la Granja" 
+                        value={granjaForm.nombre}
+                        onChange={e => setGranjaForm({...granjaForm, nombre: e.target.value})}
+                        className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="Ubicación" 
+                        value={granjaForm.ubicacion}
+                        onChange={e => setGranjaForm({...granjaForm, ubicacion: e.target.value})}
+                        className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                    </div>
+                    <div className="flex space-x-3">
+                      <button onClick={handleSaveGranja} disabled={!granjaForm.nombre || !granjaForm.ubicacion} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">Guardar</button>
+                      <button onClick={() => setShowGranjaForm(false)} className="bg-neutral-200 text-neutral-700 px-4 py-2 rounded-lg text-sm font-bold">Cancelar</button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm whitespace-nowrap">
+                    <thead className="bg-neutral-50 text-neutral-500 uppercase tracking-wider font-bold text-[10px] border-b border-neutral-200">
+                      <tr>
+                        <th className="px-4 py-3">Nombre</th>
+                        <th className="px-4 py-3">Ubicación</th>
+                        <th className="px-4 py-3 text-center">Estado</th>
+                        <th className="px-4 py-3 text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100">
+                      {granjas.map(g => (
+                        <tr key={g.id} className="hover:bg-neutral-50/50">
+                          <td className="px-4 py-3 font-bold text-neutral-800">{g.nombre}</td>
+                          <td className="px-4 py-3 text-neutral-500">{g.ubicacion}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={cn("px-2 py-1 rounded text-xs font-bold", g.estado === 'Archivado' ? "bg-neutral-100 text-neutral-600" : "bg-emerald-100 text-emerald-700")}>
+                              {g.estado || 'Activo'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right space-x-2">
+                            <button onClick={() => setConfigSelectedGranja(g)} className="text-blue-600 hover:text-blue-800 font-bold text-xs bg-blue-50 px-3 py-1 rounded-lg">Ver Galerones</button>
+                            <button onClick={() => { setEditingGranja(g); setGranjaForm({nombre: g.nombre, ubicacion: g.ubicacion, encargadoId: g.encargadoId}); setShowGranjaForm(true); }} className="text-neutral-500 hover:text-blue-600"><Edit className="w-4 h-4 inline"/></button>
+                            {g.estado !== 'Archivado' && (
+                              <button onClick={() => handleArchiveGranja(g)} className="text-neutral-500 hover:text-red-600"><Archive className="w-4 h-4 inline"/></button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-sm animate-in fade-in slide-in-from-right-4">
+                <button
+                  onClick={() => setConfigSelectedGranja(null)}
+                  className="flex items-center text-sm font-bold text-neutral-500 hover:text-neutral-800 transition-colors mb-4"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" />
+                  Volver a Granjas
+                </button>
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-neutral-800">Galerones: {configSelectedGranja.nombre}</h3>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingGaleron(null);
+                      setGaleronForm({ nombre: '', capacidad_maxima: '', estado_fisico: 'Óptimo' });
+                      setShowGaleronForm(true);
+                    }}
+                    className="flex items-center text-sm font-bold bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Nuevo Galerón
+                  </button>
+                </div>
+
+                {showGaleronForm && (
+                  <div className="mb-6 bg-neutral-50 p-5 rounded-2xl border border-neutral-200">
+                    <h4 className="font-bold text-neutral-800 mb-4">{editingGaleron ? 'Editar Galerón' : 'Crear Galerón'}</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <input 
+                        type="text" 
+                        placeholder="Nombre / Número" 
+                        value={galeronForm.nombre}
+                        onChange={e => setGaleronForm({...galeronForm, nombre: e.target.value})}
+                        className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                      <input 
+                        type="number" 
+                        placeholder="Capacidad Máxima" 
+                        value={galeronForm.capacidad_maxima}
+                        onChange={e => setGaleronForm({...galeronForm, capacidad_maxima: e.target.value})}
+                        className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                      />
+                      <select 
+                        value={galeronForm.estado_fisico}
+                        onChange={e => setGaleronForm({...galeronForm, estado_fisico: e.target.value})}
+                        className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                      >
+                        <option value="Óptimo">Óptimo</option>
+                        <option value="Mantenimiento">Mantenimiento</option>
+                        <option value="Deteriorado">Deteriorado</option>
+                      </select>
+                    </div>
+                    <div className="flex space-x-3">
+                      <button onClick={handleSaveGaleron} disabled={!galeronForm.nombre || !galeronForm.capacidad_maxima} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">Guardar</button>
+                      <button onClick={() => setShowGaleronForm(false)} className="bg-neutral-200 text-neutral-700 px-4 py-2 rounded-lg text-sm font-bold">Cancelar</button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm whitespace-nowrap">
+                    <thead className="bg-neutral-50 text-neutral-500 uppercase tracking-wider font-bold text-[10px] border-b border-neutral-200">
+                      <tr>
+                        <th className="px-4 py-3">Nombre</th>
+                        <th className="px-4 py-3">Capacidad</th>
+                        <th className="px-4 py-3">Estado Físico</th>
+                        <th className="px-4 py-3 text-center">Estado Sist.</th>
+                        <th className="px-4 py-3 text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100">
+                      {galerones.filter(g => g.granjaId === configSelectedGranja.id).map(g => (
+                        <tr key={g.id} className="hover:bg-neutral-50/50">
+                          <td className="px-4 py-3 font-bold text-neutral-800">{g.nombre}</td>
+                          <td className="px-4 py-3 text-neutral-500">{g.capacidad_maxima.toLocaleString()} aves</td>
+                          <td className="px-4 py-3 text-neutral-500">{g.estado_fisico}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={cn("px-2 py-1 rounded text-xs font-bold", g.estado === 'Archivado' ? "bg-neutral-100 text-neutral-600" : "bg-emerald-100 text-emerald-700")}>
+                              {g.estado || 'Activo'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right space-x-2">
+                            <button onClick={() => { setEditingGaleron(g); setGaleronForm({nombre: g.nombre, capacidad_maxima: g.capacidad_maxima.toString(), estado_fisico: g.estado_fisico}); setShowGaleronForm(true); }} className="text-neutral-500 hover:text-blue-600"><Edit className="w-4 h-4 inline"/></button>
+                            {g.estado !== 'Archivado' && (
+                              <button onClick={() => handleArchiveGaleron(g)} className="text-neutral-500 hover:text-red-600"><Archive className="w-4 h-4 inline"/></button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Recoleccion and Mortalidad code remains similar to before */}
+        {activeTab === 'recoleccion' && (
+          <div className="max-w-xl">
+             {/* Omitted for brevity since user just requested CRUD */}
+             <form onSubmit={handleRecoleccion} className="bg-white p-6 rounded-2xl border border-neutral-200 shadow-sm space-y-6">
+              <div className="flex items-center space-x-3 pb-4 border-b border-neutral-100">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <PackageCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-neutral-800">Ingreso de Recolección</h3>
+                  <p className="text-xs text-neutral-500">Los cartones se sumarán a la Bodega Central</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-neutral-700">Galerón de Origen</label>
+                <select
+                  value={galeronSeleccionadoRecoleccion}
+                  onChange={(e) => setGaleronSeleccionadoRecoleccion(e.target.value)}
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                >
+                  <option value="">Seleccione un galerón</option>
+                  {galerones.filter(g => g.estado !== 'Archivado').map(g => (
+                    <option key={g.id} value={g.nombre}>{g.nombre}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-neutral-700">Cartones (Grande)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={huevosGrandes || ''}
+                    onChange={(e) => setHuevosGrandes(Number(e.target.value))}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-neutral-700">Cartones (Mediano)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={huevosMedianos || ''}
+                    onChange={(e) => setHuevosMedianos(Number(e.target.value))}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-neutral-700">Gallinaza (Sacos)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={gallinazaSacos || ''}
+                    onChange={(e) => setGallinazaSacos(Number(e.target.value))}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting || (!huevosGrandes && !huevosMedianos && !gallinazaSacos) || !galeronSeleccionadoRecoleccion}
+                className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 transition-colors shadow-sm flex justify-center items-center"
+              >
+                {isSubmitting ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                ) : (
+                  'Registrar Producción'
+                )}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {activeTab === 'mortalidad' && (
+          <div className="bg-white p-10 rounded-2xl border border-neutral-200 shadow-sm text-center">
+            <HeartCrack className="w-12 h-12 text-neutral-300 mx-auto mb-4" />
+            <h3 className="text-lg font-bold text-neutral-800 mb-2">Registro de Mortalidad</h3>
+            <p className="text-neutral-500 max-w-sm mx-auto">Módulo en construcción. Aquí se registrarán las bajas diarias por galerón.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

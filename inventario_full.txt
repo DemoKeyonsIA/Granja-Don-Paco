@@ -1,0 +1,354 @@
+import React, { useState, useEffect } from 'react';
+import { PackageOpen, ArrowRightLeft, ArrowDownToLine, ArrowUpFromLine, Camera, History, Upload, Inbox } from 'lucide-react';
+import { InventarioItem, MovimientoInventario, User } from '../types';
+import { mockInventario, mockMovimientos, rutasDisponibles } from '../data';
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+interface InventarioProps {
+  currentUser: User;
+}
+
+export default function Inventario({ currentUser }: InventarioProps) {
+  const [inventario, setInventario] = useState<any[]>([]);
+  const [movimientos, setMovimientos] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchInventario = async () => {
+      setIsLoading(true);
+      try {
+        const [resInv, resMov] = await Promise.all([
+          fetch('/api/inventario'),
+          fetch('/api/inventario/movimientos')
+        ]);
+        if (resInv.ok) setInventario(await resInv.json());
+        if (resMov.ok) setMovimientos(await resMov.json());
+      } catch (e) {
+        console.error("Error fetching inventory:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchInventario();
+  }, []);
+
+  const [activeTab, setActiveTab] = useState<'bodega' | 'movimientos'>('bodega');
+  const [showMoveForm, setShowMoveForm] = useState(false);
+  const [moveType, setMoveType] = useState<'Entrada' | 'Salida' | 'Traslado'>('Traslado');
+
+  const [newMove, setNewMove] = useState<Partial<MovimientoInventario>>({
+    producto: 'Aves',
+    cantidad: 0,
+    unidad: 'kg',
+    origen: 'Bodega Central',
+    destino: rutasDisponibles[0],
+  });
+
+  const handleMove = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMove.cantidad || newMove.cantidad <= 0) return;
+
+    const movimiento: MovimientoInventario = {
+      id: crypto.randomUUID(),
+      tipo: moveType,
+      producto: newMove.producto!,
+      cantidad: Number(newMove.cantidad),
+      unidad: newMove.unidad!,
+      origen: moveType !== 'Entrada' ? newMove.origen : undefined,
+      destino: moveType !== 'Salida' ? newMove.destino : undefined,
+      fecha: new Date().toISOString(),
+      usuarioId: currentUser.id,
+    };
+
+    setMovimientos([movimiento, ...movimientos]);
+    
+    // Update inventory logic (simplified for mockup)
+    let updatedInv = [...inventario];
+    
+    if (moveType === 'Traslado') {
+      const origenItem = updatedInv.find(i => i.ubicacion === movimiento.origen && i.producto === movimiento.producto);
+      if (origenItem) {
+        origenItem.cantidad -= movimiento.cantidad;
+        origenItem.ultima_actualizacion = new Date().toISOString();
+      }
+      
+      const destinoItem = updatedInv.find(i => i.ubicacion === movimiento.destino && i.producto === movimiento.producto);
+      if (destinoItem) {
+        destinoItem.cantidad += movimiento.cantidad;
+        destinoItem.ultima_actualizacion = new Date().toISOString();
+      } else {
+        updatedInv.push({
+          id: crypto.randomUUID(),
+          producto: movimiento.producto,
+          cantidad: movimiento.cantidad,
+          unidad: movimiento.unidad,
+          ubicacion: movimiento.destino!,
+          ultima_actualizacion: new Date().toISOString()
+        });
+      }
+    } else if (moveType === 'Entrada') {
+        const destinoItem = updatedInv.find(i => i.ubicacion === movimiento.destino && i.producto === movimiento.producto);
+        if (destinoItem) {
+            destinoItem.cantidad += movimiento.cantidad;
+            destinoItem.ultima_actualizacion = new Date().toISOString();
+        } else {
+            updatedInv.push({
+                id: crypto.randomUUID(),
+                producto: movimiento.producto,
+                cantidad: movimiento.cantidad,
+                unidad: movimiento.unidad,
+                ubicacion: movimiento.destino!,
+                ultima_actualizacion: new Date().toISOString()
+            });
+        }
+    } else if (moveType === 'Salida') {
+        const origenItem = updatedInv.find(i => i.ubicacion === movimiento.origen && i.producto === movimiento.producto);
+        if (origenItem) {
+            origenItem.cantidad -= movimiento.cantidad;
+            origenItem.ultima_actualizacion = new Date().toISOString();
+        }
+    }
+
+    setInventario(updatedInv);
+    setShowMoveForm(false);
+  };
+
+  const isBodega = activeTab === 'bodega';
+
+  return (
+    <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6 animate-in fade-in pb-20">
+      
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+           <h2 className="text-2xl font-bold text-neutral-800 flex items-center">
+             <PackageOpen className="w-6 h-6 mr-2 text-blue-600" />
+             Bodega e Inventario
+           </h2>
+           <p className="text-sm text-neutral-500 mt-1">
+             Control de existencias, cargas y traslados.
+           </p>
+        </div>
+        
+        <div className="flex bg-neutral-100 p-1 rounded-xl">
+          <button 
+            onClick={() => setActiveTab('bodega')}
+            className={cn("px-4 py-2 rounded-lg text-sm font-semibold transition-colors", isBodega ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-700")}
+          >
+            Existencias
+          </button>
+          <button 
+            onClick={() => setActiveTab('movimientos')}
+            className={cn("px-4 py-2 rounded-lg text-sm font-semibold transition-colors", !isBodega ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-700")}
+          >
+            Movimientos
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      {isBodega ? (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="font-bold text-lg text-neutral-800">Estado Actual</h3>
+            <button 
+              onClick={() => setShowMoveForm(!showMoveForm)}
+              className="flex items-center text-sm font-bold bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors"
+            >
+              <ArrowRightLeft className="w-4 h-4 mr-2" />
+              Nuevo Movimiento
+            </button>
+          </div>
+
+          {showMoveForm && (
+            <form onSubmit={handleMove} className="bg-white p-5 rounded-2xl shadow-sm border border-neutral-200 animate-in slide-in-from-top-4">
+              <div className="flex space-x-2 mb-4">
+                <button type="button" onClick={() => setMoveType('Traslado')} className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border", moveType === 'Traslado' ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50")}>
+                  Traslado (a Camión)
+                </button>
+                <button type="button" onClick={() => setMoveType('Entrada')} className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border", moveType === 'Entrada' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50")}>
+                  Entrada (Proveedor)
+                </button>
+                <button type="button" onClick={() => setMoveType('Salida')} className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border", moveType === 'Salida' ? "bg-red-50 text-red-700 border-red-200" : "bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50")}>
+                  Salida (Ajuste/Merma)
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Producto</label>
+                  <select 
+                    value={newMove.producto}
+                    onChange={e => setNewMove({...newMove, producto: e.target.value})}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:border-blue-500 outline-none"
+                  >
+                    <option value="Aves">Aves</option>
+                    <option value="Huevos">Huevos</option>
+                    <option value="Alimento">Alimento</option>
+                  </select>
+                </div>
+                
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Cantidad</label>
+                  <div className="flex space-x-2">
+                    <input 
+                      type="number" 
+                      required
+                      value={newMove.cantidad || ''}
+                      onChange={e => setNewMove({...newMove, cantidad: Number(e.target.value)})}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:border-blue-500 outline-none"
+                    />
+                    <select 
+                      value={newMove.unidad}
+                      onChange={e => setNewMove({...newMove, unidad: e.target.value})}
+                      className="w-24 bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-2 text-xs focus:border-blue-500 outline-none"
+                    >
+                      <option value="kg">kg</option>
+                      <option value="unidades">uds</option>
+                      <option value="sacos">sacos</option>
+                    </select>
+                  </div>
+                </div>
+
+                {moveType !== 'Entrada' && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Origen</label>
+                    <select 
+                      value={newMove.origen}
+                      onChange={e => setNewMove({...newMove, origen: e.target.value})}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:border-blue-500 outline-none"
+                    >
+                      <option value="Bodega Central">Bodega Central</option>
+                      {rutasDisponibles.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {moveType !== 'Salida' && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Destino</label>
+                    <select 
+                      value={newMove.destino}
+                      onChange={e => setNewMove({...newMove, destino: e.target.value})}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-sm focus:border-blue-500 outline-none"
+                    >
+                      {moveType === 'Entrada' && <option value="Bodega Central">Bodega Central</option>}
+                      {rutasDisponibles.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-neutral-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div className="w-full md:w-auto">
+                    <label className="flex items-center justify-center space-x-2 text-sm font-semibold text-neutral-600 bg-neutral-100 px-4 py-2 rounded-xl cursor-pointer hover:bg-neutral-200 transition-colors border border-dashed border-neutral-300">
+                        <Camera className="w-4 h-4" />
+                        <span>Adjuntar respaldo de carga (Opcional)</span>
+                        <input type="file" className="hidden" accept="image/*" />
+                    </label>
+                </div>
+                <button type="submit" className="w-full md:w-auto bg-blue-600 text-white font-bold px-6 py-2 rounded-xl hover:bg-blue-700 transition-colors">
+                  Confirmar Movimiento
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {inventario.map(item => {
+              const isBodega = item.ubicacion === 'Bodega Central';
+              const daysToExpire = item.fecha_caducidad ? Math.ceil((new Date(item.fecha_caducidad).getTime() - Date.now()) / (1000 * 3600 * 24)) : null;
+              const isExpiringSoon = daysToExpire !== null && daysToExpire <= 7;
+
+              return (
+              <div key={item.id} className={cn("bg-white p-5 rounded-2xl shadow-sm border transition-colors", isExpiringSoon ? "border-amber-300 bg-amber-50" : "border-neutral-200")}>
+                <div className="flex justify-between items-start mb-3">
+                  <span className={cn("px-2.5 py-1 rounded-md text-xs font-bold border", 
+                    isBodega ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  )}>
+                    {item.ubicacion}
+                  </span>
+                  <span className="text-xs text-neutral-400 font-medium">
+                    {new Date(item.ultima_actualizacion).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </span>
+                </div>
+                <h4 className="text-2xl font-bold text-neutral-800 flex items-end space-x-1">
+                  <span>{item.cantidad}</span>
+                  <span className="text-base text-neutral-500 font-medium mb-1">{item.unidad}</span>
+                </h4>
+                <p className="text-sm font-semibold text-neutral-800 mt-1">{item.producto}</p>
+                {(item.lote || item.fecha_caducidad) && (
+                  <div className="mt-3 pt-3 border-t border-neutral-100 flex flex-col gap-1">
+                    {item.lote && <p className="text-xs text-neutral-500"><span className="font-bold">Lote:</span> {item.lote}</p>}
+                    {item.fecha_caducidad && (
+                      <p className={cn("text-xs", isExpiringSoon ? "text-amber-700 font-bold" : "text-neutral-500")}>
+                        <span className="font-bold">Vence:</span> {new Date(item.fecha_caducidad).toLocaleDateString()} {isExpiringSoon && `(en ${daysToExpire} días)`}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )})}
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl shadow-sm border border-neutral-200 overflow-hidden">
+          {movimientos.length === 0 ? (
+            <div className="p-12 text-center flex flex-col items-center">
+              <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mb-4 text-neutral-400">
+                <Inbox className="w-8 h-8" />
+              </div>
+              <h4 className="text-lg font-bold text-neutral-700 mb-1">Sin Movimientos</h4>
+              <p className="text-neutral-500">No hay movimientos registrados en el kardex.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead className="bg-neutral-50 text-neutral-500 uppercase tracking-wider font-bold text-xs border-b border-neutral-200">
+                  <tr>
+                    <th className="px-6 py-4">Fecha</th>
+                    <th className="px-6 py-4">Tipo</th>
+                    <th className="px-6 py-4">Origen</th>
+                    <th className="px-6 py-4">Destino</th>
+                    <th className="px-6 py-4">Producto</th>
+                    <th className="px-6 py-4 text-right">Cantidad</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100">
+                  {[...movimientos].sort((a,b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()).map(mov => (
+                    <tr key={mov.id} className="hover:bg-neutral-50/50 transition-colors">
+                      <td className="px-6 py-4 text-neutral-500 text-xs">
+                        {new Date(mov.fecha).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold",
+                          mov.tipo === 'Entrada Producción' ? "bg-green-100 text-green-700" :
+                          mov.tipo === 'Venta' || mov.tipo === 'Salida' ? "bg-orange-100 text-orange-700" :
+                          mov.tipo === 'Traslado' ? "bg-blue-100 text-blue-700" :
+                          "bg-neutral-100 text-neutral-700"
+                        )}>
+                          {mov.tipo}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-neutral-600">{mov.origen || '-'}</td>
+                      <td className="px-6 py-4 text-neutral-600">{mov.destino || '-'}</td>
+                      <td className="px-6 py-4 font-bold text-neutral-800">{mov.producto}</td>
+                      <td className="px-6 py-4 text-right font-bold text-neutral-700">
+                        {mov.cantidad} <span className="font-normal text-neutral-500 text-xs">{mov.unidad || ''}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
