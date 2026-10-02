@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Scale, Plus, Search, AlertTriangle, CheckCircle, XCircle, MapPin, Clock, Filter, RefreshCw, ArrowRight, X } from 'lucide-react';
+import { Scale, Plus, Search, AlertTriangle, CheckCircle, XCircle, MapPin, Clock, Filter, ArrowRight, X } from 'lucide-react';
 import { PesoPorPunto, User } from '../types';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { Spinner } from './Spinner';
 
 interface PesosProps {
   currentUser: User;
@@ -244,7 +245,7 @@ export default function Pesos({ currentUser }: PesosProps) {
           <div className="mt-4 flex justify-end">
             <button onClick={handleRegistrar} disabled={loading || pesoReal === 0}
               className="px-6 py-2.5 text-white rounded-xl font-bold text-sm transition-colors disabled:opacity-50 flex items-center" style={{ background: 'var(--brand-secondary)' }}>
-              {loading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Scale className="w-4 h-4 mr-2" />}
+                {loading ? <Spinner className="mr-2" /> : <Scale className="w-4 h-4 mr-2" />}
               Registrar Peso
             </button>
           </div>

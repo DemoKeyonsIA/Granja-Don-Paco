@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowUpFromLine, CheckCircle2, AlertTriangle, Inbox, Loader2, X, Scale, ShieldAlert,
+  ArrowUpFromLine, CheckCircle2, AlertTriangle, Inbox, X, Scale, ShieldAlert,
   ArrowDownFromLine, ArrowUpRight, Search, ChevronDown, ChevronRight, QrCode,
   ClipboardList, Boxes, CalendarClock, PackageX, Layers, RefreshCcw,
 } from 'lucide-react';
@@ -8,6 +8,8 @@ import { User } from '../../types';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import Desperdicios from '../Desperdicios';
+import { Spinner, SpinnerConTexto } from '../Spinner';
+import { TarjetaKpi } from '../TarjetaKpi';
 import { OPCIONES_DIFERENCIA_RECEPCION, ETIQUETA_TIPO_DIFERENCIA, OpcionDiferencia } from '../../lib/opcionesRecepcion';
 
 interface Props {
@@ -132,23 +134,6 @@ function ChipEstado({ estado }: { estado: string }) {
     </span>
   );
 }
-function Kpi({ icon: Icon, label, value, unit, tone, caption }: { icon: React.ElementType; label: string; value: React.ReactNode; unit?: string; tone?: string; caption?: string }) {
-  return (
-    <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm p-3 flex items-center gap-3">
-      <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', tone || 'bg-neutral-100 text-neutral-500')}>
-        <Icon className="w-5 h-5" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-neutral-400 truncate">{label}</p>
-        <p className="text-xl font-black text-neutral-800 leading-tight">
-          {value}{unit && <span className="text-xs font-medium text-neutral-500 ml-1">{unit}</span>}
-        </p>
-        {caption && <p className="text-[10px] text-neutral-400 truncate">{caption}</p>}
-      </div>
-    </div>
-  );
-}
-
 export default function BodegaAdmin({ currentUser, inventario, movimientos, onRefresh, vista, onVista }: Props) {
   const [stock, setStock] = useState<any>(null);
   const [cargandoStock, setCargandoStock] = useState(true);
@@ -516,11 +501,11 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
       {/* ===== RESUMEN INTELIGENTE ===== */}
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden">
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 p-4">
-          <Kpi icon={Boxes} label="Stock total" value={kpis.stockTotal ?? '—'} unit="cartones" caption="entradas − salidas (bodega)" tone="bg-blue-100 text-blue-600" />
-          <Kpi icon={Layers} label="Etiquetados" value={kpis.etiquetas ?? '—'} unit="cartones" caption={etiquetadosUnidades > 0 ? `${etiquetadosUnidades} huevos` : '1 etiqueta = 1 cartón'} tone="bg-indigo-100 text-indigo-600" />
-          <Kpi icon={PackageX} label="Por etiquetar" value={kpis.porEtiquetar ?? '—'} unit="cartones" caption="sin etiqueta individual" tone="bg-amber-100 text-amber-600" />
-          <Kpi icon={CalendarClock} label="Por vencer" value={kpis.porVencer ?? '—'} unit="cartones" caption={tieneVencidos ? 'hay vencidos' : tienePorVencer ? 'dentro del aviso' : 'sin riesgo'} tone={porVencerTone} />
-          <Kpi icon={ClipboardList} label="Tipos de producto" value={productos.length ?? '—'} unit="tipos" caption="configurables en Admin → Productos" tone="bg-teal-100 text-teal-600" />
+          <TarjetaKpi variante="fila" icono={Boxes} etiqueta="Stock total" valor={kpis.stockTotal ?? '—'} unidad="cartones" ayuda="entradas − salidas (bodega)" tonoIcono="bg-blue-100 text-blue-600" />
+          <TarjetaKpi variante="fila" icono={Layers} etiqueta="Etiquetados" valor={kpis.etiquetas ?? '—'} unidad="cartones" ayuda={etiquetadosUnidades > 0 ? `${etiquetadosUnidades} huevos` : '1 etiqueta = 1 cartón'} tonoIcono="bg-indigo-100 text-indigo-600" />
+          <TarjetaKpi variante="fila" icono={PackageX} etiqueta="Por etiquetar" valor={kpis.porEtiquetar ?? '—'} unidad="cartones" ayuda="sin etiqueta individual" tonoIcono="bg-amber-100 text-amber-600" />
+          <TarjetaKpi variante="fila" icono={CalendarClock} etiqueta="Por vencer" valor={kpis.porVencer ?? '—'} unidad="cartones" ayuda={tieneVencidos ? 'hay vencidos' : tienePorVencer ? 'dentro del aviso' : 'sin riesgo'} tonoIcono={porVencerTone} />
+          <TarjetaKpi variante="fila" icono={ClipboardList} etiqueta="Tipos de producto" valor={productos.length ?? '—'} unidad="tipos" ayuda="configurables en Admin → Productos" tonoIcono="bg-teal-100 text-teal-600" />
         </div>
 
         {((kpis.vencidos || 0) > 0 || (kpis.porVencer || 0) > 0 || kpis.proximoSalir) && (
@@ -584,7 +569,7 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
           </div>
 
           {cargandoStock ? (
-            <div className="bg-white rounded-2xl border border-neutral-200 p-12 flex items-center justify-center text-neutral-400"><Loader2 className="w-6 h-6 animate-spin" /></div>
+            <div className="bg-white rounded-2xl border border-neutral-200 p-12 flex items-center justify-center text-neutral-400"><Spinner /></div>
           ) : errorStock ? (
             <div className="bg-white rounded-2xl shadow-sm border border-red-200 p-12 text-center flex flex-col items-center">
               <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4 text-red-400"><AlertTriangle className="w-8 h-8" /></div>
@@ -939,7 +924,7 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
                 <input value={trazCodigo} onChange={e => setTrazCodigo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); buscarTraz(); } }}
                   placeholder="Escanear / escribir código ETQ-… y Enter" className="flex-1 border border-neutral-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-1 focus:ring-purple-500 outline-none" />
                 <button onClick={() => void buscarTraz()} disabled={buscandoTraz} className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50">
-                  {buscandoTraz ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />} Buscar
+                    {buscandoTraz ? <Spinner /> : <Search className="w-4 h-4" />} Buscar
                 </button>
               </div>
               {sugerenciasTraz.length > 0 && (
@@ -1078,7 +1063,7 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
                       <div key={c.codigo} className={cn('flex items-center justify-between rounded-lg border px-3 py-2 text-xs', CHIP_CODIGO[c.estado])}>
                         <span className="font-mono text-neutral-600 truncate">{c.codigo}</span>
                         <span className="flex items-center gap-1 font-bold shrink-0 ml-2">
-                          {c.estado === 'validando' && <Loader2 className="w-3 h-3 animate-spin" />}
+                          {c.estado === 'validando' && <Spinner tamano="xs" className="w-3 h-3" />}
                           {c.estado === 'pendiente' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
                           {c.estado === 'yaIngresada' && <AlertTriangle className="w-3 h-3 text-amber-600" />}
                           {c.estado === 'noExiste' && <X className="w-3 h-3 text-red-600" />}
@@ -1099,7 +1084,7 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
                 <div className="flex items-center gap-2">
                   <button onClick={() => void finalizarWizard(false)} disabled={enviandoWizard}
                     className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2.5 rounded-lg disabled:opacity-50">
-                    {enviandoWizard ? <span className="flex items-center justify-center gap-1.5"><Loader2 className="w-4 h-4 animate-spin" /> Procesando…</span> : 'Finalizar recepción'}
+                    {enviandoWizard ? <SpinnerConTexto className="justify-center">Procesando…</SpinnerConTexto> : 'Finalizar recepción'}
                   </button>
                   <button onClick={() => void finalizarWizard(true)} disabled={enviandoWizard}
                     className="border border-neutral-200 text-neutral-600 hover:bg-neutral-50 text-xs font-bold px-3 py-2.5 rounded-lg disabled:opacity-50">
@@ -1172,7 +1157,7 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
               <div className="flex items-center gap-2 pt-1">
                 <button onClick={() => void registrarIngresoManual()} disabled={enviandoManual}
                   className="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2.5 rounded-lg disabled:opacity-50">
-                  {enviandoManual ? <span className="flex items-center justify-center gap-1.5"><Loader2 className="w-4 h-4 animate-spin" /> Registrando…</span> : 'Agregar al stock'}
+                    {enviandoManual ? <SpinnerConTexto className="justify-center">Registrando…</SpinnerConTexto> : 'Agregar al stock'}
                 </button>
                 <button onClick={() => setIngresoManualAbierto(false)} disabled={enviandoManual}
                   className="border border-neutral-200 text-neutral-600 text-xs font-bold px-3 py-2.5 rounded-lg disabled:opacity-50">Cancelar</button>

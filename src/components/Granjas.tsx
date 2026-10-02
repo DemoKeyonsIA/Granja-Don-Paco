@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Plus, ChevronRight, ChevronDown, Warehouse, Heart, Egg, Package, AlertTriangle, Wrench, Calendar, Trash2, Edit, Loader2, X, MapPin, Users, TrendingUp, Clock, Activity, Target, ArrowLeft, Check, CheckCircle2, ShieldCheck, PackageCheck } from 'lucide-react';
+import { Building2, Plus, ChevronRight, ChevronDown, Warehouse, Heart, Egg, Package, AlertTriangle, Wrench, Calendar, Trash2, Edit, X, MapPin, Users, TrendingUp, Clock, Activity, Target, ArrowLeft, Check, CheckCircle2, ShieldCheck, PackageCheck } from 'lucide-react';
 import { User } from '../types';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import Breadcrumb from './Breadcrumb';
 import WizardProgress from './WizardProgress';
+import { BloqueCarga, Spinner } from './Spinner';
+import { TarjetaKpi } from './TarjetaKpi';
 
 interface Props { currentUser: User; }
 
@@ -192,7 +194,7 @@ export default function Granjas({ currentUser }: Props) {
           <div className="flex justify-end">
             <button onClick={registrarRecoleccion} disabled={savingRecoleccion || !productosConCantidad.length || !recolGaleron}
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm disabled:opacity-50 flex items-center transition-colors">
-              {savingRecoleccion ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <PackageCheck className="w-4 h-4 mr-2" />}Registrar Recolección
+              {savingRecoleccion ? <Spinner className="mr-2" /> : <PackageCheck className="w-4 h-4 mr-2" />}Registrar Recolección
             </button>
           </div>
         </div>
@@ -200,15 +202,15 @@ export default function Granjas({ currentUser }: Props) {
 
       {/* Summary KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KPISimple label="Granjas Activas" value={String(granjasActivas.length)} icon={Building2} color="emerald" />
-        <KPISimple label="Galerones" value={String(totalGalerones)} icon={Warehouse} color="blue" />
-        <KPISimple label="Lotes Activos" value={String(totalLotesActivos)} icon={Heart} color="rose" />
-        <KPISimple label="Aves Totales" value={totalAves.toLocaleString()} icon={Egg} color="amber" />
+        <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Granjas Activas" valor={String(granjasActivas.length)} icono={Building2} tono="marca" />
+        <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Galerones" valor={String(totalGalerones)} icono={Warehouse} tono="marca-info" />
+        <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Lotes Activos" valor={String(totalLotesActivos)} icono={Heart} tono="marca-acento" />
+        <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Aves Totales" valor={totalAves.toLocaleString()} icono={Egg} tono="marca-info" />
       </div>
 
       {/* Granja Cards */}
       {loading && granjas.length === 0 ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin" style={{ color: 'var(--brand-primary)' }} /></div>
+        <BloqueCarga />
       ) : granjasActivas.length === 0 ? (
         <div className="bg-white dark:bg-neutral-800/80 rounded-2xl border border-stone-200/60 dark:border-neutral-700/40 p-12 text-center">
           <Building2 className="w-12 h-12 mx-auto mb-3" style={{ color: 'var(--brand-primary)', opacity: 0.3 }} />
@@ -249,10 +251,10 @@ export default function Granjas({ currentUser }: Props) {
                       <MapPin className="w-3 h-3" /> {granja.ubicacion || 'Sin ubicación'}
                     </p>
                     <div className="grid grid-cols-4 gap-3">
-                      <MiniStat label="Galerones" value={String(gGalerones.filter(g => g.estado !== 'Archivado').length)} />
-                      <MiniStat label="Aves" value={aves.toLocaleString()} />
-                      <MiniStat label="Ocupación" value={`${ocupacion}%`} highlight={ocupacion > 90} />
-                      <MiniStat label="Lotes" value={String(gLotes.length)} />
+                      <TarjetaKpi variante="plano" etiqueta="Galerones" valor={String(gGalerones.filter(g => g.estado !== 'Archivado').length)} />
+                      <TarjetaKpi variante="plano" etiqueta="Aves" valor={aves.toLocaleString()} />
+                      <TarjetaKpi variante="plano" etiqueta="Ocupación" valor={`${ocupacion}%`} tono={ocupacion > 90 ? 'negativo' : 'neutro'} />
+                      <TarjetaKpi variante="plano" etiqueta="Lotes" valor={String(gLotes.length)} />
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5 text-neutral-300 dark:text-neutral-600 shrink-0 mt-2 group-hover:text-emerald-500 transition-colors" />
@@ -269,33 +271,6 @@ export default function Granjas({ currentUser }: Props) {
           })}
         </div>
       )}
-    </div>
-  );
-}
-
-// ==================== KPIS ====================
-function KPISimple({ label, value, icon: Icon, color }: { label: string; value: string; icon: React.ComponentType<{className?: string}>; color: string }) {
-  const colors: Record<string, { text: string; bg: string }> = {
-    emerald: { text: 'var(--brand-primary)', bg: 'color-mix(in srgb, var(--brand-primary) 8%, transparent)' },
-    blue: { text: 'var(--brand-secondary-dark)', bg: 'color-mix(in srgb, var(--brand-secondary) 10%, transparent)' },
-    rose: { text: 'var(--brand-accent)', bg: 'color-mix(in srgb, var(--brand-accent) 8%, transparent)' },
-    amber: { text: 'var(--brand-secondary-dark)', bg: 'color-mix(in srgb, var(--brand-secondary) 10%, transparent)' },
-  };
-  const c = colors[color] || colors.emerald;
-  return (
-    <div className="p-4 rounded-2xl border border-stone-200/60 dark:border-neutral-700/40" style={{ background: c.bg }}>
-      <span style={{ color: c.text }}><Icon className="w-5 h-5 mb-2" /></span>
-      <p className="text-2xl font-black" style={{ color: c.text }}>{value}</p>
-      <p className="text-[10px] font-bold text-stone-500 dark:text-stone-400 uppercase">{label}</p>
-    </div>
-  );
-}
-
-function MiniStat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div>
-      <p className={cn("text-sm font-black", highlight ? "text-red-600 dark:text-red-400" : "text-stone-800 dark:text-white")}>{value}</p>
-      <p className="text-[9px] font-bold text-stone-400 uppercase">{label}</p>
     </div>
   );
 }
@@ -467,7 +442,7 @@ function CrearGranjaWizard({ onBack }: { onBack: () => void }) {
             <button onClick={handleSave} disabled={saving}
               className="flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm font-bold shadow-lg disabled:opacity-50"
               style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-primary-light))' }}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              {saving ? <Spinner /> : <Check className="w-4 h-4" />}
               {saving ? 'Creando...' : 'Crear Granja'}
             </button>
           </div>
@@ -517,11 +492,11 @@ function GranjaDetalleView({ data, tab, setTab, onBack, onRefresh, currentUser }
 
       {/* Resumen KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <KPISimple label="Galerones" value={String(resumen.totalGalerones)} icon={Warehouse} color="blue" />
-        <KPISimple label="Aves" value={resumen.avesTotal.toLocaleString()} icon={Heart} color="rose" />
-        <KPISimple label="Ocupación" value={`${resumen.ocupacion}%`} icon={TrendingUp} color={resumen.ocupacion > 90 ? 'rose' : 'emerald'} />
-        <KPISimple label="Cartones Hoy" value={String(resumen.cartonesHoy)} icon={Package} color="amber" />
-        <KPISimple label="Alertas" value={String(resumen.vacunasVencidas + resumen.ordenesVencidas)} icon={AlertTriangle} color={resumen.vacunasVencidas + resumen.ordenesVencidas > 0 ? 'rose' : 'emerald'} />
+        <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Galerones" valor={String(resumen.totalGalerones)} icono={Warehouse} tono="marca-info" />
+        <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Aves" valor={resumen.avesTotal.toLocaleString()} icono={Heart} tono="marca-acento" />
+        <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Ocupación" valor={`${resumen.ocupacion}%`} icono={TrendingUp} tono={resumen.ocupacion > 90 ? 'marca-acento' : 'marca'} />
+        <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Cartones Hoy" valor={String(resumen.cartonesHoy)} icono={Package} tono="marca-info" />
+          <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Alertas" valor={String(resumen.vacunasVencidas + resumen.ordenesVencidas)} icono={AlertTriangle} tono={resumen.vacunasVencidas + resumen.ordenesVencidas > 0 ? 'marca-acento' : 'marca'} />
       </div>
 
       {/* Occupancy bar */}
@@ -850,7 +825,7 @@ function GaleronesTab({ galerones, granjaId, onRefresh }: { galerones: GaleronDe
           <div className="flex justify-end gap-2 pt-2">
             <button onClick={() => setShowCreate(false)} className="px-4 py-2 rounded-xl text-sm font-bold text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700">Cancelar</button>
             <button onClick={handleCreate} disabled={saving} className="flex items-center gap-1 px-5 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-50" style={{ background: 'var(--brand-primary)' }}>
-              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Crear
+              {saving && <Spinner tamano="xs" />} Crear
             </button>
           </div>
         </div>
@@ -893,9 +868,9 @@ function GaleronesTab({ galerones, granjaId, onRefresh }: { galerones: GaleronDe
             {isExpanded && (
               <div style={{ borderTop: '1px solid var(--border-default)', background: 'var(--bg-muted)' }} className="p-5 space-y-4 animate-in fade-in">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <MiniStatCard label="Capacidad Maxima" value={`${gl.capacidad_maxima.toLocaleString()} aves`} color="blue" />
-                  <MiniStatCard label="Aves en Produccion" value={String(avesProduccion)} color="emerald" />
-                  <MiniStatCard label="Lotes Activos" value={String(lotesActivos)} color="amber" />
+              <TarjetaKpi tamanoValor="md" etiqueta="Capacidad Maxima" valor={`${gl.capacidad_maxima.toLocaleString()} aves`} tono="info" />
+              <TarjetaKpi tamanoValor="md" etiqueta="Aves en Produccion" valor={String(avesProduccion)} tono="positivo" />
+              <TarjetaKpi tamanoValor="md" etiqueta="Lotes Activos" valor={String(lotesActivos)} tono="alerta" />
                 </div>
                 {gl.notas && <p className="text-xs italic" style={{ color: 'var(--text-muted)' }}>Notas: {gl.notas}</p>}
                 <div className="flex gap-2 pt-1">
@@ -971,22 +946,12 @@ function GaleronesTab({ galerones, granjaId, onRefresh }: { galerones: GaleronDe
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setEditingGaleron(null)} className="px-4 py-2.5 rounded-xl text-sm font-bold text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700">Cancelar</button>
               <button onClick={saveEdit} disabled={saving} className="flex items-center gap-1 px-5 py-2.5 rounded-xl text-white text-sm font-bold disabled:opacity-50" style={{ background: 'var(--brand-primary)' }}>
-                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Guardar
+                {saving && <Spinner tamano="xs" />} Guardar
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function MiniStatCard({ label, value, color }: { label: string; value: string; color: string }) {
-  const c: Record<string, string> = { emerald: 'text-emerald-600 dark:text-emerald-400', red: 'text-red-600 dark:text-red-400', amber: 'text-amber-600 dark:text-amber-400', blue: 'text-blue-600 dark:text-blue-400' };
-  return (
-    <div className="p-3 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
-      <p className={cn("text-lg font-black", c[color] || c.emerald)}>{value}</p>
-      <p className="text-[10px] font-bold text-neutral-500 uppercase">{label}</p>
     </div>
   );
 }
@@ -1109,7 +1074,7 @@ function ProduccionTab({ granjaId, galerones }: { granjaId: string; galerones: G
         <button onClick={registrarRecoleccion} disabled={saving}
           className="w-full py-3 rounded-xl text-white text-sm font-bold shadow-lg disabled:opacity-50"
           style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-primary-light))' }}>
-          {saving ? <Loader2 className="w-4 h-4 animate-spin inline mr-2" /> : null}
+          {saving ? <Spinner className="inline mr-2" /> : null}
           {saving ? 'Registrando...' : 'Registrar Recolección'}
         </button>
       </div>
@@ -1258,7 +1223,7 @@ function MantenimientosTab({ galerones, granjaId, onRefresh }: { galerones: Gale
           <div className="flex justify-end gap-2 pt-2">
             <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl text-sm font-bold text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700">Cancelar</button>
             <button onClick={handleCreate} disabled={saving} className="flex items-center gap-1 px-5 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-50" style={{ background: 'var(--brand-primary)' }}>
-              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Registrar
+              {saving && <Spinner tamano="xs" />} Registrar
             </button>
           </div>
         </div>
@@ -1382,7 +1347,7 @@ function LotesTab({ galerones, onRefresh }: { galerones: GaleronDetalle[]; onRef
             <button onClick={handleCreate} disabled={saving}
               className="flex items-center gap-1 px-5 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-50"
               style={{ background: 'var(--brand-primary)' }}>
-              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Crear Lote
+              {saving && <Spinner tamano="xs" />} Crear Lote
             </button>
           </div>
         </div>

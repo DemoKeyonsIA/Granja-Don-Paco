@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Check, ChevronRight, ChevronLeft, Loader2, Wrench, Egg, ClipboardList, Plus } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, ChevronLeft, Wrench, Egg, ClipboardList, Plus } from 'lucide-react';
 import { User } from '../types';
 import { toast } from 'sonner';
+import { BloqueCarga, Spinner } from './Spinner';
 
 type Granja = { id: string; nombre: string; ubicacion?: string; estado?: string };
 type Galeron = { id: string; granjaId: string; nombre: string; estado?: string };
@@ -155,9 +156,7 @@ export default function IncidentesMovil({ currentUser }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin" style={{ color: 'var(--brand-primary)' }} />
-      </div>
+      <BloqueCarga className="min-h-[60vh]" />
     );
   }
 
@@ -539,7 +538,7 @@ export default function IncidentesMovil({ currentUser }: Props) {
           <button onClick={handleEnviar} disabled={submitting}
             className="w-full py-5 rounded-2xl text-lg font-black flex items-center justify-center gap-2 transition-all active:scale-[0.97] disabled:opacity-60"
             style={{ background: 'var(--brand-primary)', color: 'var(--text-inverse)' }}>
-            {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
+            {submitting ? <Spinner /> : <Check className="w-5 h-5" />}
             {submitting ? 'Enviando...' : 'Reportar incidente'}
           </button>
         </div>

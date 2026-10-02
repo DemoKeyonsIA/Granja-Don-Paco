@@ -1,4 +1,5 @@
 import { cn } from '../lib/utils';
+import { BloqueCarga } from './Spinner';
 
 export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
@@ -39,13 +40,11 @@ export function SkeletonTable({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
   );
 }
 
+/**
+ * Esqueleto con texto visible, para cuando ya se sabe qué forma tiene la pantalla.
+ * Comparte el indicador con `BloqueCarga`: los dos son "la pantalla está
+ * esperando", y si cada uno dibuja el suyo se ven como dos pantallas distintas.
+ */
 export function PageLoader() {
-  return (
-    <div className="flex items-center justify-center py-20">
-      <div className="flex flex-col items-center gap-3">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-neutral-200 dark:border-neutral-600 border-t-blue-600" />
-        <span className="text-sm text-neutral-500 dark:text-neutral-400">Cargando...</span>
-      </div>
-    </div>
-  );
+  return <BloqueCarga texto="Cargando..." className="py-20" />;
 }

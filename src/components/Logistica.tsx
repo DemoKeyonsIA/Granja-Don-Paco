@@ -1,14 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Truck, Users, Map, Clock, Navigation, AlertTriangle, Box, Receipt, ArrowRightLeft, ListChecks, Plus, CheckCircle2, X, MapPin, PackageCheck, Truck as TruckIcon } from 'lucide-react';
 import { User, Ruta, Cliente } from '../types';
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import Despacho from './Despacho';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { BloqueCarga } from './Spinner';
 
 type LogisticaProps = {
   currentUser: User;
@@ -233,9 +229,7 @@ export default function Logistica({ currentUser, initialTab }: LogisticaProps) {
           ) : (
             <>
               {isLoading ? (
-                <div className="flex items-center justify-center min-h-[30vh]">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--brand-primary)' }} />
-                </div>
+                <BloqueCarga className="min-h-[30vh]" />
               ) : (
                 <div className="space-y-6 animate-in fade-in">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -498,9 +492,7 @@ export default function Logistica({ currentUser, initialTab }: LogisticaProps) {
           )}
 
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--brand-primary)' }} />
-            </div>
+            <BloqueCarga />
           ) : rutas.length === 0 ? (
             <div className="rounded-2xl p-12 text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <Map className="w-12 h-12 mx-auto mb-4 opacity-30" />

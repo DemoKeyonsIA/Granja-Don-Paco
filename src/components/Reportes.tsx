@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { User } from '../types';
 import { toast } from 'sonner';
 import { fmtCRC } from '../lib/finanzas';
 import type { TipoReporte } from '../nav/modulos';
+import { BloqueCarga } from './Spinner';
+import { TarjetaKpi } from './TarjetaKpi';
 
 /**
  * Sub-fila de Analítica: los seis reportes.
@@ -69,9 +71,7 @@ export default function Reportes({
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
-        </div>
+        <BloqueCarga className="py-20" />
       ) : !datos ? (
         <div className="text-center py-20 text-neutral-400 dark:text-neutral-500">No hay datos disponibles</div>
       ) : (
@@ -88,31 +88,15 @@ export default function Reportes({
   );
 }
 
-function KPI({ label, value, color = 'blue' }: { label: string; value: string | number; color?: string }) {
-  const colors: Record<string, string> = {
-    blue: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700',
-    green: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700',
-    red: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700',
-    yellow: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700',
-    purple: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700',
-  };
-  return (
-    <div className={`rounded-xl p-4 border ${colors[color] || colors.blue}`}>
-      <p className="text-xs font-bold uppercase tracking-wider opacity-70">{label}</p>
-      <p className="text-2xl font-black mt-1">{typeof value === 'number' ? value.toLocaleString('es-CR') : value}</p>
-    </div>
-  );
-}
-
 function ReporteFinanciero({ data }: { data: any }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <KPI label="Total Ventas" value={`₡${Number(data.totalVentas || 0).toLocaleString()}`} color="green" />
-        <KPI label="Total Gastos" value={`₡${Number(data.totalGastos || 0).toLocaleString()}`} color="red" />
-        <KPI label="Utilidad Neta" value={`₡${Number(data.utilidadNeta || 0).toLocaleString()}`} color={data.utilidadNeta >= 0 ? 'green' : 'red'} />
-        <KPI label="Cuentas por Cobrar" value={`₡${Number(data.cuentasPorCobrar || 0).toLocaleString()}`} color="yellow" />
-        <KPI label="Margen" value={`${data.margen || 0}%`} color="purple" />
+        <TarjetaKpi etiqueta="Total Ventas" valor={`₡${Number(data.totalVentas || 0).toLocaleString()}`} tono="positivo" superficie="tono" />
+        <TarjetaKpi etiqueta="Total Gastos" valor={`₡${Number(data.totalGastos || 0).toLocaleString()}`} tono="negativo" superficie="tono" />
+        <TarjetaKpi etiqueta="Utilidad Neta" valor={`₡${Number(data.utilidadNeta || 0).toLocaleString()}`} tono={data.utilidadNeta >= 0 ? 'positivo' : 'negativo'} superficie="tono" />
+        <TarjetaKpi etiqueta="Cuentas por Cobrar" valor={`₡${Number(data.cuentasPorCobrar || 0).toLocaleString()}`} tono="alerta" superficie="tono" />
+        <TarjetaKpi etiqueta="Margen" valor={`${data.margen || 0}%`} tono="acento" superficie="tono" />
       </div>
       {data.gastosPorCategoria && Object.keys(data.gastosPorCategoria).length > 0 && (
         <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 p-6">
@@ -154,10 +138,10 @@ function ReporteFlujoCaja({ data }: { data: any }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPI label="Facturado" value={fmtCRC(data?.ingresosFacturados)} color="green" />
-        <KPI label="Cobrado" value={fmtCRC(cobrado)} color="blue" />
-        <KPI label="Por cobrar" value={fmtCRC(data?.cuentasPorCobrar)} color="yellow" />
-        <KPI label="Caja del periodo" value={fmtCRC(caja)} color={caja >= 0 ? 'green' : 'red'} />
+        <TarjetaKpi etiqueta="Facturado" valor={fmtCRC(data?.ingresosFacturados)} tono="positivo" superficie="tono" />
+        <TarjetaKpi etiqueta="Cobrado" valor={fmtCRC(cobrado)} tono="info" superficie="tono" />
+        <TarjetaKpi etiqueta="Por cobrar" valor={fmtCRC(data?.cuentasPorCobrar)} tono="alerta" superficie="tono" />
+        <TarjetaKpi etiqueta="Caja del periodo" valor={fmtCRC(caja)} tono={caja >= 0 ? 'positivo' : 'negativo'} superficie="tono" />
       </div>
 
       <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 p-6">

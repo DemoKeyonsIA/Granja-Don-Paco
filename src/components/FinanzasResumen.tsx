@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import type { User } from '../types';
 import { fmtCRC, type NodoCiclo, type RangoPeriodo } from '../lib/finanzas';
+import { BloqueCarga } from './Spinner';
+import { TarjetaKpi } from './TarjetaKpi';
 
 type Aging = { alDia: number; d1_30: number; d31_60: number; d60: number };
 
@@ -233,6 +235,12 @@ const ESTILO_NIVEL: Record<Aviso['nivel'], { fondo: string; texto: string; punto
   bajo: { fondo: 'bg-neutral-50 dark:bg-neutral-800/50', texto: 'text-neutral-700 dark:text-neutral-300', punto: 'bg-neutral-400' },
 };
 
+/**
+ * Tarjeta de dinero. Envuelve `TarjetaKpi` y le pone lo que el componente
+ * compartido no puede saber: si una variación es mala depende del signo que
+ * importa —un gasto que sube es malo, un ingreso que sube es bueno— y qué se
+ * muestra cuando el periodo anterior fue cero.
+ */
 function Tarjeta({
   label, valor, variacion, ayuda, icono: Icono, negativo = false, maloSiSube = false,
 }: {
@@ -249,16 +257,15 @@ function Tarjeta({
   // como 0%: sería una mentira más pequeña que la de al lado.
   const malo = variacion == null ? null : (maloSiSube ? variacion > 0 : variacion < 0);
   return (
-    <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm p-5">
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="text-[11px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{label}</h3>
-        <div className="p-2 rounded-lg bg-neutral-100 dark:bg-neutral-700">
-          <Icono className="w-5 h-5 text-neutral-600 dark:text-neutral-300" />
-        </div>
-      </div>
-      <p className={`text-3xl font-black mt-3 ${negativo ? 'text-red-600 dark:text-red-400' : 'text-neutral-900 dark:text-white'}`}>
-        {fmtCRC(valor)}
-      </p>
+    <TarjetaKpi
+      etiqueta={label}
+      valor={fmtCRC(valor)}
+      icono={Icono}
+      tono={negativo ? 'negativo' : 'neutro'}
+      tamanoValor="xl"
+      nivelEtiqueta={3}
+      ayuda={ayuda}
+    >
       <div className="flex items-center gap-2 mt-2 min-h-[1.25rem]">
         {variacion != null && (
           <span className={`inline-flex items-center gap-0.5 text-xs font-bold ${
@@ -272,8 +279,7 @@ function Tarjeta({
           {variacion == null ? 'Sin periodo anterior con que comparar' : 'vs. periodo anterior'}
         </span>
       </div>
-      {ayuda && <p className="text-[11px] text-neutral-400 dark:text-neutral-500 mt-1">{ayuda}</p>}
-    </div>
+    </TarjetaKpi>
   );
 }
 
@@ -328,8 +334,8 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[30vh]" data-testid="finanzas-resumen-cargando">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      <div data-testid="finanzas-resumen-cargando">
+        <BloqueCarga className="min-h-[30vh]" />
       </div>
     );
   }

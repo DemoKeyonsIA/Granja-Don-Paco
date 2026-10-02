@@ -5,6 +5,7 @@ import { cn } from '../lib/utils';
 import Breadcrumb from './Breadcrumb';
 import WizardProgress from './WizardProgress';
 import { Factura, User, DetalleFactura, Cliente, InventarioItem, FacturaElectronica } from '../types';
+import { Spinner } from './Spinner';
 
 const DRAFT_KEY = 'granja_don_paco_draft_invoice';
 
@@ -786,7 +787,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                           <button onClick={() => handleConsolidarRuta(r.guiaId)} disabled={consolidandoRuta === r.guiaId}
                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 hover:opacity-90"
                             style={{ background: 'var(--brand-primary)', color: 'white' }}>
-                            {consolidandoRuta === r.guiaId ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                            {consolidandoRuta === r.guiaId ? <Spinner tamano="xs" /> : <FileText className="w-3.5 h-3.5" />}
                             Generar facturas
                           </button>
                         )}

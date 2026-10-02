@@ -3,6 +3,7 @@ import { Truck, RefreshCw, AlertTriangle, PackageOpen, Banknote, CreditCard, Rot
 import { User } from '../types';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { SpinnerConTexto } from './Spinner';
 
 interface TableroRutasProps {
   currentUser: User;
@@ -285,7 +286,7 @@ export default function TableroRutas({ currentUser }: TableroRutasProps) {
 
             {cargandoCuadre ? (
               <div className="text-center py-8 text-sm font-bold" style={{ color: 'var(--text-muted)' }}>
-                <RefreshCw className="w-5 h-5 mx-auto mb-2 animate-spin" /> Cargando cuadre…
+                <SpinnerConTexto tamano="md" className="justify-center">Cargando cuadre…</SpinnerConTexto>
               </div>
             ) : previewCuadre ? (
               <>

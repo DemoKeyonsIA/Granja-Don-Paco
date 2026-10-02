@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, PackageCheck, ScanLine, RefreshCw, Check, Boxes, Printer, ArrowDownToLine, X, Loader2 } from 'lucide-react';
+import { Truck, PackageCheck, ScanLine, RefreshCw, Check, Boxes, Printer, ArrowDownToLine, X } from 'lucide-react';
 import { User } from '../../types';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import { OPCIONES_DIFERENCIA_RECEPCION } from '../../lib/opcionesRecepcion';
+import { Spinner } from '../Spinner';
 
 interface Props {
   currentUser: User;
@@ -193,7 +194,7 @@ export default function DespachoAdmin({ currentUser, onRefresh }: Props) {
             <div className="flex justify-end space-x-3 mt-6">
               <button onClick={() => setShowTraslado(false)} className="px-4 py-2.5 rounded-lg text-sm font-bold bg-neutral-100 text-neutral-600 hover:bg-neutral-200">Cancelar</button>
               <button onClick={handleTraslado} disabled={isSubmittingTraslado || !productoTraslado || cantidadTraslado <= 0 || !responsableTraslado} className="bg-orange-600 hover:bg-orange-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 flex items-center">
-                {isSubmittingTraslado ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ArrowDownToLine className="w-4 h-4 mr-2" />}Registrar Salida de Granja
+                {isSubmittingTraslado ? <Spinner className="mr-2" /> : <ArrowDownToLine className="w-4 h-4 mr-2" />}Registrar Salida de Granja
               </button>
             </div>
           </div>
@@ -220,7 +221,7 @@ export default function DespachoAdmin({ currentUser, onRefresh }: Props) {
           <div className="flex justify-end">
             <button onClick={emitir} disabled={loading || !cartones}
               className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-bold text-sm hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center">
-              {loading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Truck className="w-4 h-4 mr-2" />}Emitir Guía
+              {loading ? <Spinner className="mr-2" /> : <Truck className="w-4 h-4 mr-2" />}Emitir Guía
             </button>
           </div>
         </div>
@@ -250,7 +251,7 @@ export default function DespachoAdmin({ currentUser, onRefresh }: Props) {
           <div className="flex justify-end">
             <button onClick={recibir} disabled={loading || !guiaIdRecibir}
               className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-bold text-sm hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center">
-              {loading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}Registrar Recepción
+              {loading ? <Spinner className="mr-2" /> : <Check className="w-4 h-4 mr-2" />}Registrar Recepción
             </button>
           </div>
         </div>
@@ -282,7 +283,7 @@ export default function DespachoAdmin({ currentUser, onRefresh }: Props) {
             <div className="flex justify-end">
               <button onClick={alistar} disabled={loading || !cartonesAlistar}
                 className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-bold text-sm hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center">
-                {loading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Boxes className="w-4 h-4 mr-2" />}Alistar y Etiquetar
+                {loading ? <Spinner className="mr-2" /> : <Boxes className="w-4 h-4 mr-2" />}Alistar y Etiquetar
               </button>
             </div>
           </div>

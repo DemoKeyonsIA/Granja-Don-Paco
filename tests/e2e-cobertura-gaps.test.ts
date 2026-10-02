@@ -177,9 +177,12 @@ describe('E2E — Gaps de cobertura: PUT rutas', () => {
     expect(editada.estado).toBe('Inactiva');
   });
 
-  it('PUT /api/rutas/:id con id inexistente no rompe', async () => {
+  // Antes este caso solo pedía "que no rompa": la ruta hacía update sobre un id
+  // inexistente y devolvía 200, así que un cliente que editaba una ruta ya
+  // borrada creía que el cambio se había guardado.
+  it('PUT /api/rutas/:id con id inexistente responde 404', async () => {
     const res = await request(app).put('/api/rutas/no-existe').send({ nombre: 'Nada' });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
   });
 });
 

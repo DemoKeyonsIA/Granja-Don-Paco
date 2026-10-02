@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, Check, ChevronLeft, ChevronRight, X, Loader2, Package, AlertCircle } from 'lucide-react';
+import { Truck, Check, ChevronLeft, ChevronRight, X, Package, AlertCircle } from 'lucide-react';
 import { User } from '../types';
 import { toast } from 'sonner';
+import { BloqueCarga, SpinnerConTexto } from './Spinner';
 
 type CargaItem = { trasladoId: string; granjaOrigenId?: string; producto: string; cantidad: number; unidad: string };
 type Carga = {
@@ -90,9 +91,7 @@ export default function CamioneroMovil({ currentUser }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin" style={{ color: 'var(--brand-primary)' }} />
-      </div>
+      <BloqueCarga className="min-h-[60vh]" />
     );
   }
 
@@ -155,7 +154,7 @@ export default function CamioneroMovil({ currentUser }: Props) {
                   className="w-full py-5 rounded-2xl text-lg font-black transition-all active:scale-[0.97] disabled:opacity-60"
                   style={{ background: '#16a34a', color: '#fff', boxShadow: '0 8px 24px rgba(22,163,74,0.3)' }}>
                   {sendingAction === 'confirm' ? (
-                    <span className="flex items-center justify-center gap-3"><Loader2 className="w-6 h-6 animate-spin" /> Confirmando...</span>
+                    <SpinnerConTexto tamano="md" className="justify-center">Confirmando...</SpinnerConTexto>
                   ) : (
                     <span className="flex items-center justify-center gap-2"><Check className="w-5 h-5" /> Confirmar carga</span>
                   )}

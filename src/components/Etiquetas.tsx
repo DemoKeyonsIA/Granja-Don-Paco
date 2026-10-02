@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Tag, Plus, Search, QrCode, Check, X, Package, MapPin, Clock, CheckCircle, XCircle, RefreshCw, Printer } from 'lucide-react';
+import { Tag, Plus, Search, QrCode, Check, X, Package, MapPin, Clock, CheckCircle, XCircle, Printer } from 'lucide-react';
 import { Etiqueta, User } from '../types';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { Spinner } from './Spinner';
 
 interface EtiquetasProps {
   currentUser: User;
@@ -307,7 +308,7 @@ producto, cantidad, pesoBruto, pesoNeto, granjaOrigen, galeronOrigen, clasificac
           <div className="mt-4 flex justify-end">
             <button onClick={handleGenerar} disabled={loading}
               className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-bold text-sm hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center">
-              {loading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Tag className="w-4 h-4 mr-2" />}
+                {loading ? <Spinner className="mr-2" /> : <Tag className="w-4 h-4 mr-2" />}
               Generar {cantidadEtiquetas > 1 ? `${cantidadEtiquetas} Etiquetas` : 'Etiqueta'}
             </button>
           </div>

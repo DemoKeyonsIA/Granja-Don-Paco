@@ -1,3 +1,28 @@
+/**
+ * SMOKE MAESTRO — cobertura de endpoints.
+ *
+ * Este archivo responde una sola pregunta: ¿está toda la API de pie? Antes
+ * vivía como 74 casos escritos a mano, lo que hacía imposible saber si faltaba
+ * alguno. Ahora el inventario vive en tablas y un guard (bloque "Cobertura")
+ * parsea `server.ts` para fallar en el momento en que se registre una ruta que
+ * las tablas no conocen. Agregar un endpoint obliga a decidir su contrato.
+ *
+ * Contrato por clase de ruta, medido contra la app real:
+ *   - GET de lectura sin parámetros -> 200 con la forma declarada.
+ *   - GET que exige parámetro        -> 400 (no 200 con datos inventados).
+ *   - GET que exige sesión           -> 401.
+ *   - POST de escritura             -> 4xx con cuerpo vacío; nunca 500.
+ *   - Ruta con :param               -> 4xx ante un id inexistente.
+ *
+ * Excluidas a propósito: las rutas que llaman a Gemini (`/api/extract`,
+ * `/api/predict-load`, `/api/ai/*`, `/api/chat/estela`) necesitan
+ * `GEMINI_API_KEY`, así que no son verificables en un smoke sin red. El guard de
+ * cobertura las conoce por nombre para que la exclusión sea explícita y no una
+ * ruta que se pierde en silencio.
+ *
+ * La profundidad de comportamiento (cadena de custodia, precios, roles,
+ * conciliaciones) vive en los archivos e2e-*. Este archivo no los repite.
+ */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { drizzle } from 'drizzle-orm/libsql';
@@ -10,7 +35,6 @@ import { ejecutarDdl } from './helpers/db';
 
 let app: Express;
 const DB_PATH = path.resolve(process.cwd(), '.test-smoke.db');
-
 
 beforeAll(async () => {
   if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
@@ -27,297 +51,307 @@ afterAll(() => {
   try { if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH); } catch {}
 });
 
-describe('SMOKE — Todos los endpoints responden', () => {
-  it('GET /api/inventario', async () => {
-    const res = await request(app).get('/api/inventario');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
+// ---------------------------------------------------------------------------
+// Inventario de rutas
+// ---------------------------------------------------------------------------
 
-  it('GET /api/inventario/movimientos', async () => {
-    const res = await request(app).get('/api/inventario/movimientos');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
+/** Lecturas que responden 200 con una lista. */
+const LECTURAS_LISTA: string[] = [
+  '/api/inventario', '/api/inventario/movimientos', '/api/facturas', '/api/gastos',
+  '/api/granjas', '/api/galerones', '/api/lotes', '/api/mantenimientos', '/api/produccion/historial',
+  '/api/camiones', '/api/rutas', '/api/etiquetas', '/api/pesos', '/api/vacunaciones',
+  '/api/alimento', '/api/alimento/consumo', '/api/activos', '/api/ordenes-mantenimiento',
+  '/api/desperdicios', '/api/precios/listas', '/api/precios/historial', '/api/auditoria',
+  '/api/aprobaciones', '/api/reportes/ventas-por-ruta', '/api/reportes/produccion',
+  '/api/reportes/inventario', '/api/reportes/desperdicios', '/api/users', '/api/clientes',
+  '/api/productos-catalogo', '/api/tipos-carton', '/api/incidentes',
+  '/api/operaciones/traslados', '/api/operaciones/cargas', '/api/operaciones/recepciones',
+  '/api/operaciones/remisiones', '/api/logistica/camiones', '/api/logistica/guias',
+  '/api/logistica/guias-activas', '/api/facturacion/documentos',
+];
 
-  it('GET /api/facturas', async () => {
-    const res = await request(app).get('/api/facturas');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
+/**
+ * Lecturas que responden 200 con un objeto. `claves` son las que la UI consume
+ * por nombre: si una se renombra en el servidor, la pantalla se cae en silencio
+ * y un `200` no lo delata.
+ */
+const LECTURAS_OBJETO: Array<{ ruta: string; claves: string[] }> = [
+  { ruta: '/api/logistica/auditoria', claves: ['facturas', 'totalCargado'] },
+  { ruta: '/api/clientes/cartera', claves: ['total', 'clientes'] },
+  { ruta: '/api/clientes/analisis', claves: ['periodo', 'totalClientes', 'ventaDelMes'] },
+  { ruta: '/api/logistica/tablero', claves: ['fecha', 'guias'] },
+  { ruta: '/api/facturacion/rutas-dia', claves: ['fecha', 'rutas'] },
+  { ruta: '/api/bodega/stock', claves: ['ubicacion', 'kpis', 'productos', 'colaFEFO'] },
+  { ruta: '/api/pesos/trazabilidad', claves: ['pesos', 'resumen'] },
+  { ruta: '/api/pesos/conciliacion', claves: ['porUbicacion', 'totalRegistros'] },
+  { ruta: '/api/vacunaciones/alertas', claves: ['proximas', 'vencidas', 'totalProgramadas'] },
+  { ruta: '/api/alimento/alertas', claves: ['bajoInventario', 'totalSilos'] },
+  { ruta: '/api/ordenes-mantenimiento/alertas', claves: ['vencidas', 'proximas', 'totalPendientes'] },
+  { ruta: '/api/desperdicios/resumen', claves: ['porOrigen', 'impactoTotal', 'totalRegistros'] },
+  { ruta: '/api/desperdicios/patrones', claves: ['rango', 'totales', 'porRuta', 'porVendedor'] },
+  { ruta: '/api/dashboard/enterprise', claves: ['ingresosHoy', 'gastosHoy', 'utilidadNeta'] },
+  { ruta: '/api/dashboard/produccion-detalle', claves: ['porGranja', 'resumen'] },
+  { ruta: '/api/aprobaciones/pendientes', claves: ['count', 'items'] },
+  { ruta: '/api/finanzas/resumen', claves: ['periodo', 'ingresosFacturados', 'gastos', 'utilidad'] },
+  { ruta: '/api/reportes/flujo-caja', claves: ['periodo', 'ingresosFacturados', 'gastos', 'utilidad'] },
+  { ruta: '/api/reportes/financiero', claves: ['totalVentas', 'totalGastos', 'utilidadNeta', 'margen'] },
+];
 
-  it('GET /api/gastos', async () => {
-    const res = await request(app).get('/api/gastos');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
+/** Lecturas que sin el parámetro obligatorio deben pedirlo (400), no improvisar. */
+const LECTURAS_EXIGEN_PARAMETRO: string[] = [
+  '/api/logistica/cuadre-central', '/api/precios/lookup', '/api/roles/permisos',
+];
 
-  it('POST /api/gastos — crear gasto', async () => {
-    const res = await request(app).post('/api/gastos').send({
-      fecha: new Date().toISOString(),
-      categoria: 'Diesel',
-      monto: 15000,
-      descripcion: 'Prueba smoke test',
-      usuarioId: 'test-user-001'
+/** Lecturas detrás de sesión: sin cookie responden 401 y no 200 con datos de otro. */
+const LECTURAS_EXIGEN_SESION: string[] = [
+  '/api/auth/me',
+  '/api/office/resumen', '/api/office/cuentas', '/api/office/mensajes',
+  '/api/office/arbol', '/api/office/documentos', '/api/office/vinculaciones',
+];
+
+/** Escrituras que validan el cuerpo y responden 400. */
+const ESCRITURAS_VALIDAN: string[] = [
+  '/api/produccion/recoleccion', '/api/gastos', '/api/granjas/wizard', '/api/granjas',
+  '/api/galerones',
+  '/api/lotes', '/api/mantenimientos', '/api/operaciones/traslado', '/api/camiones',
+  '/api/operaciones/recepcion', '/api/operaciones/remision', '/api/operaciones/recepcion-remision',
+  '/api/operaciones/alistamiento', '/api/clientes', '/api/rutas', '/api/logistica/camiones',
+  '/api/logistica/guias', '/api/logistica/cargar-camion', '/api/logistica/cierre-ruta',
+  '/api/logistica/caja/venta', '/api/logistica/caja/devolucion', '/api/logistica/caja/fin-dia',
+  '/api/logistica/cuadre-central', '/api/etiquetas/generar', '/api/etiquetas/generar-lote',
+  '/api/etiquetas/escanear', '/api/bodega/ingresar-etiquetas', '/api/bodega/ingreso-manual',
+  '/api/pesos/registrar', '/api/vacunaciones', '/api/alimento', '/api/alimento/consumo',
+  '/api/activos', '/api/ordenes-mantenimiento', '/api/desperdicios', '/api/precios/listas',
+  '/api/precios/detalle', '/api/precios/cambiar', '/api/auditoria', '/api/aprobaciones',
+  '/api/precios/lookup-multiple', '/api/users', '/api/productos-catalogo', '/api/tipos-carton',
+  '/api/precio-excepciones', '/api/incidentes', '/api/auth/login',
+];
+
+/** Escrituras detrás de sesión. */
+const ESCRITURAS_EXIGEN_SESION: string[] = [
+  '/api/ventas', '/api/pagos',
+  '/api/facturacion/crear-documento', '/api/facturacion/generar-xml', '/api/facturacion/enviar',
+  '/api/facturacion/consultar-estado', '/api/facturacion/nota-credito', '/api/facturacion/consolidar-ruta',
+  '/api/office/cuentas', '/api/office/sync', '/api/office/mensajes', '/api/office/documentos',
+  '/api/office/vinculaciones', '/api/office/vinculaciones/probar',
+];
+
+/**
+ * Rutas con :param contra un id inexistente. Tres devuelven 200 a propósito y por
+ * eso están anotadas: son borrados idempotentes y listados de "sin resultados",
+ * no recursos que existen. El resto debe rechazar.
+ */
+const CON_PARAMETRO: Array<{ metodo: string; patron: string; esperado: number; nota?: string }> = [
+  { metodo: 'GET', patron: '/api/facturas/:id/pagos', esperado: 404 },
+  { metodo: 'GET', patron: '/api/granjas/:id/detalle', esperado: 404 },
+  { metodo: 'GET', patron: '/api/clientes/:id/360', esperado: 404 },
+  { metodo: 'GET', patron: '/api/logistica/guias/:id', esperado: 404 },
+  { metodo: 'GET', patron: '/api/etiquetas/trazabilidad/:codigo', esperado: 404 },
+  { metodo: 'GET', patron: '/api/etiquetas/:codigo/qr.png', esperado: 404 },
+  { metodo: 'GET', patron: '/api/precios/detalle/:listaId', esperado: 200, nota: 'lista inexistente -> detalle vacío, no error' },
+  { metodo: 'GET', patron: '/api/precio-excepciones/:clienteId', esperado: 200, nota: 'cliente sin excepciones -> lista vacía' },
+
+  { metodo: 'PUT', patron: '/api/mantenimientos/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/granjas/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/galerones/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/lotes/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/camiones/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/clientes/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/rutas/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/vacunaciones/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/ordenes-mantenimiento/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/users/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/productos-catalogo/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/tipos-carton/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/aprobaciones/:id', esperado: 400, nota: 'rechaza el cuerpo vacío antes de buscar el id' },
+
+  { metodo: 'PATCH', patron: '/api/incidentes/:id', esperado: 404 },
+
+  { metodo: 'DELETE', patron: '/api/galerones/:id', esperado: 404 },
+  { metodo: 'DELETE', patron: '/api/lotes/:id', esperado: 404 },
+  { metodo: 'DELETE', patron: '/api/camiones/:id', esperado: 404 },
+  { metodo: 'DELETE', patron: '/api/clientes/:id', esperado: 200, nota: 'borrado idempotente' },
+  { metodo: 'DELETE', patron: '/api/users/:id', esperado: 404 },
+  { metodo: 'DELETE', patron: '/api/productos-catalogo/:id', esperado: 404 },
+  { metodo: 'DELETE', patron: '/api/tipos-carton/:id', esperado: 404 },
+  { metodo: 'DELETE', patron: '/api/precio-excepciones/:id', esperado: 404 },
+
+  { metodo: 'POST', patron: '/api/operaciones/carga/:cargaId/confirmar', esperado: 400 },
+  { metodo: 'POST', patron: '/api/operaciones/carga/:cargaId/rechazar', esperado: 400 },
+  { metodo: 'POST', patron: '/api/logistica/guias/:id/marcar-en-ruta', esperado: 404 },
+  { metodo: 'POST', patron: '/api/logistica/guias/:id/cerrar', esperado: 404 },
+  { metodo: 'POST', patron: '/api/office/mensajes/:id/leer', esperado: 401 },
+  { metodo: 'POST', patron: '/api/office/documentos/:id/vincular', esperado: 401 },
+  { metodo: 'DELETE', patron: '/api/office/cuentas/:id', esperado: 401 },
+  { metodo: 'DELETE', patron: '/api/office/vinculaciones/:id', esperado: 401 },
+  { metodo: 'GET', patron: '/api/office/mensajes/:threadId', esperado: 401 },
+];
+
+/** Rutas que dependen de Gemini y por eso el smoke no las puede sondear. */
+const EXCLUIDAS_POR_GEMINI: string[] = [
+  '/api/extract', '/api/predict-load', '/api/chat/estela',
+  '/api/ai/ceres', '/api/ai/vega', '/api/ai/nash', '/api/ai/houston',
+  '/api/ai/magnetar', '/api/ai/nova', '/api/ai/tales',
+];
+
+const ID_FALSO = 'no-existe-000';
+
+// ---------------------------------------------------------------------------
+// Runner agregado
+// ---------------------------------------------------------------------------
+
+type Sondeo = { etiqueta: string; ejecutar: () => Promise<{ status: number; body: any }>; verificar?: (res: { status: number; body: any }) => string | null };
+
+/**
+ * Corre todos los sondeos y acumula los fallos en vez de cortar en el primero:
+ * un smoke que se detiene en el primer endpoint caído esconde los otros. El
+ * mensaje final lista los que fallaron juntos.
+ */
+async function sondeosAgregados(sondeos: Sondeo[]): Promise<void> {
+  const fallos: string[] = [];
+  for (const s of sondeos) {
+    const res = await s.ejecutar();
+    const problema = res.status >= 500
+      ? ` — 500 con ${JSON.stringify(res.body).slice(0, 160)}`
+      : s.verificar?.(res);
+    if (problema) fallos.push(`${s.etiqueta}${problema}`);
+  }
+  expect(fallos, fallos.length ? `\n${fallos.join('\n')}` : '').toEqual([]);
+}
+
+const metodo = (m: string) => (m === 'GET' ? 'get' : m === 'PUT' ? 'put' : m === 'PATCH' ? 'patch' : m === 'DELETE' ? 'delete' : 'post') as 'get' | 'post' | 'put' | 'patch' | 'delete';
+
+function llamar(m: string, ruta: string, cuerpo?: any) {
+  return (request(app) as any)[metodo(m)](ruta).send(cuerpo);
+}
+
+/** El sufijo del mensaje; la etiqueta la antepone el runner. */
+const esperando = (esperado: number) => (res: { status: number }) =>
+  res.status === esperado ? null : ` — esperaba ${esperado} y recibió ${res.status}`;
+
+// ---------------------------------------------------------------------------
+
+describe('SMOKE maestro — inventario de endpoints', () => {
+  describe('Cobertura: toda ruta registrada en server.ts está en una tabla', () => {
+    it('ninguna ruta registrada quedó fuera del inventario', () => {
+      const fuente = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8');
+      const registradas: Array<{ metodo: string; ruta: string }> = [];
+      const re = /app\.(get|post|put|patch|delete)\s*\(\s*(['"`])([^'"`]+)\2/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(fuente))) {
+        const ruta = m[3].split('?')[0];
+        if (ruta === '*') continue; // fallback SPA, no es un endpoint
+        registradas.push({ metodo: m[1].toUpperCase(), ruta });
+      }
+
+      const aPatron = (ruta: string) => ruta.replace(/\/:\w+/g, '/*');
+      const cubiertas = new Set<string>([
+        ...LECTURAS_LISTA.map((r) => `GET ${aPatron(r)}`),
+        ...LECTURAS_OBJETO.map((l) => `GET ${aPatron(l.ruta)}`),
+        ...LECTURAS_EXIGEN_PARAMETRO.map((r) => `GET ${aPatron(r)}`),
+        ...LECTURAS_EXIGEN_SESION.map((r) => `GET ${aPatron(r)}`),
+        ...ESCRITURAS_VALIDAN.map((r) => `POST ${aPatron(r)}`),
+        ...ESCRITURAS_EXIGEN_SESION.map((r) => `POST ${aPatron(r)}`),
+        ...EXCLUIDAS_POR_GEMINI.map((r) => `POST ${aPatron(r)}`),
+        ...CON_PARAMETRO.map((r) => `${r.metodo} ${aPatron(r.patron)}`),
+        'POST /api/auth/logout', // 200 sin cuerpo: cierra sesión, no valida nada
+      ]);
+
+      const sinCubrir = registradas
+        .map((r) => `${r.metodo} ${aPatron(r.ruta)}`)
+        .filter((clave) => !cubiertas.has(clave));
+
+      expect(sinCubrir, `rutas nuevas sin smoke:\n${sinCubrir.join('\n')}`).toEqual([]);
+      expect(registradas.length, 'el inventario de server.ts cambió de tamaño; revisá las tablas').toBeGreaterThan(140);
     });
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
   });
 
-  it('GET /api/clientes', async () => {
-    const res = await request(app).get('/api/clientes');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('POST /api/clientes — crear cliente', async () => {
-    const res = await request(app).post('/api/clientes').send({
-      nombre: 'Cliente Test',
-      telefono: '8888-0000',
-      ruta: 'Ruta Test',
-      condicion_pago: 'Contado'
+  describe('Lecturas', () => {
+    it('todo GET de lista responde 200 con un arreglo', () => {
+      return sondeosAgregados(LECTURAS_LISTA.map((ruta) => ({
+        etiqueta: `GET ${ruta}`,
+        ejecutar: () => request(app).get(ruta),
+        verificar: (res) => {
+          if (res.status !== 200) return `GET ${ruta} — esperaba 200 y recibió ${res.status}`;
+          if (!Array.isArray(res.body)) return `GET ${ruta} — esperaba un arreglo y recibió ${JSON.stringify(res.body).slice(0, 80)}`;
+          return null;
+        },
+      })));
     });
-    expect(res.status).toBe(201);
-    expect(res.body.success).toBe(true);
-  });
 
-  it('GET /api/rutas', async () => {
-    const res = await request(app).get('/api/rutas');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('POST /api/rutas — crear ruta', async () => {
-    const res = await request(app).post('/api/rutas').send({
-      nombre: 'Ruta Test',
-      vendedor_asignado: 'Vendedor Test'
+    it('todo GET de objeto responde 200 con las claves que la UI consume', () => {
+      return sondeosAgregados(LECTURAS_OBJETO.map(({ ruta, claves }) => ({
+        etiqueta: `GET ${ruta}`,
+        ejecutar: () => request(app).get(ruta),
+        verificar: (res) => {
+          if (res.status !== 200) return `GET ${ruta} — esperaba 200 y recibió ${res.status}`;
+          const faltantes = claves.filter((k) => !(k in (res.body ?? {})));
+          return faltantes.length ? `GET ${ruta} — le faltan las claves ${faltantes.join(', ')}` : null;
+        },
+      })));
     });
-    expect(res.status).toBe(201);
-    expect(res.body.success).toBe(true);
+
+    it('los GET que exigen parámetro responden 400 en vez de improvisar datos', () => {
+      return sondeosAgregados(LECTURAS_EXIGEN_PARAMETRO.map((ruta) => ({
+        etiqueta: `GET ${ruta}`,
+        ejecutar: () => request(app).get(ruta),
+        verificar: esperando(400),
+      })));
+    });
+
+    it('los GET detrás de sesión responden 401 y no datos', () => {
+      return sondeosAgregados(LECTURAS_EXIGEN_SESION.map((ruta) => ({
+        etiqueta: `GET ${ruta}`,
+        ejecutar: () => request(app).get(ruta),
+        verificar: esperando(401),
+      })));
+    });
   });
 
-  it('GET /api/granjas', async () => {
-    const res = await request(app).get('/api/granjas');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
+  describe('Escrituras', () => {
+    it('todo POST de escritura rechaza el cuerpo vacío con 400', () => {
+      return sondeosAgregados(ESCRITURAS_VALIDAN.map((ruta) => ({
+        etiqueta: `POST ${ruta}`,
+        ejecutar: () => request(app).post(ruta).send({}),
+        verificar: esperando(400),
+      })));
+    });
+
+    it('los POST detrás de sesión responden 401 y no escriben', () => {
+      return sondeosAgregados(ESCRITURAS_EXIGEN_SESION.map((ruta) => ({
+        etiqueta: `POST ${ruta}`,
+        ejecutar: () => request(app).post(ruta).send({}),
+        verificar: esperando(401),
+      })));
+    });
+
+    it('POST /api/auth/logout responde 200 sin cuerpo', async () => {
+      const res = await request(app).post('/api/auth/logout').send({});
+      expect(res.status).toBe(200);
+    });
   });
 
-  it('GET /api/galerones', async () => {
-    const res = await request(app).get('/api/galerones');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
+  describe('Rutas con :param', () => {
+    it('ninguna revienta ni se hace la loca ante un id inexistente', () => {
+      return sondeosAgregados(CON_PARAMETRO.map(({ metodo: m, patron, esperado, nota }) => ({
+        etiqueta: `${m} ${patron}`,
+        ejecutar: () => llamar(m, patron.replace(/:(\w+)/g, ID_FALSO), {}),
+        verificar: (res) => {
+          if (res.status === esperado) return null;
+          return ` — esperaba ${esperado} y recibió ${res.status}${nota ? ` (${nota})` : ''}`;
+        },
+      })));
+    });
   });
+});
 
-  it('GET /api/lotes', async () => {
-    const res = await request(app).get('/api/lotes');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/mantenimientos', async () => {
-    const res = await request(app).get('/api/mantenimientos');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/produccion/historial', async () => {
-    const res = await request(app).get('/api/produccion/historial');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/produccion/historial con filtro granjaId', async () => {
-    const res = await request(app).get('/api/produccion/historial?granjaId=any');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('POST /api/granjas/wizard con solo nombre', async () => {
-    const res = await request(app).post('/api/granjas/wizard').send({ nombre: 'Test Smoke Wizard' });
-    expect(res.status).toBe(201);
-  });
-
-  it('POST /api/granjas/wizard falla sin nombre', async () => {
-    const res = await request(app).post('/api/granjas/wizard').send({});
-    expect(res.status).toBe(400);
-  });
-
-  it('PUT /api/lotes/:id falla con ID inexistente', async () => {
-    const res = await request(app).put('/api/lotes/no-id').send({ cantidad_inicial: 100 });
-    expect(res.status).toBe(404);
-  });
-
-  it('DELETE /api/lotes/:id falla con ID inexistente', async () => {
-    const res = await request(app).delete('/api/lotes/no-id');
-    expect(res.status).toBe(404);
-  });
-
-  it('GET /api/granjas/:id/detalle falla con ID inexistente', async () => {
-    const res = await request(app).get('/api/granjas/no-id/detalle');
-    expect(res.status).toBe(404);
-  });
-
-  it('GET /api/operaciones/traslados', async () => {
-    const res = await request(app).get('/api/operaciones/traslados');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/logistica/auditoria', async () => {
-    const res = await request(app).get('/api/logistica/auditoria?ruta=Camión Ruta 1');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('facturas');
-    expect(res.body).toHaveProperty('totalCargado');
-  });
-
-  it('POST /api/clientes — falla sin nombre', async () => {
-    const res = await request(app).post('/api/clientes').send({});
-    expect(res.status).toBe(400);
-  });
-
-  it('POST /api/rutas — falla sin nombre', async () => {
-    const res = await request(app).post('/api/rutas').send({});
-    expect(res.status).toBe(400);
-  });
-
-  it('POST /api/produccion/recoleccion — falla sin galerón', async () => {
-    const res = await request(app).post('/api/produccion/recoleccion').send({ galeron: null, detalles: [] });
-    expect(res.status).toBe(400);
-  });
-
-  // Phase 3 Smoke Tests
-  it('GET /api/facturacion/documentos', async () => {
-    const res = await request(app).get('/api/facturacion/documentos');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/etiquetas', async () => {
-    const res = await request(app).get('/api/etiquetas');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/pesos', async () => {
-    const res = await request(app).get('/api/pesos');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/pesos/trazabilidad', async () => {
-    const res = await request(app).get('/api/pesos/trazabilidad');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('pesos');
-    expect(res.body).toHaveProperty('resumen');
-  });
-
-  it('GET /api/pesos/conciliacion', async () => {
-    const res = await request(app).get('/api/pesos/conciliacion');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('porUbicacion');
-  });
-
-  it('POST /api/facturacion/crear-documento — falla sin datos', async () => {
-    const res = await request(app).post('/api/facturacion/crear-documento').set('x-user-id', '1').send({});
-    expect(res.status).toBe(400);
-  });
-
-  it('POST /api/etiquetas/generar — falla sin producto', async () => {
-    const res = await request(app).post('/api/etiquetas/generar').send({ cantidad: 10 });
-    expect(res.status).toBe(400);
-  });
-
-  it('POST /api/pesos/registrar — falla sin datos', async () => {
-    const res = await request(app).post('/api/pesos/registrar').send({});
-    expect(res.status).toBe(400);
-  });
-
-  // Phase 4 Smoke Tests
-  it('GET /api/vacunaciones', async () => {
-    const res = await request(app).get('/api/vacunaciones');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/vacunaciones/alertas', async () => {
-    const res = await request(app).get('/api/vacunaciones/alertas');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('vencidas');
-  });
-
-  it('GET /api/alimento', async () => {
-    const res = await request(app).get('/api/alimento');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/alimento/consumo', async () => {
-    const res = await request(app).get('/api/alimento/consumo');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/alimento/alertas', async () => {
-    const res = await request(app).get('/api/alimento/alertas');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('bajoInventario');
-  });
-
-  it('GET /api/activos', async () => {
-    const res = await request(app).get('/api/activos');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/ordenes-mantenimiento', async () => {
-    const res = await request(app).get('/api/ordenes-mantenimiento');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/ordenes-mantenimiento/alertas', async () => {
-    const res = await request(app).get('/api/ordenes-mantenimiento/alertas');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('vencidas');
-  });
-
-  it('GET /api/desperdicios', async () => {
-    const res = await request(app).get('/api/desperdicios');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/desperdicios/resumen', async () => {
-    const res = await request(app).get('/api/desperdicios/resumen');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('porOrigen');
-  });
-
-  it('GET /api/precios/listas', async () => {
-    const res = await request(app).get('/api/precios/listas');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/precios/historial', async () => {
-    const res = await request(app).get('/api/precios/historial');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/dashboard/enterprise', async () => {
-    const res = await request(app).get('/api/dashboard/enterprise');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('ingresosHoy');
-    expect(res.body).toHaveProperty('alertas');
-  });
-
+describe('SMOKE maestro — contratos que la UI consume por nombre', () => {
   /**
-   * Fase 5: desde que el módulo Centro de Mando salió del sidebar, este endpoint
-   * no alimenta una pantalla propia sino la columna "Salud del negocio" de
-   * Resumen. `FinanzasResumen` elige las claves una por una y, si falta alguna,
-   * oculta el bloque en vez de inventar ceros; este caso es lo que avisa del
-   * cambio de nombre antes de que el bloque desaparezca en silencio.
+   * Desde que el módulo Centro de Mando salió del sidebar, este endpoint no
+   * alimenta una pantalla propia sino la columna "Salud del negocio" de Resumen.
+   * `FinanzasResumen` elige las claves una por una y, si falta alguna, oculta el
+   * bloque en vez de inventar ceros; este caso avisa del cambio de nombre antes
+   * de que el bloque desaparezca en silencio.
    */
   it('GET /api/dashboard/enterprise — las 7 claves que lee Resumen', async () => {
     const res = await request(app).get('/api/dashboard/enterprise');
@@ -344,108 +378,25 @@ describe('SMOKE — Todos los endpoints responden', () => {
     expect(res.body.cicloDelDinero).toHaveLength(6);
   });
 
-  it('GET /api/auditoria', async () => {
-    const res = await request(app).get('/api/auditoria');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
+  // Resumen y Flujo de Caja muestran el mismo P&L: si divergieran, una de las dos
+  // pantallas estaría mintiendo. La comparación exacta vive en
+  // `e2e-finanzas-roles.test.ts`; acá solo se ata que ambas rutas existen.
+  it('finanzas/resumen y reportes/flujo-caja exponen el mismo P&L', async () => {
+    const [resumen, flujo] = await Promise.all([
+      request(app).get('/api/finanzas/resumen'),
+      request(app).get('/api/reportes/flujo-caja'),
+    ]);
+    for (const cuerpo of [resumen.body, flujo.body]) {
+      expect(Array.isArray(cuerpo.cicloDelDinero)).toBe(true);
+      expect(cuerpo).toHaveProperty('aging');
+      expect(cuerpo).toHaveProperty('cuentasPorCobrar');
+    }
   });
 
-  it('POST /api/vacunaciones — falla sin datos', async () => {
-    const res = await request(app).post('/api/vacunaciones').send({});
-    expect(res.status).toBe(400);
-  });
-
-  it('POST /api/alimento — falla sin datos', async () => {
-    const res = await request(app).post('/api/alimento').send({});
-    expect(res.status).toBe(400);
-  });
-
-  it('POST /api/desperdicios — falla sin datos', async () => {
-    const res = await request(app).post('/api/desperdicios').send({});
-    expect(res.status).toBe(400);
-  });
-
-  it('POST /api/ordenes-mantenimiento — falla sin datos', async () => {
-    const res = await request(app).post('/api/ordenes-mantenimiento').send({});
-    expect(res.status).toBe(400);
-  });
-
-  it('POST /api/precios/listas — falla sin datos', async () => {
-    const res = await request(app).post('/api/precios/listas').send({});
-    expect(res.status).toBe(400);
-  });
-
-  it('POST /api/auditoria — falla sin datos', async () => {
-    const res = await request(app).post('/api/auditoria').send({});
-    expect(res.status).toBe(400);
-  });
-
-  // Phase 5 Smoke Tests
-  it('GET /api/aprobaciones', async () => {
-    const res = await request(app).get('/api/aprobaciones');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/aprobaciones/pendientes', async () => {
-    const res = await request(app).get('/api/aprobaciones/pendientes');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('count');
-    expect(res.body).toHaveProperty('items');
-  });
-
-  it('POST /api/aprobaciones — falla sin datos', async () => {
-    const res = await request(app).post('/api/aprobaciones').send({});
-    expect(res.status).toBe(400);
-  });
-
-  it('GET /api/precios/lookup — falla sin producto', async () => {
-    const res = await request(app).get('/api/precios/lookup');
-    expect(res.status).toBe(400);
-  });
-
-  it('GET /api/precios/lookup — producto inexistente', async () => {
-    const res = await request(app).get('/api/precios/lookup?producto=NoExiste');
-    expect(res.status).toBe(404);
-  });
-
-  it('GET /api/reportes/ventas-por-ruta', async () => {
-    const res = await request(app).get('/api/reportes/ventas-por-ruta');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/reportes/produccion', async () => {
-    const res = await request(app).get('/api/reportes/produccion');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/reportes/inventario', async () => {
-    const res = await request(app).get('/api/reportes/inventario');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/reportes/desperdicios', async () => {
-    const res = await request(app).get('/api/reportes/desperdicios');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  it('GET /api/reportes/financiero', async () => {
-    const res = await request(app).get('/api/reportes/financiero');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('totalVentas');
-    expect(res.body).toHaveProperty('utilidadNeta');
-    expect(res.body).toHaveProperty('margen');
-  });
-
-  // Los cinco reportes ya se cubren uno a uno arriba. Este caso ata el conjunto:
-  // los ids que el cliente pide tienen que existir como rutas. El bug 1 fue
-  // precisamente un id (`ventas-ruta`) que el cliente pedía y el servidor no
-  // servía, de modo que el reporte se veía vacío en vez de roto.
-  // Fase 4 sumó `flujo-caja` a la lista: es la sexta sub-fila de Analítica.
+  // Los reportes ya se cubren uno a uno arriba. Este caso ata el conjunto: los ids
+  // que Reportes.tsx pide tienen que existir como rutas. El bug 1 fue precisamente
+  // un id (`ventas-ruta`) que el cliente pedía y el servidor no servía, de modo
+  // que el reporte se veía vacío en vez de roto.
   it('todos los reportes que consume Reportes.tsx resuelven 200', async () => {
     const ids = ['financiero', 'flujo-caja', 'ventas-por-ruta', 'produccion', 'inventario', 'desperdicios'];
     for (const id of ids) {
@@ -454,64 +405,101 @@ describe('SMOKE — Todos los endpoints responden', () => {
     }
   });
 
-  // Resumen y Flujo de Caja muestran el mismo P&L: si divergieran, una de las dos
-  // pantallas estaría mintiendo. La comparación exacta vive en
-  // `e2e-finanzas-roles.test.ts`; acá solo se ata que ambas rutas existen.
-  it('GET /api/finanzas/resumen y /api/reportes/flujo-caja responden 200', async () => {
-    const [resumen, flujo] = await Promise.all([
-      request(app).get('/api/finanzas/resumen'),
-      request(app).get('/api/reportes/flujo-caja'),
-    ]);
-    expect(resumen.status).toBe(200);
-    expect(flujo.status).toBe(200);
-    for (const cuerpo of [resumen.body, flujo.body]) {
-      expect(Array.isArray(cuerpo.cicloDelDinero)).toBe(true);
-      expect(cuerpo).toHaveProperty('aging');
-      expect(cuerpo).toHaveProperty('cuentasPorCobrar');
-    }
+  it('GET /api/roles/permisos — Admin, Vendedor y rol inválido', async () => {
+    const admin = await request(app).get('/api/roles/permisos?role=Admin');
+    expect(admin.status).toBe(200);
+    expect(admin.body.view).toContain('*');
+    expect(admin.body.approve).toContain('*');
+
+    const vendedor = await request(app).get('/api/roles/permisos?role=Vendedor');
+    expect(vendedor.status).toBe(200);
+    expect(vendedor.body.view).toContain('rutas_propias');
+    expect(vendedor.body.create).toContain('ventas');
+
+    const invalido = await request(app).get('/api/roles/permisos?role=FakeRole');
+    expect(invalido.status).toBe(400);
   });
 
-  it('GET /api/users', async () => {
-    const res = await request(app).get('/api/users');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
+  it('GET /api/precios/lookup — 400 sin producto, 404 si no existe', async () => {
+    expect((await request(app).get('/api/precios/lookup')).status).toBe(400);
+    expect((await request(app).get('/api/precios/lookup?producto=NoExiste')).status).toBe(404);
   });
 
-  it('GET /api/roles/permisos — Admin', async () => {
-    const res = await request(app).get('/api/roles/permisos?role=Admin');
-    expect(res.status).toBe(200);
-    expect(res.body.view).toContain('*');
-    expect(res.body.approve).toContain('*');
-  });
-
-  it('GET /api/roles/permisos — Vendedor', async () => {
-    const res = await request(app).get('/api/roles/permisos?role=Vendedor');
-    expect(res.status).toBe(200);
-    expect(res.body.view).toContain('rutas_propias');
-    expect(res.body.create).toContain('ventas');
-  });
-
-  it('GET /api/roles/permisos — rol inválido', async () => {
-    const res = await request(app).get('/api/roles/permisos?role=FakeRole');
+  it('POST /api/produccion/recoleccion — falla sin galerón', async () => {
+    const res = await request(app).post('/api/produccion/recoleccion').send({ galeron: null, detalles: [] });
     expect(res.status).toBe(400);
   });
 
-  it('POST /api/ventas — auto-aplica precio de lista', async () => {
-    // Create a client first
+  it('POST /api/granjas/wizard — crea con nombre, rechaza sin nombre', async () => {
+    const creada = await request(app).post('/api/granjas/wizard').send({ nombre: 'Test Smoke Wizard' });
+    expect(creada.status).toBe(201);
+    const sinNombre = await request(app).post('/api/granjas/wizard').send({});
+    expect(sinNombre.status).toBe(400);
+  });
+});
+
+describe('SMOKE maestro — escrituras detrás de sesión', () => {
+  /**
+   * Las seis rutas de facturación responden 401 sin sesión, así que el sondeo
+   * anterior solo probó el candado y nunca su validación. Con `x-user-id` se
+   * comprueba la segunda mitad del contrato: una vez autenticado, el cuerpo
+   * vacío tiene que rechazarse con 400 y no reventar con 500.
+   */
+  const FACTURACION: string[] = [
+    '/api/facturacion/crear-documento', '/api/facturacion/generar-xml', '/api/facturacion/enviar',
+    '/api/facturacion/consultar-estado', '/api/facturacion/nota-credito', '/api/facturacion/consolidar-ruta',
+  ];
+
+  it('con sesión, facturación rechaza el cuerpo vacío con 400', () => {
+    return sondeosAgregados(FACTURACION.map((ruta) => ({
+      etiqueta: `POST ${ruta} (autenticado)`,
+      ejecutar: () => request(app).post(ruta).set('x-user-id', '1').send({}),
+      verificar: esperando(400),
+    })));
+  });
+
+  // Escrituras felices mínimas: prueban que el camino de éxito sigue en pie, no
+  // solo que el endpoint rechaza. La profundidad vive en los e2e-*.
+  it('gastos, rutas y clientes aceptan una escritura válida', async () => {
+    const gasto = await request(app).post('/api/gastos').send({
+      fecha: new Date().toISOString(),
+      categoria: 'Diesel',
+      monto: 15000,
+      descripcion: 'Prueba smoke test',
+      usuarioId: 'test-user-001',
+    });
+    expect(gasto.status).toBe(200);
+    expect(gasto.body.success).toBe(true);
+
+    const ruta = await request(app).post('/api/rutas').send({ nombre: 'Ruta Test', vendedor_asignado: 'Vendedor Test' });
+    expect(ruta.status).toBe(201);
+    expect(ruta.body.success).toBe(true);
+
+    const cliente = await request(app).post('/api/clientes').send({ nombre: 'Cliente Test', telefono: '8888-0000', ruta: 'Ruta Test', condicion_pago: 'Contado' });
+    expect(cliente.status).toBe(201);
+    expect(cliente.body.success).toBe(true);
+  });
+
+  it('el historial de producción acepta el filtro de granja', async () => {
+    const res = await request(app).get('/api/produccion/historial?granjaId=any');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+});
+
+describe('SMOKE maestro — flujos con estado', () => {
+  it('POST /api/ventas — auto-aplica el precio de lista', async () => {
     const clientRes = await request(app).post('/api/clientes').send({ nombre: 'Test Client Precio', ruta: 'Ruta 1' });
     expect(clientRes.status).toBe(201);
     const clientId = clientRes.body.id;
 
-    // Create a price list
     const listaRes = await request(app).post('/api/precios/listas').send({ nombre: 'Lista Test', tipo: 'Global' });
     expect(listaRes.status).toBe(201);
     const listaId = listaRes.body.id;
 
-    // Add price detail
     const detRes = await request(app).post('/api/precios/detalle').send({ listaId, producto: 'Huevos - Smoke TEST', precioUnitario: 2500 });
     expect(detRes.status).toBe(201);
 
-    // Create venta with price=0 (should auto-apply from list)
     const ventaRes = await request(app).post('/api/ventas').set('x-user-id', '1').send({
       factura: { id: crypto.randomUUID(), consecutivo: 'FAC-TEST-001', fecha: new Date().toISOString(), clienteId: clientId, vendedorId: '1', subtotal: 0, descuento: 0, total: 0, condicion_pago: 'Contado', estado: 'Pagada' },
       detalles: [{ producto: 'Huevos - Smoke TEST', cantidad: 10, precio_unitario: 0, subtotal: 0 }]
@@ -525,7 +513,7 @@ describe('SMOKE — Todos los endpoints responden', () => {
     let testGranjaId: string;
     let testGaleronId: string;
 
-    it('POST /api/granjas/wizard — crea granja con galerón', async () => {
+    it('wizard crea granja con galerón en cero', async () => {
       const res = await request(app)
         .post('/api/granjas/wizard')
         .send({
@@ -537,66 +525,37 @@ describe('SMOKE — Todos los endpoints responden', () => {
         });
       expect(res.status).toBe(201);
 
-      const granjas = (await request(app).get('/api/granjas')).body;
-      const g = granjas.find((x: any) => x.nombre === 'Granja Test Ocupación');
+      const g = (await request(app).get('/api/granjas')).body.find((x: any) => x.nombre === 'Granja Test Ocupación');
       expect(g).toBeDefined();
       testGranjaId = g.id;
 
-      const galerones = (await request(app).get('/api/galerones')).body;
-      const gal = galerones.find((x: any) => x.granjaId === testGranjaId && x.nombre === 'Galpón Ocupación');
+      const gal = (await request(app).get('/api/galerones')).body.find((x: any) => x.granjaId === testGranjaId && x.nombre === 'Galpón Ocupación');
       expect(gal).toBeDefined();
       expect(gal.capacidad_maxima).toBe(1000);
       expect(gal.aves_en_produccion).toBe(0);
       testGaleronId = gal.id;
     });
 
-    it('PUT /api/galerones/:id — actualiza aves_en_produccion', async () => {
-      const res = await request(app)
-        .put(`/api/galerones/${testGaleronId}`)
-        .send({ aves_en_produccion: 800 });
-      expect(res.status).toBe(200);
+    it('PUT actualiza aves_en_produccion y el detalle calcula la ocupación', async () => {
+      await request(app).put(`/api/galerones/${testGaleronId}`).send({ aves_en_produccion: 800 });
 
-      const galerones = (await request(app).get('/api/galerones')).body;
-      const gal = galerones.find((x: any) => x.id === testGaleronId);
-      expect(gal.aves_en_produccion).toBe(800);
-    });
-
-    it('GET /api/galerones — devuelve aves_en_produccion correcto', async () => {
-      const galerones = (await request(app).get('/api/galerones')).body;
-      const gal = galerones.find((x: any) => x.id === testGaleronId);
-      expect(gal.aves_en_produccion).toBe(800);
-      expect(gal.capacidad_maxima).toBe(1000);
-    });
-
-    it('GET /api/granjas/:id/detalle — calcula ocupación desde aves_en_produccion', async () => {
       const res = await request(app).get(`/api/granjas/${testGranjaId}/detalle`);
       expect(res.status).toBe(200);
       const gal = res.body.galerones.find((g: any) => g.id === testGaleronId);
-      expect(gal).toBeDefined();
       expect(gal.aves).toBe(800);
       expect(gal.ocupacion).toBe(80);
       expect(res.body.resumen.avesTotal).toBe(800);
       expect(res.body.resumen.ocupacion).toBe(80);
     });
 
-    it('PUT /api/galerones/:id — capacity 1200, aves 360 → 30%', async () => {
-      await request(app)
-        .put(`/api/galerones/${testGaleronId}`)
-        .send({ capacidad_maxima: 1200, aves_en_produccion: 360 });
-
-      const res = await request(app).get(`/api/granjas/${testGranjaId}/detalle`);
-      const gal = res.body.galerones.find((g: any) => g.id === testGaleronId);
+    it('la ocupación se recalcula al cambiar la capacidad, no solo las aves', async () => {
+      await request(app).put(`/api/galerones/${testGaleronId}`).send({ capacidad_maxima: 1200, aves_en_produccion: 360 });
+      let gal = (await request(app).get(`/api/granjas/${testGranjaId}/detalle`)).body.galerones.find((g: any) => g.id === testGaleronId);
       expect(gal.aves).toBe(360);
       expect(gal.ocupacion).toBe(30);
-    });
 
-    it('PUT /api/galerones/:id — capacity 1000, aves 950 → 95%', async () => {
-      await request(app)
-        .put(`/api/galerones/${testGaleronId}`)
-        .send({ capacidad_maxima: 1000, aves_en_produccion: 950 });
-
-      const res = await request(app).get(`/api/granjas/${testGranjaId}/detalle`);
-      const gal = res.body.galerones.find((g: any) => g.id === testGaleronId);
+      await request(app).put(`/api/galerones/${testGaleronId}`).send({ capacidad_maxima: 1000, aves_en_produccion: 950 });
+      gal = (await request(app).get(`/api/granjas/${testGranjaId}/detalle`)).body.galerones.find((g: any) => g.id === testGaleronId);
       expect(gal.aves).toBe(950);
       expect(gal.ocupacion).toBe(95);
     });

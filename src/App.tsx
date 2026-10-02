@@ -1,9 +1,10 @@
 import React from "react";
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Bot, ChevronRight, ChevronDown, DollarSign, LogOut, Plus, Send, Settings, User as UserIcon, X, Loader2, Info, Sparkles, Menu, Search, Egg, Sun, Moon, Shield, FileText, Users, ClipboardList, CreditCard, Tag, Mail, Truck } from 'lucide-react';
+import { Bot, ChevronRight, ChevronDown, DollarSign, LogOut, Plus, Send, Settings, User as UserIcon, X, Info, Sparkles, Menu, Search, Egg, Sun, Moon, Shield, FileText, Users, ClipboardList, CreditCard, Tag, Mail, Truck } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { cn } from './lib/utils';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { Spinner } from './components/Spinner';
 import Login from "./components/Login";
 import Clientes from "./components/Clientes";
 import Facturacion from "./components/Facturacion";
@@ -667,7 +668,7 @@ const nuevoItems = useMemo(() => {
                         className="w-8 h-8 flex items-center justify-center text-white rounded-lg disabled:opacity-50 transition-all hover:opacity-90"
                         style={{ background: 'var(--brand-primary)' }}
                       >
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 ml-0.5" />}
+                        {loading ? <Spinner /> : <Send className="w-4 h-4 ml-0.5" />}
                       </button>
                     </div>
                   </form>

@@ -1195,6 +1195,8 @@ ${JSON.stringify(historicalData, null, 2)}`;
   app.put("/api/mantenimientos/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      const existente = await db.query.mantenimientos.findFirst({ where: eq(mantenimientos.id, id) });
+      if (!existente) return res.status(404).json({ error: "Mantenimiento no encontrado" });
       const { estado } = req.body;
       const updateData: any = {};
       if (estado) updateData.estado = estado;
@@ -1208,6 +1210,8 @@ ${JSON.stringify(historicalData, null, 2)}`;
   app.put("/api/granjas/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      const existente = await db.query.granjas.findFirst({ where: eq(granjas.id, id) });
+      if (!existente) return res.status(404).json({ error: "Granja no encontrada" });
       const { nombre, ubicacion, tipo_produccion, encargadoId, estado } = req.body;
       const updateData: any = {};
       if (nombre) updateData.nombre = nombre;
@@ -1366,6 +1370,10 @@ ${JSON.stringify(historicalData, null, 2)}`;
   app.post("/api/operaciones/traslado", async (req, res) => {
     try {
       const { granjaId, producto, cantidad, unidad, responsable, cargaId, vehiculo, camionId, creadoPorId } = req.body;
+
+      if (!producto || cantidad === undefined || cantidad === null) {
+        return res.status(400).json({ error: "Datos de traslado inválidos" });
+      }
 
       await db.transaction(async (tx) => {
         // 1. Verify stock in Granja
@@ -1667,6 +1675,10 @@ ${JSON.stringify(historicalData, null, 2)}`;
       const diferencia = Number(cantidadEsperada) - Number(cantidadRecibida);
       const recepcionResponsable = responsableRecepcion || 'Bodeguero Actual';
       const usuarioId = req.headers['x-user-id'] as string || null;
+
+      if (cantidadEsperada === undefined || cantidadRecibida === undefined) {
+        return res.status(400).json({ error: "Cantidades de recepción inválidas" });
+      }
 
       // Etiquetas escaneadas por el bodeguero (opcional): se validan y se marcan EnBodega
       // al confirmar. Cada etiqueta es 1 cartón (1 etiqueta = 1 cartón del galerón).
@@ -2255,6 +2267,8 @@ ${JSON.stringify(historicalData, null, 2)}`;
   app.put("/api/clientes/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      const existente = await db.query.clientes.findFirst({ where: eq(clientes.id, id) });
+      if (!existente) return res.status(404).json({ error: "Cliente no encontrado" });
       const { nombre, tipo_documento, documento_id, telefono, email, direccion, latitud, longitud, ruta, condicion_pago, precio_especial, limite_credito, notas, estado } = req.body;
       const updateData: any = {};
       if (nombre !== undefined) updateData.nombre = nombre;
@@ -2664,6 +2678,8 @@ ${JSON.stringify(historicalData, null, 2)}`;
   app.put("/api/rutas/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      const existente = await db.query.rutas.findFirst({ where: eq(rutas.id, id) });
+      if (!existente) return res.status(404).json({ error: "Ruta no encontrada" });
       const { nombre, vendedor_asignado, cliente_ids, dias_frecuencia, kilometraje_aprox, estado } = req.body;
       const updateData: any = {};
       if (nombre !== undefined) updateData.nombre = nombre;
@@ -3148,7 +3164,11 @@ ${JSON.stringify(historicalData, null, 2)}`;
   app.post("/api/logistica/cargar-camion", async (req, res) => {
     try {
       const { rutaId, camionNombre, producto, cantidad, responsable } = req.body;
-      
+
+      if (!camionNombre || !producto || cantidad === undefined || cantidad === null) {
+        return res.status(400).json({ error: "Datos de carga inválidos" });
+      }
+
       await db.transaction(async (tx) => {
         // 1. Check stock in Bodega Central
         const stockBodega = await tx.query.inventario.findFirst({
@@ -3219,7 +3239,11 @@ ${JSON.stringify(historicalData, null, 2)}`;
   app.post("/api/logistica/cierre-ruta", async (req, res) => {
     try {
       const { camionNombre, responsable, observaciones } = req.body;
-      
+
+      if (!camionNombre) {
+        return res.status(400).json({ error: "Camión de cierre inválido" });
+      }
+
       await db.transaction(async (tx) => {
         // 1. Get current truck inventory
         const camionItems = await tx.query.inventario.findMany({
@@ -4163,7 +4187,11 @@ ${JSON.stringify(historicalData, null, 2)}`;
   app.post("/api/facturacion/generar-xml", requirePermission('facturacion', 'create'), async (req, res) => {
     try {
       const { documentoId } = req.body;
-      
+
+      if (!documentoId) {
+        return res.status(400).json({ error: "Falta documentoId" });
+      }
+
       const doc = await db.query.facturas_electronicas.findFirst({
         where: eq(facturas_electronicas.id, documentoId)
       });
@@ -4215,7 +4243,11 @@ ${JSON.stringify(historicalData, null, 2)}`;
   app.post("/api/facturacion/enviar", requirePermission('facturacion', 'create'), async (req, res) => {
     try {
       const { documentoId } = req.body;
-      
+
+      if (!documentoId) {
+        return res.status(400).json({ error: "Falta documentoId" });
+      }
+
       const doc = await db.query.facturas_electronicas.findFirst({
         where: eq(facturas_electronicas.id, documentoId)
       });
@@ -4245,7 +4277,11 @@ ${JSON.stringify(historicalData, null, 2)}`;
   app.post("/api/facturacion/consultar-estado", requirePermission('facturacion', 'create'), async (req, res) => {
     try {
       const { documentoId } = req.body;
-      
+
+      if (!documentoId) {
+        return res.status(400).json({ error: "Falta documentoId" });
+      }
+
       const doc = await db.query.facturas_electronicas.findFirst({
         where: eq(facturas_electronicas.id, documentoId)
       });
@@ -5164,6 +5200,8 @@ ${JSON.stringify(historicalData, null, 2)}`;
   app.put("/api/vacunaciones/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      const existente = await db.query.vacunaciones.findFirst({ where: eq(vacunaciones.id, id) });
+      if (!existente) return res.status(404).json({ error: "Vacunación no encontrada" });
       const { estado, fechaAplicada, reaccionIncidencia, proximaFecha, evidencia } = req.body;
       const updateData: any = {};
       if (estado) updateData.estado = estado;
@@ -5301,6 +5339,8 @@ ${JSON.stringify(historicalData, null, 2)}`;
   app.put("/api/ordenes-mantenimiento/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      const existente = await db.query.ordenes_mantenimiento.findFirst({ where: eq(ordenes_mantenimiento.id, id) });
+      if (!existente) return res.status(404).json({ error: "Orden de mantenimiento no encontrada" });
       const { estado, fechaEjecutada, costo, observaciones, proximaFecha, insumosUsados } = req.body;
       const updateData: any = {};
       if (estado) updateData.estado = estado;

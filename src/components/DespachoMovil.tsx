@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Egg, Check, ChevronRight, ChevronLeft, Plus, Minus, Loader2, Truck } from 'lucide-react';
+import { Egg, Check, ChevronRight, ChevronLeft, Plus, Minus, Truck } from 'lucide-react';
 import { User } from '../types';
 import { toast } from 'sonner';
+import { BloqueCarga, SpinnerConTexto } from './Spinner';
 
 type Granja = { id: string; nombre: string; ubicacion?: string; estado?: string };
 type Galeron = { id: string; granjaId: string; nombre: string; estado?: string };
@@ -177,9 +178,7 @@ export default function DespachoMovil({ currentUser }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin" style={{ color: 'var(--brand-primary)' }} />
-      </div>
+      <BloqueCarga className="min-h-[60vh]" />
     );
   }
 
@@ -399,9 +398,7 @@ export default function DespachoMovil({ currentUser }: Props) {
           className="w-full py-6 rounded-2xl text-xl font-black transition-all active:scale-[0.97] disabled:opacity-60 disabled:active:scale-100"
           style={{ background: 'var(--brand-primary)', color: 'var(--text-inverse)', boxShadow: '0 8px 24px color-mix(in srgb, var(--brand-primary) 35%, transparent)' }}>
           {submitting ? (
-            <span className="flex items-center justify-center gap-3">
-              <Loader2 className="w-6 h-6 animate-spin" /> Enviando...
-            </span>
+            <SpinnerConTexto tamano="md" className="justify-center">Enviando...</SpinnerConTexto>
           ) : (
             '✅ Confirmar y enviar'
           )}

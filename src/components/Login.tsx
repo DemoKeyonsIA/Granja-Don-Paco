@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Egg, LogIn, AlertCircle, Loader2 } from 'lucide-react';
+import { Egg, LogIn, AlertCircle } from 'lucide-react';
+import { Spinner } from './Spinner';
 import { saveSession } from '../lib/session';
 import { toast } from 'sonner';
 import { User } from '../types';
@@ -131,7 +132,7 @@ export default function Login({ onLogin }: LoginProps) {
               className="w-full flex items-center justify-center text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-60"
               style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-primary-light))' }}
             >
-              {loading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <LogIn className="w-5 h-5 mr-2" />}
+              {loading ? <Spinner className="mr-2" /> : <LogIn className="w-5 h-5 mr-2" />}
               {loading ? 'Verificando...' : 'Ingresar al Sistema'}
             </button>
           </form>

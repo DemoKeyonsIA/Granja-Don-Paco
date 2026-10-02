@@ -2,12 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, Search, Calendar, AlertCircle, CheckCircle2, TrendingUp, TrendingDown, Clock, MessageSquare, CreditCard, Wallet, X } from 'lucide-react';
 import { Factura, User, Cliente } from '../types';
 import { toast } from 'sonner';
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { cn } from '../lib/utils';
+import { BloqueCarga } from './Spinner';
 
 interface CobranzaProps {
   currentUser: User;
@@ -240,10 +236,7 @@ const calculateDaysPast = (dateStr: string) => {
                 {isLoading && (
                   <tr>
                     <td colSpan={6} className="px-6 py-10 text-center">
-                      <div className="flex flex-col items-center justify-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--brand-primary)', borderTopColor: 'transparent' }}></div>
-                        <p className="text-neutral-500 text-sm mt-3">Cargando cuentas por cobrar...</p>
-                      </div>
+                      <BloqueCarga texto="Cargando cuentas por cobrar..." />
                     </td>
                   </tr>
                 )}

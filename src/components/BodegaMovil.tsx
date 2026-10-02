@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowDownToLine, Truck, Check, AlertTriangle, ChevronRight, Loader2, QrCode, X } from 'lucide-react';
+import { ArrowDownToLine, Truck, Check, AlertTriangle, ChevronRight, QrCode, X } from 'lucide-react';
 import { User } from '../types';
 import { OPCIONES_DIFERENCIA_RECEPCION } from '../lib/opcionesRecepcion';
+import { BloqueCarga, SpinnerConTexto } from './Spinner';
 
 type ScanEstado = 'validando' | 'pendiente' | 'yaIngresada' | 'noExiste' | 'otroProducto' | 'duplicado';
 type Escan = { codigo: string; estado: ScanEstado; detalle?: string; producto?: string; cartones?: number };
@@ -354,7 +355,7 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
           onClick={recibirCarga}
           className="w-full mt-6 py-4 rounded-2xl text-lg font-extrabold text-white transition-all active:scale-[0.98]"
           style={{ background: enviando || !completado ? 'var(--text-muted)' : 'var(--brand-primary)', opacity: enviando || !completado ? 0.5 : 1 }}>
-          {enviando ? <><Loader2 className="w-5 h-5 animate-spin inline" /> Registrando...</> : '✅ Confirmar recepción'}
+          {enviando ? <SpinnerConTexto>Registrando...</SpinnerConTexto> : '✅ Confirmar recepción'}
         </button>
         {!completado && (
           <p className="text-xs text-center mt-2" style={{ color: 'var(--text-muted)' }}>
@@ -424,9 +425,7 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
           {pendientes.length === 0 ? 'Camiones enviados de la granja' : `${pendientes.length} camión${pendientes.length !== 1 ? 'es' : ''} enviado${pendientes.length !== 1 ? 's' : ''}`}
         </p>
         {cargando ? (
-          <div className="flex flex-col items-center py-16">
-            <Loader2 className="w-8 h-8 animate-spin mb-3" style={{ color: 'var(--brand-primary)' }} />
-          </div>
+          <BloqueCarga className="py-16" />
         ) : pendientes.length === 0 ? renderVacio() : renderCargasList()}
       </div>
     );
@@ -445,9 +444,7 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
         </p>
 
         {cargando ? (
-          <div className="flex flex-col items-center py-16">
-            <Loader2 className="w-8 h-8 animate-spin mb-3" style={{ color: 'var(--brand-primary)' }} />
-          </div>
+          <BloqueCarga className="py-16" />
         ) : pendientes.length === 0 ? (
           <div className="flex flex-col items-center py-16">
             <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: 'var(--bg-muted)' }}>
@@ -475,9 +472,7 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
       </div>
 
       {cargando ? (
-        <div className="flex flex-col items-center py-16">
-          <Loader2 className="w-8 h-8 animate-spin mb-3" style={{ color: 'var(--brand-primary)' }} />
-        </div>
+        <BloqueCarga className="py-16" />
       ) : (
         <div className="space-y-4">
           <button onClick={() => setPantalla('recibir')}
