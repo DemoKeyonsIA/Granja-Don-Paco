@@ -173,12 +173,17 @@ export const SUBTABS_OPERACIONES_DESKTOP: SubTabDef[] = [
   { id: 'bodega', label: 'Bodega' },
 ];
 
-/** Sub-tabs de Admin. */
+/**
+ * Sub-tabs de Admin: Productos · Infraestructura · Usuarios.
+ *
+ * Vinculaciones sale de aquí en la Fase 6. No es solo una mudanza de sitio: la
+ * fila que los dibuja la tenía `Admin.tsx`, así que con este array la
+ * configuración y la pantalla dejaron de depender cada una de su propia lista.
+ */
 export const SUBTABS_ADMIN: SubTabDef[] = [
   { id: 'productos', label: 'Productos' },
   { id: 'infraestructura', label: 'Infraestructura' },
   { id: 'usuarios', label: 'Usuarios' },
-  { id: 'vinculaciones', label: 'Vinculaciones' },
 ];
 
 /**
@@ -254,14 +259,22 @@ export const SUBTABS_ANALITICA: SubTabDef[] = TIPOS_REPORTE.map(t => ({
 }));
 
 /**
- * Espacios de Office.
+ * Espacios de Office: Correo · Documentos · Vinculaciones.
  *
- * El boceto de Office tiene un tercer espacio, Vinculaciones, que hoy vive en
- * `admin`. Se suma en la Fase 6, cuando se mueva.
+ * Vinculaciones llegó aquí desde `admin` en la Fase 6. Es el único espacio de
+ * Office con filtro por rol, y no es una preferencia: `/api/office/vinculaciones`
+ * está detrás de `requireOfficeAdmin`, igual que lo estaba cuando vivía en
+ * Admin. Sin el filtro, un Socio o un Comercial abrirían el espacio y se
+ * encontrarían con un 403 en pantalla en vez de con una pantalla.
+ *
+ *   Admin    → los 3
+ *   Socio    → Correo + Documentos
+ *   Comercial→ Correo + Documentos
  */
 export const ESPACIOS_OFFICE: SubTabDef[] = [
   { id: 'correo', label: 'Correo' },
   { id: 'documentos', label: 'Documentos' },
+  { id: 'vinculaciones', label: 'Vinculaciones', roles: ['Admin'] },
 ];
 
 export const SUBTABS_POR_MODULO: Partial<Record<ModuleId, SubTabDef[]>> = {
@@ -345,11 +358,29 @@ export const subTabsLogisticaDe = (roles: Role[]): SubTabLogisticaDef[] =>
     .flatMap(banda => SUBTABS_LOGISTICA[banda])
     .filter(t => !t.roles || t.roles.some(r => roles.includes(r)));
 
+/** Ids de los espacios de Office, derivados de la configuración. */
+export type EspacioOffice = (typeof ESPACIOS_OFFICE)[number]['id'];
+
 /** Sub-tabs visibles de un módulo para un conjunto de roles. */
 export const subTabsDe = (id: ModuleId, roles: Role[]): SubTabDef[] => {
   if (id === 'logistica') return subTabsLogisticaDe(roles);
   const defs = SUBTABS_POR_MODULO[id] ?? [];
   return defs.filter(t => !t.roles || t.roles.some(r => roles.includes(r)));
+};
+
+/**
+ * Espacio de Office que se monta: el `subTab` si ese rol lo ve, o el primero que
+ * sí ve.
+ *
+ * Antes el shell comparaba `subTab` contra `ESPACIOS_OFFICE` sin mirar el rol,
+ * así que un `subTab` heredado de Admin seguía montando Vinculaciones para un
+ * Socio y el 403 aparecía en pantalla. El filtro tiene que ser el mismo que usa
+ * la fila: si la fila no enseña el espacio, el shell no lo monta.
+ */
+export const espacioOfficeDe = (subTab: string, roles: Role[]): EspacioOffice => {
+  const visibles = subTabsDe('office', roles);
+  const elegido = visibles.some(t => t.id === subTab) ? subTab : visibles[0]?.id;
+  return (elegido ?? 'correo') as EspacioOffice;
 };
 
 /**
@@ -405,7 +436,14 @@ export const subTabPorDefecto = (id: ModuleId, roles: Role[]): string => {
     }
     return 'produccion';
   }
-  if (id === 'office') return '';
+  if (id === 'office') {
+    // Correo es el primero de la lista y no tiene filtro, así que el primer
+    // espacio visible es siempre Correo para los tres roles de Office. Se
+    // resuelve igual que Finanzas para no dejar Office como el único módulo con
+    // un default escrito a mano.
+    const visibles = subTabsDe('office', roles);
+    return visibles[0]?.id ?? 'correo';
+  }
   return '';
 };
 
@@ -536,7 +574,7 @@ export const validarConfig = (): ResultadoValidacion => {
   for (const m of MODULOS) {
     for (const r of m.roles) {
       const defecto = subTabPorDefecto(m.id, [r]);
-      if (!defecto || m.id === 'office') continue;
+      if (!defecto) continue;
       if (m.id === 'operaciones' && esRolMovil([r])) continue;
       const visibles = subTabsDe(m.id, [r]);
       if (visibles.length && !visibles.some(t => t.id === defecto)) {

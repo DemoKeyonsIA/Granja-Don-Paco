@@ -32,11 +32,12 @@ import { User, Role } from './types';
 import { loadSession, clearSession } from './lib/session';
 import { iconoDe } from './nav/icons';
 import {
-  MODULOS, SUBTABS_LOGISTICA, ESPACIOS_OFFICE,
+  MODULOS, SUBTABS_LOGISTICA,
   type ModuleId, type SubTabDef, type BandaLogistica,
 } from './nav/modulos';
 import {
   rolesEfectivos, modulosVisibles, labelDeModulo, moduloPorDefecto,
+  espacioOfficeDe,
   subTabsDe, subTabPorDefecto, subTabsOperacionesMovil, subTabMovilEfectivo,
   subTabsLogisticaDe, subTabsInternosDe, breadcrumbDe, esRolMovil,
   tipoReporteDe, idSubTabReporte,
@@ -202,13 +203,9 @@ const nuevoItems = useMemo(() => {
     } else if (activeTab === 'clientes') {
       items.push({ label: 'Cliente', icon: Users, tab: 'clientes' });
     } else if (activeTab === 'admin') {
-      if (subTab === 'vinculaciones') {
-        items.push({ label: 'Nueva regla', icon: Settings, tab: 'admin', subTab: 'vinculaciones' });
-      } else {
-        items.push({ label: 'Producto Catálogo', icon: Tag, tab: 'admin', subTab: 'productos' });
-        items.push({ label: 'Camión', icon: Truck, tab: 'admin', subTab: 'infraestructura' });
-        items.push({ label: 'Usuario', icon: Users, tab: 'admin', subTab: 'usuarios' });
-      }
+      items.push({ label: 'Producto Catálogo', icon: Tag, tab: 'admin', subTab: 'productos' });
+      items.push({ label: 'Camión', icon: Truck, tab: 'admin', subTab: 'infraestructura' });
+      items.push({ label: 'Usuario', icon: Users, tab: 'admin', subTab: 'usuarios' });
     } else if (activeTab === 'finanzas') {
       // Registrar un gasto es de Admin: el gasto baja utilidad, y un Socio
       // puede verla pero no moverla. Se lee de `userRoles`, no de `role`: un
@@ -223,8 +220,15 @@ const nuevoItems = useMemo(() => {
       items.push({ label: 'Producción', icon: PackageOpen, tab: 'operaciones', subTab: 'produccion' });
       items.push({ label: 'Remisión', icon: FileText, tab: 'operaciones', subTab: 'remisiones' });
     } else if (activeTab === 'office') {
-      items.push({ label: 'Conectar cuenta', icon: Mail, tab: 'office', subTab: 'correo' });
-      items.push({ label: 'Subir documento', icon: FileText, tab: 'office', subTab: 'documentos' });
+      // "Nueva regla" sigue el espacio: pertenece a Vinculaciones, que es el
+      // único de los tres con `roles: ['Admin']`, así que se decide por rol y no
+      // solo por el `subTab` activo.
+      if (subTab === 'vinculaciones' && userRoles.includes('Admin')) {
+        items.push({ label: 'Nueva regla', icon: Settings, tab: 'office', subTab: 'vinculaciones' });
+      } else {
+        items.push({ label: 'Conectar cuenta', icon: Mail, tab: 'office', subTab: 'correo' });
+        items.push({ label: 'Subir documento', icon: FileText, tab: 'office', subTab: 'documentos' });
+      }
     }
     if (items.length === 0 && !finanzasEsSoloLectura) {
       items.push({ label: 'Guía de Despacho', icon: ClipboardList, tab: 'logistica', subTab: 'guias' });
@@ -239,7 +243,11 @@ const nuevoItems = useMemo(() => {
     const lower = q.toLowerCase();
     if (lower.includes('vinculo') || lower.includes('vínculo') || lower.includes('regla') || lower.includes('integracion') || lower.includes('integración')) {
       subTabManual.current = true;
-      setActiveTab('admin'); setSubTab('vinculaciones');
+      // Vinculaciones es de Admin desde que es un espacio de Office. Para los
+      // demás roles la búsqueda cae en Documentos, que es donde sí se ven los
+      // adjuntos que una regla debería haber vinculado.
+      if (userRoles.includes('Admin')) { setActiveTab('office'); setSubTab('vinculaciones'); }
+      else { setActiveTab('office'); setSubTab('documentos'); }
     } else if (lower.includes('correo') || lower.includes('email') || lower.includes('gmail') || lower.includes('bandeja')) {
       setActiveTab('office'); setSubTab('correo');
     } else if (lower.includes('drive') || lower.includes('documento') || lower.includes('carpeta') || lower.includes('adjunto')) {
@@ -748,7 +756,7 @@ const nuevoItems = useMemo(() => {
           {activeTab === 'office' && (
             <Office
               currentUser={currentUser}
-              initialEspacio={ESPACIOS_OFFICE.map(e => e.id).includes(subTab) ? (subTab as any) : 'correo'}
+              initialEspacio={espacioOfficeDe(subTab, userRoles)}
             />
           )}
 

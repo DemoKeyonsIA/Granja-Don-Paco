@@ -18,6 +18,7 @@ import {
   rolesEfectivos, modulosVisibles, moduloPorId, labelDeModulo, moduloPorDefecto,
   subTabsDe, subTabsLogisticaDe, subTabPorDefecto, subTabsOperacionesMovil,
   subTabMovilEfectivo, breadcrumbDe, esRolMovil, validarConfig, INCIDENCIAS_CONOCIDAS,
+  espacioOfficeDe,
 } from '../src/nav/modulos';
 
 const TODOS: Role[] = ['Admin', 'Socio', 'Comercial', 'Despachador', 'Bodeguero', 'Camionero'];
@@ -54,7 +55,7 @@ describe('validez de la configuración', () => {
     for (const m of MODULOS) {
       for (const r of m.roles) {
         const porDefecto = subTabPorDefecto(m.id, [r]);
-        if (!porDefecto || m.id === 'office') continue;
+        if (!porDefecto) continue;
         if (m.id === 'operaciones' && esRolMovil([r])) continue;
         const visibles = subTabsDe(m.id, [r]);
         if (!visibles.length || visibles.some(t => t.id === porDefecto)) continue;
@@ -252,12 +253,43 @@ describe('sub-tabs por módulo y rol', () => {
     expect(breadcrumbDe('finanzas', 'reporte:inventario', ['Admin'])).toEqual(['Finanzas', 'Analítica']);
   });
 
-  it('Admin ve los 4 tabs de Admin', () => {
-    expect(ids(subTabsDe('admin', ['Admin']))).toEqual(ids(SUBTABS_ADMIN));
+  it('Admin ve los 3 tabs que le quedan tras el salida de Vinculaciones', () => {
+    expect(ids(subTabsDe('admin', ['Admin']))).toEqual(['productos', 'infraestructura', 'usuarios']);
+    expect(ids(SUBTABS_ADMIN)).toEqual(['productos', 'infraestructura', 'usuarios']);
   });
 
-  it('Office declara Correo y Documentos; Vinculaciones llega en la Fase 6', () => {
-    expect(ids(ESPACIOS_OFFICE)).toEqual(['correo', 'documentos']);
+  it('Office declara Correo, Documentos y Vinculaciones', () => {
+    expect(ids(ESPACIOS_OFFICE)).toEqual(['correo', 'documentos', 'vinculaciones']);
+  });
+
+  it('Vinculaciones de Office es el único espacio con filtro: solo Admin', () => {
+    // Refleja `requireOfficeAdmin` en el backend. Si el filtro desapareciera,
+    // Socio y Comercial abrirían el espacio y verían el 403 en pantalla.
+    expect(ids(subTabsDe('office', ['Admin']))).toEqual(['correo', 'documentos', 'vinculaciones']);
+    for (const rol of ['Socio', 'Comercial'] as const) {
+      expect(ids(subTabsDe('office', [rol])), rol).toEqual(['correo', 'documentos']);
+    }
+  });
+
+  it('el default de Office es Correo para los tres roles, no un string vacío', () => {
+    // Devolver `''` era lo que obligaba a `validarConfig` a saltarse Office con
+    // `m.id === 'office'`. Ya no hace falta la excepción.
+    for (const rol of ['Admin', 'Socio', 'Comercial'] as const) {
+      expect(subTabPorDefecto('office', [rol]), rol).toBe('correo');
+    }
+  });
+
+  it('el espacio que se monta es el subTab solo si ese rol lo ve', () => {
+    expect(espacioOfficeDe('vinculaciones', ['Admin'])).toBe('vinculaciones');
+    expect(espacioOfficeDe('documentos', ['Socio'])).toBe('documentos');
+    // Un `subTab` heredado de la época en que Vinculaciones vivía en Admin no
+    // puede montar Vinculaciones para un Socio.
+    for (const rol of ['Socio', 'Comercial'] as const) {
+      expect(espacioOfficeDe('vinculaciones', [rol]), rol).toBe('correo');
+    }
+    // Id desconocido: al primer espacio visible, no a un espacio arbitrario.
+    expect(espacioOfficeDe('inventado', ['Admin'])).toBe('correo');
+    expect(espacioOfficeDe('', ['Comercial'])).toBe('correo');
   });
 
   it('Logística separa bandas y ya no tiene banda admin', () => {

@@ -330,9 +330,12 @@ describe('módulos con navegación propia', () => {
     expect(screen.getAllByTestId('stub-modulo')).toHaveLength(1);
   });
 
-  // La fila de Admin todavía no la dibuja la configuración: vive dentro de
-  // Admin.tsx. La Fase 6 la conecta, cuando Vinculaciones salga de ahí.
-  it('pendiente: Admin aún no consume SUBTABS_ADMIN', () => {
+  // El shell sigue sin dibujar una fila de tabs para Admin, y no debe: la fila
+  // vive dentro de Admin.tsx porque cada tab monta su propia pantalla con su
+  // propio encabezado. Lo que la Fase 6 corrigió es el interior de esa fila: ya
+  // no mantiene su propia lista de tabs, los toma de `SUBTABS_ADMIN`. Eso lo
+  // comprueba `tests/ui/office-vinculaciones.test.tsx`.
+  it('el shell no dibuja fila de tabs para Admin, que tiene la suya', () => {
     expect(idsDeTabs()).toEqual([]);
   });
 });

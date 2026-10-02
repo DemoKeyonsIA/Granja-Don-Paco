@@ -212,8 +212,15 @@ describe('E2E — Office (correo + documentos + vinculaciones)', () => {
   });
 
   it('listar reglas y eliminarlas es solo Admin', async () => {
+    // Vinculaciones pasó a ser un espacio de Office en la Fase 6, y Office es
+    // visible para Socio y Comercial. El GET tiene que seguir siendo 403 para
+    // ambos: es lo que hace que el espacio lleve `roles: ['Admin']` en la
+    // configuración, y no solo la pantalla.
     const comList = await como(COMERCIAL, request(app).get('/api/office/vinculaciones'));
     expectApi(comList, 403);
+
+    const socioList = await como(SOCIO, request(app).get('/api/office/vinculaciones'));
+    expectApi(socioList, 403);
 
     const adminList = await como(ADMIN, request(app).get('/api/office/vinculaciones'));
     expectApi(adminList, 200);

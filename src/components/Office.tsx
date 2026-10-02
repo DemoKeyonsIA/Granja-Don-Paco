@@ -1,13 +1,18 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   X, RefreshCw, Search, Mail, FolderTree, Link2, AlertTriangle, Unlink, Eye, Paperclip,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { User } from '../types';
+import { rolesEfectivos, espacioOfficeDe, subTabsDe, type EspacioOffice } from '../nav/modulos';
 import Breadcrumb from './Breadcrumb';
+import OfficeVinculos from './OfficeVinculos';
 import './gcrm.css';
 
-interface Props { currentUser: User; initialEspacio?: 'correo' | 'documentos'; }
+/** Los ids de `ESPACIOS_OFFICE`, derivados de la configuración y no repetidos. */
+type Espacio = EspacioOffice;
+
+interface Props { currentUser: User; initialEspacio?: Espacio; }
 
 interface Cuenta {
   id: string; email: string; etiqueta: string; color: string;
@@ -46,6 +51,20 @@ const VISTAS = [
 
 const COLOR_TIPO: Record<string, string> = {
   PDF: '#DC2626', XLS: '#3D7A4A', IMG: '#7C3AED', DOC: '#2563EB',
+};
+
+/**
+ * Iconos de la fila de espacios.
+ *
+ * Vive aquí y no en `modulos.ts` porque ese módulo es puro y no importa lucide;
+ * los ids, en cambio, salen de `ESPACIOS_OFFICE`. Un espacio visible sin entrada
+ * aquí no se ve raro: React falla al montar la fila, y con ella toda la pantalla
+ * de Office.
+ */
+const ICONO_ESPACIO: Record<string, React.ComponentType<{ className?: string }>> = {
+  correo: Mail,
+  documentos: FolderTree,
+  vinculaciones: Link2,
 };
 
 const fmtBytes = (b: number | null) => {
@@ -147,9 +166,27 @@ async function sembrarSiEstaVacio() {
 }
 
 export default function Office({ currentUser, initialEspacio = 'correo' }: Props) {
-  const [espacio, setEspacio] = useState<'correo' | 'documentos'>(initialEspacio);
+  // La fila y la pantalla usan el mismo filtro. Si se calcularan por separado,
+  // un rol sin permiso podría ver el tab y montar la pantalla, o al revés:
+  // abrir un espacio invisible desde una URL.
+  //
+  // `rolesEfectivos` devuelve un array nuevo en cada llamada, y eso importa:
+  // sin memorizarlo, `espacioPermitido` cambia de identidad en cada render, el
+  // efecto que sincroniza `initialEspacio` se dispara siempre y el click en la
+  // fila se pierde, porque `espacio` vuelve a su valor inicial en el mismo ciclo.
+  const roles = useMemo(
+    () => rolesEfectivos(currentUser.role, currentUser.roles),
+    [currentUser.role, currentUser.roles],
+  );
+  const espacios = useMemo(() => subTabsDe('office', roles), [roles]);
+  const espacioPermitido = useCallback((id: string) => espacioOfficeDe(id, roles), [roles]);
+  const [espacio, setEspacio] = useState<Espacio>(() => espacioPermitido(initialEspacio));
 
-  useEffect(() => { setEspacio(initialEspacio); }, [initialEspacio]);
+  useEffect(() => { setEspacio(espacioPermitido(initialEspacio)); }, [initialEspacio, espacioPermitido]);
+  // Estado de la última ejecución del efecto de carga, para distinguir tres
+  // causas que antes iban juntas en la dependencia `cargar`: primera carga,
+  // cambio de filtro y cambio de espacio.
+  const cargaPrevia = useRef<{ espacio: Espacio; cargar: typeof cargar } | null>(null);
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [docs, setDocs] = useState<Documento[]>([]);
@@ -198,10 +235,35 @@ export default function Office({ currentUser, initialEspacio = 'correo' }: Props
     }
   }, [cuentaSel, vista, conAdjuntos, carpetaSel, q]);
 
+  // Sembrar la bandeja de ejemplo es una sola vez por montaje, y solo si la
+  // pantalla va a mostrar la bandeja. Antes depended de `espacio`, con lo que
+  // cambiar de espacio volvía a disparar el `GET` (y los `POST` de cuentas) de
+  // una siembra que ya había ocurrido; y entrar directo a Vinculaciones
+  // sembraba sin que nadie llegara a ver la bandeja.
+  const sembrado = useRef(false);
   useEffect(() => {
-    if (currentUser.role === 'Admin') void sembrarSiEstaVacio();
-  }, [currentUser.role]);
-  useEffect(() => { void cargar(); }, [cargar]);
+    if (currentUser.role !== 'Admin' || espacio === 'vinculaciones' || sembrado.current) return;
+    sembrado.current = true;
+    void sembrarSiEstaVacio();
+  }, [currentUser.role, espacio]);
+  useEffect(() => {
+    // Vinculaciones tiene su propio fetch dentro de `OfficeVinculos`. Pedir
+    // además cuentas, mensajes, documentos, árbol y resumen al entrar ahí eran
+    // cinco respuestas que la pantalla no usa, y `sembrarSiEstaVacio` disparaba
+    // cuatro `POST` de cuentas más.
+    //
+    // `espacio` está en las dependencias para reaccionar a entrar y salir de
+    // Vinculaciones; el resto de cambios de espacio no recargan, como antes de
+    // que Vinculaciones entrara en el módulo.
+    const previa = cargaPrevia.current;
+    cargaPrevia.current = { espacio, cargar };
+    if (espacio === 'vinculaciones') { setCargando(false); return; }
+    const cambiaFiltro = previa !== null && previa.cargar !== cargar;
+    const vuelveDeVinculaciones = previa !== null && previa.espacio === 'vinculaciones';
+    // Cambiar entre Correo y Documentos no recarga: comparten la misma bandeja,
+    // que es como estaba antes de que Vinculaciones entrara en el módulo.
+    if (previa === null || cambiaFiltro || vuelveDeVinculaciones) void cargar();
+  }, [cargar, espacio]);
 
   const abrirHilo = async (threadId: string) => {
     try {
@@ -236,40 +298,62 @@ export default function Office({ currentUser, initialEspacio = 'correo' }: Props
     return VISTAS;
   }, [espacio]);
 
+  const filaEspacios = (
+    <div data-testid="office-espacios" className="flex items-center gap-2 border-b" style={{ borderColor: 'var(--border-default)' }}>
+      {espacios.map(e => {
+        const Icono = ICONO_ESPACIO[e.id];
+        return (
+          <button key={e.id} data-espacio-id={e.id} aria-current={espacio === e.id ? 'page' : undefined}
+            onClick={() => setEspacio(e.id as Espacio)}
+            className="pb-3 text-sm font-semibold transition-colors border-b-2"
+            style={{
+              color: espacio === e.id ? 'var(--brand-primary)' : 'var(--text-muted)',
+              borderColor: espacio === e.id ? 'var(--brand-primary)' : 'transparent',
+            }}>
+            <span className="flex items-center gap-2"><Icono className="w-4 h-4" />{e.label}</span>
+          </button>
+        );
+      })}
+      {/* Correo y Documentos nunca se ven a la vez */}
+      <div className="ml-auto pb-2 flex gap-2">
+        {espacio === 'correo'
+          ? <button onClick={async () => {
+              const email = prompt('Email de la cuenta a conectar');
+              if (!email) return;
+              const etiqueta = prompt('Etiqueta (Gerencia, Proveedores, Contabilidad, Ventas)') || 'Gerencia';
+              const r = await fetch('/api/office/cuentas', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, etiqueta }),
+              });
+              if (!r.ok) { const e = await r.json().catch(() => ({})); setError(e.error || 'No se pudo conectar'); }
+              void cargar();
+            }} className="btn"><Mail className="w-3.5 h-3.5" />Conectar cuenta</button>
+          : espacio === 'documentos' && <SubirDocumento onDone={() => void cargar()} />}
+      </div>
+    </div>
+  );
+
+  // Vinculaciones es una pantalla distinta dentro de Office: reglas de
+  // vinculación, no una vista de la bandeja. Devolver antes del cuerpo de
+  // correo evita tener que condicionar cada bloque por `espacio`, y deja claro
+  // que no comparte estado con los otros dos espacios.
+  if (espacio === 'vinculaciones') {
+    return (
+      <div className="gcrm">
+        <Breadcrumb items={[{ label: 'Office' }, { label: 'Vinculaciones' }]} />
+        {filaEspacios}
+        <OfficeVinculos currentUser={currentUser} />
+      </div>
+    );
+  }
+
   return (
     <div className="gcrm">
       <Breadcrumb items={[
         { label: 'Office' },
         { label: espacio === 'correo' ? 'Correo' : 'Documentos' },
       ]} />
-      {/* Tabs de espacio — Correo y Documentos nunca se ven a la vez */}
-      <div className="flex items-center gap-2 border-b" style={{ borderColor: 'var(--border-default)' }}>
-        {(['correo', 'documentos'] as const).map(k => (
-          <button key={k} onClick={() => setEspacio(k)}
-            className="pb-3 text-sm font-semibold transition-colors border-b-2"
-            style={{
-              color: espacio === k ? 'var(--brand-primary)' : 'var(--text-muted)',
-              borderColor: espacio === k ? 'var(--brand-primary)' : 'transparent',
-            }}>
-            {k === 'correo' ? <span className="flex items-center gap-2"><Mail className="w-4 h-4" />Correo</span> : <span className="flex items-center gap-2"><FolderTree className="w-4 h-4" />Documentos</span>}
-          </button>
-        ))}
-        <div className="ml-auto pb-2 flex gap-2">
-          {espacio === 'correo'
-            ? <button onClick={async () => {
-                const email = prompt('Email de la cuenta a conectar');
-                if (!email) return;
-                const etiqueta = prompt('Etiqueta (Gerencia, Proveedores, Contabilidad, Ventas)') || 'Gerencia';
-                const r = await fetch('/api/office/cuentas', {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ email, etiqueta }),
-                });
-                if (!r.ok) { const e = await r.json().catch(() => ({})); setError(e.error || 'No se pudo conectar'); }
-                void cargar();
-              }} className="btn"><Mail className="w-3.5 h-3.5" />Conectar cuenta</button>
-            : <SubirDocumento onDone={() => void cargar()} />}
-        </div>
-      </div>
+      {filaEspacios}
 
       <div className="viewhead">
         <div>
@@ -445,7 +529,7 @@ export default function Office({ currentUser, initialEspacio = 'correo' }: Props
                   <div className="kv"><span>Cuenta</span><b>{hilo.mensajes[0].etiquetaCuenta}</b></div>
                   <div className="kv">
                     <span>Vinculado a</span>
-                    <b>{hilo.carpeta ? <span style={{ color: 'var(--brand)' }}>{hilo.carpeta}</span> : <span style={{ color: 'var(--amber)' }}>sin carpeta (ver Admin › Vinculaciones)</span>}</b>
+                    <b>{hilo.carpeta ? <span style={{ color: 'var(--brand)' }}>{hilo.carpeta}</span> : <span style={{ color: 'var(--amber)' }}>sin carpeta (ver Office › Vinculaciones)</span>}</b>
                   </div>
                   <div className="sect" style={{ marginTop: 16 }}>
                     <h4>Mensajes</h4>
