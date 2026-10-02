@@ -5,7 +5,6 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { toast } from 'sonner';
 import Despacho from './Despacho';
-import DespachoAdmin from './operaciones/DespachoAdmin';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -13,10 +12,19 @@ function cn(...inputs: ClassValue[]) {
 
 type LogisticaProps = {
   currentUser: User;
+  /**
+   * Vista interna con la que se abre el componente.
+   *
+   * Esta prop existía pero no hacía nada: el estado arrancaba siempre en
+   * `trazabilidad`, así que el tab Logística › Guías de Despacho del shell
+   * desembocaba en Auditoría de Ruta. Un `initialTab` que no se lee es una
+   * puerta que no lleva a la puerta.
+   */
   initialTab?: TabId;
 };
 
-type TabId = 'trazabilidad' | 'guias' | 'rutas' | 'remisiones' | 'conciliacion';
+/** `remisiones` se fue en la Fase 7: ahora es el grupo Despacho del hub. */
+type TabId = 'trazabilidad' | 'guias' | 'rutas' | 'conciliacion';
 
 const fmtCRC = (n: number) => new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 0 }).format(n || 0);
 const fmtFecha = (iso?: string | null) => iso ? new Date(iso).toLocaleDateString('es-CR') : '—';
@@ -32,8 +40,8 @@ const estadoStyle = (estado: string): React.CSSProperties => {
   }
 };
 
-export default function Logistica({ currentUser }: LogisticaProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('trazabilidad');
+export default function Logistica({ currentUser, initialTab }: LogisticaProps) {
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab ?? 'trazabilidad');
   const [rutas, setRutas] = useState<Ruta[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [camiones, setCamiones] = useState<any[]>([]);
@@ -197,7 +205,6 @@ export default function Logistica({ currentUser }: LogisticaProps) {
           { id: 'trazabilidad' as TabId, label: 'Auditoría de Ruta' },
           { id: 'guias' as TabId, label: 'Guías de Despacho' },
           { id: 'rutas' as TabId, label: 'Gestión de Rutas' },
-          { id: 'remisiones' as TabId, label: 'Remisiones' },
           { id: 'conciliacion' as TabId, label: 'Cierre de Ruta' },
         ]).map(tab => (
           <button
@@ -544,9 +551,6 @@ export default function Logistica({ currentUser }: LogisticaProps) {
           )}
         </div>
       )}
-
-      {/* ==================== REMISIONES (DespachoAdmin.tsx) ==================== */}
-      {activeTab === 'remisiones' && <DespachoAdmin currentUser={currentUser} />}
 
       {/* ==================== CIERRE DE RUTA ==================== */}
       {activeTab === 'conciliacion' && (

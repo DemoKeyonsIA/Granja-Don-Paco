@@ -1,12 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User } from '../../types';
-import BodegaAdmin from './BodegaAdmin';
+import BodegaAdmin, { type VistaBodega } from './BodegaAdmin';
 
 interface Props {
   currentUser: User;
+  /**
+   * La vista de Bodega y el sub-tab activo viajan como props desde el shell.
+   *
+   * Este componente solo carga el inventario y sus movimientos, que son los dos
+   * datos que la vista de Control necesita para el cuadre. Elegir la vista sigue
+   * siendo del shell: si se decidiera aquí, el breadcrumb del hub no podría
+   * nombrarla.
+   */
+  vista: VistaBodega;
+  onVista: (vista: VistaBodega) => void;
 }
 
-export default function OperacionesAdmin({ currentUser }: Props) {
+export default function OperacionesAdmin({ currentUser, vista, onVista }: Props) {
   const [inventario, setInventario] = useState<any[]>([]);
   const [movimientos, setMovimientos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,7 +49,7 @@ export default function OperacionesAdmin({ currentUser }: Props) {
 
   return (
     <div className="animate-in fade-in">
-      <BodegaAdmin currentUser={currentUser} inventario={inventario} movimientos={movimientos} onRefresh={fetchData} />
+      <BodegaAdmin currentUser={currentUser} inventario={inventario} movimientos={movimientos} onRefresh={fetchData} vista={vista} onVista={onVista} />
     </div>
   );
 }

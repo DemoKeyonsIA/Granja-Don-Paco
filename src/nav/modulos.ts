@@ -20,7 +20,7 @@ export type IconName =
   | 'CreditCardAlt' | 'Scale' | 'PiggyBank';
 
 export type ModuleId =
-  | 'finanzas' | 'granja' | 'admin'
+  | 'finanzas' | 'admin'
   | 'office' | 'operaciones' | 'logistica' | 'clientes';
 
 export interface ModuloDef {
@@ -57,12 +57,6 @@ export const MODULOS: ModuloDef[] = [
     label: 'Finanzas',
     icon: 'DollarSign',
     roles: ['Admin', 'Socio', 'Comercial'],
-  },
-  {
-    id: 'granja',
-    label: 'Granja',
-    icon: 'Egg',
-    roles: ['Admin'],
   },
   {
     id: 'admin',
@@ -108,12 +102,36 @@ export const ROLES_MOVIL: Role[] = ['Despachador', 'Bodeguero', 'Camionero'];
 
 export const esRolMovil = (roles: Role[]): boolean => roles.some(r => ROLES_MOVIL.includes(r));
 
-/** Sub-tabs del módulo `granja`. Solo Admin: el módulo entero es de Admin. */
+/**
+ * Las cuatro vistas de Granja, que en la Fase 7 dejan de ser tabs de un módulo
+ * propio y pasan a ser la sub-fila del tab Granja del hub de Operaciones.
+ *
+ * El módulo `granja` desaparece del sidebar por la misma razón que desapareció
+ * `dashboard` en la Fase 5: con sus cuatro vistas dentro de Operaciones, su
+ * entrada propia era una segunda puerta al mismo contenido. Quien da de alta una
+ * granja o un galerón sigue encontrándolo en `Admin > Infraestructura`, que es
+ * donde está el maestro.
+ */
 export const SUBTABS_GRANJA: SubTabDef[] = [
   { id: 'granjas', label: 'Granjas' },
   { id: 'salud', label: 'Salud Avícola' },
   { id: 'alimento', label: 'Alimento/Silos' },
   { id: 'mantenimiento', label: 'Mantenimiento' },
+];
+
+/**
+ * Las dos vistas internas de Bodega: existencias y control de recepción.
+ *
+ * La fila se dibuja en el shell (como la de Analítica y la de Granja) para que
+ * la vista activa sea el mismo `subTab` del hub y no un `useState` escondido
+ * dentro de `BodegaAdmin`. El id de la primera era `bodega`, igual que el del
+ * tab que la contiene: con los dos ids iguales, `subTab = 'bodega'` no decía si
+ * se estaba pidiendo el tab o su vista, y el hub no podía resolver a cuál
+ * belonged. Por eso aquí se llama `existencias`.
+ */
+export const SUBTABS_BODEGA: SubTabDef[] = [
+  { id: 'existencias', label: 'Existencias' },
+  { id: 'control', label: 'Control' },
 ];
 
 /** Sub-tabs del camino móvil de Operaciones: dependen del rol, no del módulo. */
@@ -145,13 +163,15 @@ export const SUBTABS_LOGISTICA: Record<BandaLogistica, SubTabLogisticaDef[]> = {
   nucleo: [
     { id: 'logistica', label: 'Logística', banda: 'nucleo' },
     { id: 'guias', label: 'Guías y Camiones', breadcrumb: 'Guías y Camiones', banda: 'nucleo' },
-    { id: 'remisiones', label: 'Remisiones', banda: 'nucleo' },
-    { id: 'caja', label: 'Caja Ruta', banda: 'nucleo' },
     { id: 'tablero', label: 'Tablero Vivo', banda: 'nucleo' },
   ],
   // El tab `facturacion` que vivía acá se elimina: Facturación es ahora el tab
   // Documentos de Finanzas, y dejarlo aquí le daba a Logística una segunda
   // puerta a la misma pantalla con dos rutas de navegación distintas.
+  //
+  // Lo mismo pasa en la Fase 7 con `caja` y `remisiones`: Caja Ruta es el tab
+  // Ventas del hub de Operaciones y DespachoAdmin es su tab Despacho. Dejarlos
+  // aquí también habría dejado dos puertas a la misma pantalla.
   admin: [],
   config: [
     { id: 'etiquetas', label: 'Etiquetas QR', roles: ['Admin'], banda: 'config' },
@@ -161,16 +181,31 @@ export const SUBTABS_LOGISTICA: Record<BandaLogistica, SubTabLogisticaDef[]> = {
 };
 
 /**
- * Sub-tabs del hub de escritorio de Operaciones (`BodegaAdmin`).
+ * Los cinco grupos del hub de Operaciones de escritorio.
  *
- * Fase 7 los amplía a los 5 grupos del boceto (Resumen · Granja · Bodega ·
- * Despacho · Ventas), cuando Despacho y Ventas se muden desde Logística. Por
- * ahora se declara únicamente lo que el hub muestra hoy, para que esta fase
- * sea una extracción sin cambio de comportamiento.
+ * Resumen · Granja · Bodega · Despacho · Ventas.
+ *
+ * La matriz por rol es explícita y no es decorativa. El módulo Operaciones
+ * entra con cinco roles, pero solo dos de ellos (Admin y Comercial) usan el hub:
+ * los otros tres van por el camino móvil. Un tab sin filtro le daría a un
+ * Comercial el control de bodega o el maestro de granja, que son de Admin.
+ *
+ *   Admin     → los 5
+ *   Comercial → Despacho + Ventas
+ *
+ * Granja, Bodega y Resumen son de Admin porque lo que hay detrás lo es: el
+ * maestro de granja y galerón es de Admin —y sigue en `Admin > Infraestructura`—
+ * y el control de recepción mueve inventario.
+ *
+ * Despacho y Ventas salen de Logística en esta fase. `DespachoAdmin` y `CajaRuta`
+ * son el día a día de la ruta, que es lo que un Comercial viene a hacer.
  */
 export const SUBTABS_OPERACIONES_DESKTOP: SubTabDef[] = [
-  { id: 'resumen', label: 'Resumen del día' },
-  { id: 'bodega', label: 'Bodega' },
+  { id: 'resumen', label: 'Resumen del día', roles: ['Admin'] },
+  { id: 'granja', label: 'Granja', roles: ['Admin'] },
+  { id: 'bodega', label: 'Bodega', roles: ['Admin'] },
+  { id: 'despacho', label: 'Despacho', roles: ['Admin', 'Comercial'] },
+  { id: 'ventas', label: 'Ventas', roles: ['Admin', 'Comercial'] },
 ];
 
 /**
@@ -278,7 +313,6 @@ export const ESPACIOS_OFFICE: SubTabDef[] = [
 ];
 
 export const SUBTABS_POR_MODULO: Partial<Record<ModuleId, SubTabDef[]>> = {
-  granja: SUBTABS_GRANJA,
   admin: SUBTABS_ADMIN,
   finanzas: SUBTABS_FINANZAS,
   office: ESPACIOS_OFFICE,
@@ -384,19 +418,23 @@ export const espacioOfficeDe = (subTab: string, roles: Role[]): EspacioOffice =>
 };
 
 /**
- * Sub-fila de un tab: los tipos de reporte cuando el tab es Analítica.
+ * Sub-fila de un tab.
  *
  * Cualquier otro tab no tiene sub-fila, y por eso no se pide una fila vacía.
  *
- * La fila se resuelve también cuando el sub-tab activo ya es un tipo de reporte
- * (`reporte:financiero`), no solo cuando vale `analitica`: al elegir un reporte
- * el sub-tab pasa a ser el reporte, y si aquí no lo reconociera la fila
- * desaparecería justo en el momento en que el usuario la necesita para cambiar
- * de reporte.
+ * La fila se resuelve también cuando el sub-tab activo ya es un elemento de la
+ * sub-fila (`granjas`, `salud`, `existencias`), no solo cuando vale el id del
+ * tab que la contiene: al elegir un elemento el sub-tab pasa a ser ese elemento,
+ * y si aquí no lo reconociera la fila desaparecería justo en el momento en que
+ * el usuario la necesita para cambiar de vista.
  */
 export const subTabsInternosDe = (id: ModuleId, subTab: string): SubTabDef[] => {
   if (id === 'finanzas' && (subTab === 'analitica' || tipoReporteDe(subTab) !== null)) {
     return SUBTABS_ANALITICA;
+  }
+  if (id === 'operaciones') {
+    if (subTab === 'granja' || SUBTABS_GRANJA.some(t => t.id === subTab)) return SUBTABS_GRANJA;
+    if (subTab === 'bodega' || SUBTABS_BODEGA.some(t => t.id === subTab)) return SUBTABS_BODEGA;
   }
   return [];
 };
@@ -413,8 +451,10 @@ export const subTabsInternosDe = (id: ModuleId, subTab: string): SubTabDef[] => 
  */
 export const subTabPorDefecto = (id: ModuleId, roles: Role[]): string => {
   if (id === 'logistica') {
-    // Comercial arranca en Caja Ruta; el resto en Logística.
-    return roles.includes('Comercial') && !roles.includes('Admin') ? 'caja' : 'logistica';
+    // El default es la auditoría de ruta para todos. Antes un Comercial entraba
+    // por Caja Ruta, que en la Fase 7 es el tab Ventas del hub de Operaciones:
+    // seguir apuntando aquí dejaría un sub-tab que ya no existe en la fila.
+    return 'logistica';
   }
   if (id === 'finanzas') {
     // Todo rol que entra a Finanzas aterriza en el primer tab que puede ver.
@@ -424,7 +464,6 @@ export const subTabPorDefecto = (id: ModuleId, roles: Role[]): string => {
     const visibles = subTabsDe('finanzas', roles);
     return visibles[0]?.id ?? 'resumen';
   }
-  if (id === 'granja') return 'granjas';
   if (id === 'admin') return 'productos';
   if (id === 'operaciones') {
     if (esRolMovil(roles)) {
@@ -434,7 +473,13 @@ export const subTabPorDefecto = (id: ModuleId, roles: Role[]): string => {
       if (roles.includes('Bodeguero')) return 'recibir';
       return 'carga';
     }
-    return 'produccion';
+    // El hub de escritorio entra por su primer grupo visible: Resumen para Admin,
+    // Despacho para Comercial. Antes devolvía `'produccion'` a mano, un id que no
+    // era de ningún tab: el hub lo ignoraba y el usuario aterrizaba en la
+    // pantalla de bodega con el sub-tab apuntando a otra cosa. Esa inconsistencia
+    // era una de las dos incidencias que la Fase 7 cierra.
+    const visibles = subTabsDe('operaciones', roles);
+    return visibles[0]?.id ?? 'resumen';
   }
   if (id === 'office') {
     // Correo es el primero de la lista y no tiene filtro, así que el primer
@@ -445,6 +490,35 @@ export const subTabPorDefecto = (id: ModuleId, roles: Role[]): string => {
     return visibles[0]?.id ?? 'correo';
   }
   return '';
+};
+
+/**
+ * Destino de una búsqueda que nombra un grupo del hub de Operaciones: "remisión"
+ * lleva a Despacho, "venta" a Ventas, "granja" a Granja.
+ *
+ * Devuelve `null` cuando ese rol no tiene Operaciones de ninguna forma, que es un
+ * caso real y no un borde: un Socio busca "granja" y la granja no existe para él.
+ * El shell entonces no se mueve, porque la alternativa —entrar a Operaciones
+ * igual— deja el módulo activo sin fila y sin cuerpo: una pantalla en blanco sin
+ * entrada en el sidebar desde la que salir. Antes el shell llamaba a
+ * `setActiveTab('operaciones')` sin mirar el rol y ese era justo el resultado.
+ *
+ * El camino móvil va primero a propósito, no por gusto: es el que decide qué se
+ * monta. Un Bodeguero que además es Admin ve la fila de escritorio pero el shell
+ * monta el cuerpo móvil, así que devolverle un grupo de escritorio lo llevaría a
+ * un sub-tab que ninguna fila tiene marcado.
+ */
+export const destinoGrupoOperaciones = (
+  grupo: string,
+  roles: Role[],
+): { modulo: ModuleId; subTab: string } | null => {
+  if (esRolMovil(roles)) {
+    return { modulo: 'operaciones', subTab: subTabPorDefecto('operaciones', roles) };
+  }
+  if (subTabsDe('operaciones', roles).some(t => t.id === grupo)) {
+    return { modulo: 'operaciones', subTab: grupo };
+  }
+  return null;
 };
 
 /** Sub-tabs del camino móvil de Operaciones, aplanados y sin duplicados. */
@@ -476,11 +550,16 @@ export const subTabMovilEfectivo = (roles: Role[], subTab: string): string => {
 // Breadcrumbs
 // ---------------------------------------------------------------------------
 
-/** Etiquetas de breadcrumb para sub-tabs que no viven en `SUBTABS_*`. */
-export const BREADCRUMB_EXTRA: Record<string, string> = {
-  produccion: 'Producción',
-  desperdicios: 'Desperdicios',
-};
+/**
+ * Etiquetas de breadcrumb para sub-tabs que no viven en `SUBTABS_*`.
+ *
+ * Quedó vacía en la Fase 7. Contenía `produccion` (el id que el hub de
+ * Operaciones usaba como default sin que fuera un tab suyo) y `desperdicios` (el
+ * id de la vista de Control antes de que pasara a ser `control`). Los dos
+ * desaparecieron de la navegación junto con sus hubs, y una tabla de etiquetas
+ * sin entradas es solo un lugar donde se puede colar un sub-tab que nadie ve.
+ */
+export const BREADCRUMB_EXTRA: Record<string, string> = {};
 
 /**
  * Devuelve el breadcrumb `[módulo, subTab]` de la vista actual, o `null` si la
@@ -499,35 +578,38 @@ export const breadcrumbDe = (
     return [labelDeModulo(id, roles), tab?.label ?? ''];
   }
 
-  // El hub de Operaciones no muestra el sub-tab en el breadcrumb.
-  if (id === 'operaciones') return [labelDeModulo(id, roles), ''];
-
-const visibles = subTabsDe(id, roles);
-    const tab = visibles.find(t => t.id === subTab);
-    if (tab) {
-      return [labelDeModulo(id, roles), tab.breadcrumb ?? tab.label];
-    }
-    // Un id de sub-fila (`reporte:financiero` bajo Analítica) no es un tab del
-    // módulo: el breadcrumb nombra el tab que lo contiene, no el tipo de reporte.
-    const padre = visibles.find(t => subTabsInternosDe(id, t.id).some(s => s.id === subTab));
-    if (padre) return [labelDeModulo(id, roles), padre.breadcrumb ?? padre.label];
-    return [labelDeModulo(id, roles), BREADCRUMB_EXTRA[subTab] ?? ''];
-  };
+  // El hub de Operaciones ya no se salta esta parte: su fila es la que el resto
+  // de módulos dibujan, así que el breadcrumb nombra el grupo activo igual que en
+  // Finanzas. Antes devolvía el módulo con el sub-tab vacío ("Operaciones y
+  // Bodegas"), que era la forma de admitir que el hub no tenía tabs dirigidos
+  // por la configuración.
+  const visibles = subTabsDe(id, roles);
+  const tab = visibles.find(t => t.id === subTab);
+  if (tab) {
+    return [labelDeModulo(id, roles), tab.breadcrumb ?? tab.label];
+  }
+  // Un id de sub-fila (`granjas` bajo Granja, `reporte:financiero` bajo
+  // Analítica) no es un tab del módulo: el breadcrumb nombra el tab que lo
+  // contiene, no el elemento elegido.
+  const padre = visibles.find(t => subTabsInternosDe(id, t.id).some(s => s.id === subTab));
+  if (padre) return [labelDeModulo(id, roles), padre.breadcrumb ?? padre.label];
+  return [labelDeModulo(id, roles), BREADCRUMB_EXTRA[subTab] ?? ''];
+};
 
 /**
  * Defectos de producto heredados que la configuración hace visibles.
  *
-* No son errores de este módulo: son inconsistencias reales de la aplicación que
+ * No son errores de este módulo: son inconsistencias reales de la aplicación que
  * la extracción a datos puros dejó a la vista. Cada una tiene una fase asignada
  * en PLAN-IA-UNIFICADA.md, así que se listan aquí en vez de silenciarse, y los
  * tests fallan si aparece alguna nueva o si alguna se cierra antes de tiempo.
+ *
+ * Las dos que estaban sobre `operaciones/produccion` se quitaron en la Fase 7:
+ * el hub de escritorio pasó a ser dirigido por la configuración y su default
+ * ahora es el primer grupo visible, así que ya nadie entra a un sub-tab que no
+ * ve.
  */
-export const INCIDENCIAS_CONOCIDAS: Record<string, string> = {
-  'Rol Admin entra a operaciones/produccion pero no ve ese tab':
-    'Fase 7 — el hub de escritorio de Operaciones ignora `subTab`: sus tabs son internos de BodegaAdmin. El valor `produccion` queda muerto hasta que el hub sea dirigido por la configuración.',
-  'Rol Comercial entra a operaciones/produccion pero no ve ese tab':
-    'Fase 7 — mismo origen que el caso de Admin. Comercial entra al hub de escritorio, no al camino móvil.',
-};
+export const INCIDENCIAS_CONOCIDAS: Record<string, string> = {};
 
 export interface ResultadoValidacion {
   /** Errores de la propia configuración. Deben estar siempre vacíos. */
@@ -562,6 +644,17 @@ export const validarConfig = (): ResultadoValidacion => {
   }
   for (const t of SUBTABS_ANALITICA) {
     if (!t.label.trim()) problemas.push(`Sub-tab finanzas/${t.id} sin etiqueta`);
+  }
+
+  // Las sub-filas no son tabs del módulo, así que quedan fuera del chequeo de
+  // duplicados de arriba, pero sus etiquetas se verifican igual: una sub-fila sin
+  // nombre pinta un botón vacío en la fila.
+  for (const [nombre, fila] of [['operaciones/granja', SUBTABS_GRANJA], ['operaciones/bodega', SUBTABS_BODEGA]] as const) {
+    for (const t of fila) {
+      if (!t.label.trim()) problemas.push(`Sub-fila ${nombre}/${t.id} sin etiqueta`);
+    }
+    const ids = new Set(fila.map(t => t.id));
+    if (ids.size !== fila.length) problemas.push(`Sub-fila ${nombre} con ids repetidos`);
   }
 
   for (const banda of ['nucleo', 'admin', 'config'] as BandaLogistica[]) {

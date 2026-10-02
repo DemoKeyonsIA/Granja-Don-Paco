@@ -15,9 +15,20 @@ interface Props {
   inventario: any[];
   movimientos: any[];
   onRefresh: () => void;
+  /**
+   * Vista activa de Bodega, y cómo cambiarla.
+   *
+   * La Fase 7 movió la fila de estas dos vistas al shell, junto a la de los cinco
+   * grupos del hub. La fila vive donde está `subTab` para que el breadcrumb y la
+   * navegación coincidan con lo que se ve; con la vista en un `useState` interno,
+   * un enlace a `/operaciones/control` abriría siempre Existencias y cambiar de
+   * vista no movería el breadcrumb.
+   */
+  vista: VistaBodega;
+  onVista: (vista: VistaBodega) => void;
 }
 
-type BodegaTab = 'bodega' | 'control';
+export type VistaBodega = 'existencias' | 'control';
 type HistTab = 'ingresos' | 'salidas';
 type PeriodoBodega = 'semana' | 'mes' | 'ano' | 'custom';
 
@@ -138,8 +149,7 @@ function Kpi({ icon: Icon, label, value, unit, tone, caption }: { icon: React.El
   );
 }
 
-export default function BodegaAdmin({ currentUser, inventario, movimientos, onRefresh }: Props) {
-  const [tab, setTab] = useState<BodegaTab>('bodega');
+export default function BodegaAdmin({ currentUser, inventario, movimientos, onRefresh, vista, onVista }: Props) {
   const [stock, setStock] = useState<any>(null);
   const [cargandoStock, setCargandoStock] = useState(true);
   const [errorStock, setErrorStock] = useState<string | null>(null);
@@ -500,11 +510,6 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
   };
   const buscarConSugerencia = (s: string) => { setTrazCodigo(s); void buscarTraz(s); };
 
-  const tabs: { id: BodegaTab; label: string; icon: React.ElementType; badge?: number }[] = [
-    { id: 'bodega', label: 'Bodega', icon: Boxes, badge: etiquetasGeneradas.length > 0 ? etiquetasGeneradas.length : undefined },
-    { id: 'control', label: 'Control', icon: Scale, badge: totalAlertas },
-  ];
-
   return (
     <div className="space-y-6 animate-in fade-in">
 
@@ -547,9 +552,9 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {tieneVencidos && (
-                    <button onClick={() => setTab('control')} className="text-sm font-bold text-red-700 hover:text-red-900 whitespace-nowrap">Registrar en Desperdicios →</button>
+                    <button onClick={() => onVista('control')} className="text-sm font-bold text-red-700 hover:text-red-900 whitespace-nowrap">Registrar en Desperdicios →</button>
                   )}
-                  <button onClick={() => setTab('bodega')} className="text-sm font-bold text-blue-600 hover:text-blue-800 whitespace-nowrap">Ver lotes FEFO →</button>
+                  <button onClick={() => onVista('existencias')} className="text-sm font-bold text-blue-600 hover:text-blue-800 whitespace-nowrap">Ver lotes FEFO →</button>
                 </div>
               </>
             )}
@@ -557,20 +562,8 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
         )}
       </div>
 
-      {/* ===== TABS ===== */}
-      <div className="flex gap-1 overflow-x-auto border-b border-neutral-200">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={cn('px-4 py-2.5 flex items-center gap-2 text-sm font-bold whitespace-nowrap border-b-2 -mb-px transition-colors',
-              tab === t.id ? 'text-green-700 border-green-600' : 'text-neutral-500 border-transparent hover:text-neutral-800')}>
-            <t.icon className="w-4 h-4" /> {t.label}
-            {!!t.badge && <span className="ml-0.5 bg-red-100 text-red-700 text-[10px] font-black px-1.5 py-0.5 rounded-full">{t.badge}</span>}
-          </button>
-        ))}
-      </div>
-
-      {/* ===== BODEGA: RECIBIR + EXISTENCIAS (unificadas) ===== */}
-      {tab === 'bodega' && (
+      {/* ===== EXISTENCIAS: RECIBIR + EXISTENCIAS (unificadas) ===== */}
+      {vista === 'existencias' && (
         <div className="grid gap-4 lg:grid-cols-[400px_1fr] lg:items-start">
 {/* Columna EXISTENCIAS */}
           <div className="space-y-4 order-2 lg:order-none lg:col-start-2 lg:row-start-1">
@@ -744,7 +737,7 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
       )}
 
       {/* ===== CONTROL (cuadre + movimientos + trazabilidad) ===== */}
-      {tab === 'control' && (
+      {vista === 'control' && (
         <div className="space-y-6">
           {/* Zona A · semáforo + alertas */}
           <div className={cn('rounded-2xl border shadow-sm overflow-hidden', totalAlertas > 0 ? 'border-red-200' : 'border-emerald-200')}>
@@ -785,7 +778,7 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
                         <p className="font-bold text-red-700">Posible robo de huevos</p>
                         <p className="text-sm text-red-600">Recepción del {r.fechaRecepcion ? new Date(r.fechaRecepcion).toLocaleDateString() : ''}: esperado <strong>{r.cantidadEsperada}</strong>, recibido <strong>{r.cantidadRecibida}</strong> (faltan <strong>{r.diferencia}</strong>) — {r.motivoDiferencia || 'faltante sin causa'}. Responsable: {r.responsableRecepcion || '—'}.</p>
                       </div>
-                      <button onClick={() => { setTab('bodega'); }} className="shrink-0 text-sm font-bold text-red-700 hover:text-red-900 whitespace-nowrap">Revisar recepción →</button>
+                      <button onClick={() => onVista('existencias')} className="shrink-0 text-sm font-bold text-red-700 hover:text-red-900 whitespace-nowrap">Revisar recepción →</button>
                     </div>
                   ))}
                   {alertasBodega.map(a => (

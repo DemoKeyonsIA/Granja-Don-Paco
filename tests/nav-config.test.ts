@@ -13,12 +13,13 @@ import { describe, it, expect } from 'vitest';
 import type { Role } from '../src/types';
 import {
   MODULOS, ROLES_MOVIL, ESPACIOS_OFFICE,
-  SUBTABS_GRANJA, SUBTABS_ADMIN, SUBTABS_FINANZAS, SUBTABS_LOGISTICA,
+  SUBTABS_GRANJA, SUBTABS_BODEGA, SUBTABS_OPERACIONES_DESKTOP, SUBTABS_POR_MODULO,
+  SUBTABS_ADMIN, SUBTABS_FINANZAS, SUBTABS_LOGISTICA,
   SUBTABS_ANALITICA, TIPOS_REPORTE, idSubTabReporte, tipoReporteDe, subTabsInternosDe,
   rolesEfectivos, modulosVisibles, moduloPorId, labelDeModulo, moduloPorDefecto,
   subTabsDe, subTabsLogisticaDe, subTabPorDefecto, subTabsOperacionesMovil,
   subTabMovilEfectivo, breadcrumbDe, esRolMovil, validarConfig, INCIDENCIAS_CONOCIDAS,
-  espacioOfficeDe,
+  espacioOfficeDe, BREADCRUMB_EXTRA, destinoGrupoOperaciones,
 } from '../src/nav/modulos';
 
 const TODOS: Role[] = ['Admin', 'Socio', 'Comercial', 'Despachador', 'Bodeguero', 'Camionero'];
@@ -80,10 +81,14 @@ describe('roles efectivos', () => {
 });
 
 describe('sidebar por rol', () => {
-  it('Admin ve los 7 módulos: ya no existe el Centro de Mando', () => {
+  it('Admin ve los 6 módulos: en Fase 7 dejó de existir el módulo Granja', () => {
+    // Granja no se repartió entre Logistics ni Office: pasó a ser un grupo del
+    // hub de Operaciones, que es de Admin. Un módulo que solo Admin puede ver y
+    // que comparte sitio con otros cuatro grupos es una fila más, no un destino.
     expect(idsModulos(['Admin'])).toEqual([
-      'finanzas', 'granja', 'admin', 'office', 'operaciones', 'logistica', 'clientes',
+      'finanzas', 'admin', 'office', 'operaciones', 'logistica', 'clientes',
     ]);
+    expect(MODULOS.map(m => m.id)).not.toContain('granja');
   });
 
   it('Socio ve 2 módulos: Finanzas y Office', () => {
@@ -96,9 +101,9 @@ describe('sidebar por rol', () => {
     }
   });
 
-  it('Socio no ve Granja, Admin, Operaciones, Logística ni Clientes', () => {
+  it('Socio no ve Admin, Operaciones, Logística ni Clientes', () => {
     const visibles = idsModulos(['Socio']);
-    for (const ausente of ['granja', 'admin', 'operaciones', 'logistica', 'clientes']) {
+    for (const ausente of ['admin', 'operaciones', 'logistica', 'clientes']) {
       expect(visibles, ausente).not.toContain(ausente);
     }
   });
@@ -176,10 +181,85 @@ describe('módulo de entrada por defecto', () => {
   });
 });
 
+describe('hub de Operaciones de escritorio', () => {
+  it('declaro los cinco grupos en orden y no hay un grupo residual', () => {
+    expect(ids(SUBTABS_OPERACIONES_DESKTOP)).toEqual(['resumen', 'granja', 'bodega', 'despacho', 'ventas']);
+    expect(SUBTABS_POR_MODULO.operaciones).toBe(SUBTABS_OPERACIONES_DESKTOP);
+  });
+
+  it('Admin ve los cinco grupos y Comercial solo los dos que le tocan', () => {
+    expect(ids(subTabsDe('operaciones', ['Admin'])))
+      .toEqual(['resumen', 'granja', 'bodega', 'despacho', 'ventas']);
+    expect(ids(subTabsDe('operaciones', ['Comercial']))).toEqual(['despacho', 'ventas']);
+    for (const rol of ['Socio'] as Role[]) {
+      expect(ids(subTabsDe('operaciones', [rol])), rol).toEqual([]);
+    }
+  });
+
+  it('el reparto de roles por grupo es explícito, no "Admin hasta que se demuestre lo contrario"', () => {
+    const rolesDe = (id: string) => SUBTABS_OPERACIONES_DESKTOP.find(t => t.id === id)?.roles;
+    expect(rolesDe('resumen')).toEqual(['Admin']);
+    expect(rolesDe('granja')).toEqual(['Admin']);
+    expect(rolesDe('bodega')).toEqual(['Admin']);
+    expect(rolesDe('despacho')).toEqual(['Admin', 'Comercial']);
+    expect(rolesDe('ventas')).toEqual(['Admin', 'Comercial']);
+  });
+
+  it('los roles móviles puros no ven ningún grupo de escritorio', () => {
+    // Su camino no cambia: BodegaAdmin, DespachoMovil y compañía siguen montados
+    // por `esRolMovil`, no por la fila de grupos.
+    for (const r of ROLES_MOVIL) {
+      expect(subTabsDe('operaciones', [r]), r).toEqual([]);
+      expect(subTabsOperacionesMovil([r]).length, r).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('sub-filas del hub de Operaciones', () => {
+  it('Granja expone sus cuatro vistas como sub-fila, no como módulo', () => {
+    expect(ids(SUBTABS_GRANJA)).toEqual(['granjas', 'salud', 'alimento', 'mantenimiento']);
+    // El maestro de alta se queda en Admin: crear granjas es tocar el maestro de
+    // datos, y eso sigue siendo de Admin aunque la lista viva en el hub.
+    expect(subTabsInternosDe('operaciones', 'granja')).toEqual(SUBTABS_GRANJA);
+    expect(idsModulos(['Admin'])).not.toContain('granja');
+  });
+
+  it('Bodega expone Existencias y Control como sub-fila', () => {
+    // El id de la vista se renombró de `bodega` a `existencias` para no colisionar
+    // con el grupo contenedor. Con los dos nombres conviviendo, `subTab` no
+    // podría decir cuál de los dos está activo.
+    expect(ids(SUBTABS_BODEGA)).toEqual(['existencias', 'control']);
+    expect(SUBTABS_BODEGA.some(t => t.id === 'bodega')).toBe(false);
+    expect(subTabsInternosDe('operaciones', 'bodega')).toEqual(SUBTABS_BODEGA);
+  });
+
+  it('la sub-fila sigue visible cuando el sub-tab activo ya es una de sus vistas', () => {
+    // Igual que Analítica con sus tipos de reporte: si la fila solo apareciera con
+    // el id del grupo, al elegir "Salud Avícola" la fila desaparecería y no habría
+    // forma de volver a las otras tres sin abrir el hub de nuevo.
+    for (const id of ['granjas', 'salud', 'alimento', 'mantenimiento']) {
+      expect(subTabsInternosDe('operaciones', id), id).toEqual(SUBTABS_GRANJA);
+    }
+    for (const id of ['existencias', 'control']) {
+      expect(subTabsInternosDe('operaciones', id), id).toEqual(SUBTABS_BODEGA);
+    }
+  });
+
+  it('los grupos sin sub-fila no piden fila, y Bodega no se confunde con su grupo', () => {
+    for (const subTab of ['resumen', 'despacho', 'ventas', '', 'carga', 'recibir']) {
+      expect(subTabsInternosDe('operaciones', subTab), subTab).toEqual([]);
+    }
+  });
+});
+
 describe('sub-tabs por módulo y rol', () => {
-  it('Granja tiene sus 4 vistas y es solo de Admin', () => {
-    expect(ids(subTabsDe('granja', ['Admin']))).toEqual(ids(SUBTABS_GRANJA));
-    expect(idsModulos(['Socio'])).not.toContain('granja');
+  it('el camino móvil de Operaciones no comparte ids con el hub de escritorio', () => {
+    // `bodega` y `existencias` convivían en la Fase 6 con el grupo del hub, así
+    // que un `subTab` heredado podía montar la vista equivocada sin que se notara.
+    const escritorio = new Set(ids(SUBTABS_OPERACIONES_DESKTOP));
+    for (const t of subTabsOperacionesMovil(['Despachador', 'Bodeguero', 'Camionero'])) {
+      expect(escritorio.has(t.id), t.id).toBe(false);
+    }
   });
 
   it('Finanzas es Resumen · Documentos · Cobranza · Analítica con matriz por rol', () => {
@@ -295,12 +375,20 @@ describe('sub-tabs por módulo y rol', () => {
   it('Logística separa bandas y ya no tiene banda admin', () => {
     // Fase 4: el tab `facturacion` salió de Logística. Documentos, en Finanzas,
     // es la única ruta a la facturación.
+    // Fase 7: `remisiones` y `caja` también salieron. Remisiones es el grupo
+    // Despacho y Caja Ruta es el grupo Ventas, los dos en el hub. Lo que se va de
+    // un sitio no puede seguir apareciendo en otro: dos puertas al mismo trabajo
+    // significa dos rutas de soporte y dos caminos para aprender.
     const visibles = subTabsLogisticaDe(['Admin']);
     expect(visibles.filter(t => t.banda === 'nucleo').map(t => t.id))
-      .toEqual(['logistica', 'guias', 'remisiones', 'caja', 'tablero']);
+      .toEqual(['logistica', 'guias', 'tablero']);
     expect(visibles.filter(t => t.banda === 'admin')).toEqual([]);
     expect(visibles.filter(t => t.banda === 'config').map(t => t.id))
       .toEqual(['etiquetas', 'pesos', 'precios']);
+    for (const id of ['remisiones', 'caja']) {
+      expect(ids(subTabsLogisticaDe(['Admin', 'Comercial']))).not.toContain(id);
+      expect(MODULOS.some(m => m.id === 'logistica' && m.id === id), id).toBe(false);
+    }
   });
 
   it('Comercial ve el núcleo de Logística pero no la configuración', () => {
@@ -316,8 +404,11 @@ describe('sub-tabs por módulo y rol', () => {
 });
 
 describe('sub-tab por defecto', () => {
-  it('Comercial entra a Logística por Caja Ruta', () => {
-    expect(subTabPorDefecto('logistica', ['Comercial'])).toBe('caja');
+  it('Logística entra por su vista principal para los dos roles de escritorio', () => {
+    // Antes el Comercial entraba por Caja Ruta, que en Fase 7 es el grupo Ventas
+    // del hub. Un módulo cuyo default cambia con el rol esconde el trabajo de
+    // escritorio de uno de los dos; ahora los dos entran al mismo lugar.
+    expect(subTabPorDefecto('logistica', ['Comercial'])).toBe('logistica');
   });
 
   it('Admin entra a Logística por la vista principal', () => {
@@ -334,8 +425,18 @@ describe('sub-tab por defecto', () => {
     expect(subTabPorDefecto('operaciones', ['Camionero', 'Bodeguero'])).toBe('recibir');
   });
 
-  it('escritura entra a Operaciones por Produccion', () => {
-    expect(subTabPorDefecto('operaciones', ['Admin'])).toBe('produccion');
+  it('Admin entra a Operaciones por Resumen y Comercial por Despacho', () => {
+    // El default de escritorio es el primer grupo visible, nunca uno fijo. Fase 7
+    // cerró la incidencia `operaciones/produccion`: `produccion` era un sub-tab
+    // que nadie podía montar, así que Admin caía en una pantalla vacía.
+    expect(subTabPorDefecto('operaciones', ['Admin'])).toBe('resumen');
+    expect(subTabPorDefecto('operaciones', ['Comercial'])).toBe('despacho');
+    // Y ningún rol de escritorio aterriza en un grupo que no ve.
+    for (const rol of ['Admin', 'Comercial', 'Socio'] as Role[]) {
+      const visibles = ids(subTabsDe('operaciones', [rol]));
+      if (!visibles.length) continue;
+      expect(visibles, rol).toContain(subTabPorDefecto('operaciones', [rol]));
+    }
   });
 
   it('el default de cada módulo no depende de cómo se llegó', () => {
@@ -376,7 +477,7 @@ describe('camino móvil de Operaciones', () => {
   });
 
   it('sin tabs visibles cae a Carga', () => {
-    expect(subTabMovilEfectivo(['Admin'], 'produccion')).toBe('carga');
+    expect(subTabMovilEfectivo(['Admin'], 'granja')).toBe('carga');
   });
 });
 
@@ -388,12 +489,17 @@ describe('breadcrumb', () => {
   it('muestra módulo y sub-tab', () => {
     expect(breadcrumbDe('finanzas', 'cobranza', ['Admin'])).toEqual(['Finanzas', 'Cobranza']);
     expect(breadcrumbDe('logistica', 'guias', ['Admin'])).toEqual(['Logística', 'Guías y Camiones']);
-    expect(breadcrumbDe('granja', 'salud', ['Admin'])).toEqual(['Granja', 'Salud Avícola']);
+    expect(breadcrumbDe('operaciones', 'salud', ['Admin'])).toEqual(['Operaciones y Bodegas', 'Granja']);
     expect(breadcrumbDe('admin', 'infraestructura', ['Admin'])).toEqual(['Admin', 'Infraestructura']);
   });
 
-  it('el hub de Operaciones muestra solo el módulo', () => {
-    expect(breadcrumbDe('operaciones', 'produccion', ['Admin'])).toEqual(['Operaciones y Bodegas', '']);
+  it('el hub de Operaciones nombra el grupo activo', () => {
+    // Antes el breadcrumb del hub solo mostraba el módulo y el id `produccion`
+    // quedaba sin nombre, que es como se descubre que se está en un id que no
+    // existe. Ahora cada grupo se nombra solo.
+    expect(breadcrumbDe('operaciones', 'resumen', ['Admin'])).toEqual(['Operaciones y Bodegas', 'Resumen del día']);
+    expect(breadcrumbDe('operaciones', 'granja', ['Admin'])).toEqual(['Operaciones y Bodegas', 'Granja']);
+    expect(breadcrumbDe('operaciones', 'ventas', ['Comercial'])).toEqual(['Operaciones y Bodegas', 'Ventas']);
   });
 
   it('el camino móvil muestra el módulo y la vista efectiva', () => {
@@ -401,11 +507,19 @@ describe('breadcrumb', () => {
   });
 
   it('un sub-tab desconocido no rompe el breadcrumb', () => {
-    expect(breadcrumbDe('granja', 'inventado', ['Admin'])).toEqual(['Granja', '']);
+    expect(breadcrumbDe('operaciones', 'inventado', ['Admin'])).toEqual(['Operaciones y Bodegas', '']);
   });
 
-  it('cubriría los sub-tabs declarados fuera de SUBTABS_*', () => {
-    expect(breadcrumbDe('operaciones', 'desperdicios', ['Admin'])).toEqual(['Operaciones y Bodegas', '']);
+  it('las vistas de Bodega y Granja se nombran con el grupo que las contiene', () => {
+    // Una vista de sub-fila no es un tab del módulo, así que el breadcrumb nombra
+    // el grupo que la contiene, igual que un reporte nombra "Analítica". La vista
+    // exacta ya está marcada en la fila de arriba, y el breadcrumb no crece un
+    // nivel por cada clic. `desperdicios` y `produccion` vivían en
+    // BREADCRUMB_EXTRA justamente porque eran ids que no venían de SUBTABS_*; los
+    // dos desaparecieron, y esa tabla vacía avisa si vuelve a hacer falta.
+    expect(breadcrumbDe('operaciones', 'control', ['Admin'])).toEqual(['Operaciones y Bodegas', 'Bodega']);
+    expect(breadcrumbDe('operaciones', 'existencias', ['Admin'])).toEqual(['Operaciones y Bodegas', 'Bodega']);
+    expect(Object.keys(BREADCRUMB_EXTRA)).toEqual([]);
   });
 });
 
@@ -422,5 +536,39 @@ describe('consulta por id', () => {
   it('subTabsLogisticaDe devuelve la unión de las tres bandas', () => {
     const total = Object.values(SUBTABS_LOGISTICA).reduce((n, b) => n + b.length, 0);
     expect(subTabsLogisticaDe(['Admin']).length).toBe(total);
+  });
+});
+
+describe('destino de la búsqueda hacia un grupo del hub', () => {
+  it('lleva al grupo pedido cuando el rol lo ve', () => {
+    expect(destinoGrupoOperaciones('despacho', ['Admin'])).toEqual({ modulo: 'operaciones', subTab: 'despacho' });
+    expect(destinoGrupoOperaciones('ventas', ['Comercial'])).toEqual({ modulo: 'operaciones', subTab: 'ventas' });
+    expect(destinoGrupoOperaciones('granja', ['Admin'])).toEqual({ modulo: 'operaciones', subTab: 'granja' });
+  });
+
+  it('devuelve null para un rol sin Operaciones, en vez de un módulo vacío', () => {
+    // Un Socio busca "granja". La granja no existe para él, y el peor resultado
+    // posible es abrir el módulo igual: sin fila y sin cuerpo, con el texto
+    // buscado a la vista y el resultado en ninguna pantalla.
+    expect(destinoGrupoOperaciones('granja', ['Socio'])).toBeNull();
+    expect(destinoGrupoOperaciones('despacho', ['Socio'])).toBeNull();
+    // Tampoco un Comercial puede buscar Granja o Bodega: son de Admin.
+    expect(destinoGrupoOperaciones('granja', ['Comercial'])).toBeNull();
+    expect(destinoGrupoOperaciones('bodega', ['Comercial'])).toBeNull();
+  });
+
+  it('un rol móvil aterriza en su propia pantalla de Operaciones', () => {
+    // Sigue siendo Operaciones, que es el módulo que sí ve en el sidebar, pero con
+    // el sub-tab móvil: el camino de escritorio no existe para él.
+    expect(destinoGrupoOperaciones('despacho', ['Camionero'])).toEqual({ modulo: 'operaciones', subTab: 'confirmar' });
+    expect(destinoGrupoOperaciones('despacho', ['Bodeguero'])).toEqual({ modulo: 'operaciones', subTab: 'recibir' });
+    expect(destinoGrupoOperaciones('despacho', ['Despachador'])).toEqual({ modulo: 'operaciones', subTab: 'carga' });
+  });
+
+  it('con Admin y un rol móvil manda el camino móvil, que es el que monta el shell', () => {
+    // La fila de escritorio le enseñaría los cinco grupos, pero `esRolMovil` gana
+    // al montar el cuerpo: devolverle un grupo de escritorio lo dejaría en un
+    // sub-tab que ninguna fila tiene marcado.
+    expect(destinoGrupoOperaciones('granja', ['Admin', 'Bodeguero'])).toEqual({ modulo: 'operaciones', subTab: 'recibir' });
   });
 });

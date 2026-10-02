@@ -27,7 +27,8 @@ const MODULOS_APLICACION = [
   'Cobranza', 'Granjas', 'FinanzasResumen', 'Etiquetas', 'Pesos', 'DashboardEnterprise',
   'SaludAvicola', 'Alimento', 'Mantenimiento', 'Precios', 'Admin', 'Office',
   'Reportes',
-  'operaciones', 'operaciones/BodegaAdmin',
+  'operaciones', 'operaciones/BodegaAdmin', 'operaciones/ResumenDelDia',
+  'operaciones/DespachoAdmin',
   'DespachoMovil', 'BodegaMovil', 'CamioneroMovil', 'IncidentesMovil',
   // ErrorBoundary NO se sustituye a propósito: forma parte del shell y su
   // comportamiento (contener el fallo de un módulo) es lo que se quiere observar.
@@ -37,7 +38,10 @@ for (const ruta of MODULOS_APLICACION) {
   // `vi.doMock` y no `vi.mock`: dentro de un bucle, el hoisting de `vi.mock`
   // sacaría la llamada fuera del bucle y `ruta` sería undefined.
   vi.doMock(ruta, () => {
-    const Stub = () => <div data-testid="stub-modulo" />;
+    // El stub declara qué módulo es. Todos los stubs comparten `data-testid`, así
+    // que sin esto no se puede distinguir "se montó el cuerpo de Ventas" de "se
+    // montó el de Despacho": son dos `<div>` idénticos.
+    const Stub = () => <div data-testid="stub-modulo" data-stub={ruta} />;
     Stub.displayName = 'StubModulo';
     return { default: Stub };
   });
@@ -84,6 +88,15 @@ const bandasDeTabs = (): string[] =>
 const textoDelModuloActual = (): string =>
   (document.querySelector('main')?.textContent ?? '').trim();
 
+/** Qué cuerpos de módulo hay montados ahora mismo, por ruta de import. */
+const cuerposMontados = (): string[] =>
+  Array.from(document.querySelectorAll('[data-testid="stub-modulo"]'))
+    .map(el => el.getAttribute('data-stub') ?? '');
+
+/** ¿Está montado el cuerpo que termina en `sufijo`? */
+const cuerpoMontado = (sufijo: string): boolean =>
+  cuerposMontados().some(r => r.endsWith(sufijo));
+
 /** Los dos tramos del breadcrumb, o `null` si la vista no lo muestra. */
 const breadcrumb = (): string[] | null => {
   const main = document.querySelector('main')!;
@@ -118,10 +131,10 @@ afterEach(() => {
 });
 
 describe('sidebar por rol', () => {
-  it('Admin ve los 7 módulos, sin Centro de Mando', () => {
+  it('Admin ve los 6 módulos: el módulo Granja se hizo grupo del hub', () => {
     renderComo('Admin');
     expect(modulosDelSidebar()).toEqual([
-      'Finanzas', 'Granja', 'Admin', 'Office', 'Operaciones y Bodegas', 'Logística', 'Clientes',
+      'Finanzas', 'Admin', 'Office', 'Operaciones y Bodegas', 'Logística', 'Clientes',
     ]);
   });
 
@@ -157,8 +170,11 @@ describe('sidebar por rol', () => {
     renderComo('Bodeguero', ['Bodeguero', 'Admin']);
     const mods = modulosDelSidebar();
     expect(mods).toContain('Operaciones y Bodegas');
-    expect(mods).toContain('Granja');
     expect(mods).not.toContain('Recepción');
+    // Y el hub no deja al Granja como módulo suelto: es un grupo suyo. El cuerpo
+    // que se monta sigue siendo el móvil, porque `esRolMovil` manda sobre el
+    // módulo mientras el rol tenga uno móvil encima.
+    expect(mods).not.toContain('Granja');
   });
 });
 
@@ -178,10 +194,13 @@ describe('módulo de entrada por defecto', () => {
     expect(screen.getAllByTestId('stub-modulo')).toHaveLength(1);
   });
 
-  it('Comercial entra a Logística por Caja Ruta', async () => {
+  it('Comercial entra a Logística por su vista principal', async () => {
+    // Fase 7: antes el default de un Comercial era Caja Ruta, que ahora es el
+    // grupo Ventas del hub. Si el módulo tuviera un sub-tab propio que ya no
+    // existe, el módulo se abriría con la fila en blanco.
     renderComo('Comercial');
     await abrirModulo('Logística');
-    expect(tabsActivos()).toEqual(['caja']);
+    expect(tabsActivos()).toEqual(['logistica']);
   });
 
   it('un Bodeguero entra directo al camino móvil', () => {
@@ -226,7 +245,7 @@ describe('tabs de Finanzas', () => {
   it('buscar "factura" lleva a Documentos y no al tab inicial del módulo', async () => {
     const user = userEvent.setup();
     renderComo('Admin');
-    await abrirModulo('Granja');
+    await abrirModulo('Logística');
     await user.type(screen.getByRole('textbox'), 'factura');
     await user.keyboard('{Enter}');
     expect(idsDeTabs()).toEqual(['resumen', 'documentos', 'cobranza', 'analitica']);
@@ -236,7 +255,7 @@ describe('tabs de Finanzas', () => {
   it('buscar "flujo de caja" abre Analítica en el reporte, no un tab vacío', async () => {
     const user = userEvent.setup();
     renderComo('Admin');
-    await abrirModulo('Granja');
+    await abrirModulo('Logística');
     await user.type(screen.getByRole('textbox'), 'flujo de caja');
     await user.keyboard('{Enter}');
     expect(
@@ -274,12 +293,15 @@ describe('tabs de Finanzas', () => {
 });
 
 describe('tabs de Logística', () => {
-  it('Admin ve las tres bandas', async () => {
+  it('Admin ve las tres bandas sin Remisiones ni Caja', async () => {
+    // Fase 7: esos dos tabs son los grupos Despacho y Ventas del hub. Si se
+    // quedaran aquí, la misma pantalla tendría dos direcciones y la que se
+    // documentara sería la equivocada.
     renderComo('Admin');
     await abrirModulo('Logística');
     expect(bandasDeTabs()).toEqual(['primario', 'terciario']);
     expect(idsDeTabs()).toEqual([
-      'logistica', 'guias', 'remisiones', 'caja', 'tablero',
+      'logistica', 'guias', 'tablero',
       'etiquetas', 'pesos', 'precios',
     ]);
   });
@@ -294,7 +316,7 @@ describe('tabs de Logística', () => {
     renderComo('Comercial');
     await abrirModulo('Logística');
     expect(bandasDeTabs()).toEqual(['primario']);
-    expect(idsDeTabs()).toEqual(['logistica', 'guias', 'remisiones', 'caja', 'tablero']);
+    expect(idsDeTabs()).toEqual(['logistica', 'guias', 'tablero']);
   });
 
   it('las etiquetas coinciden con el modelo del boceto', async () => {
@@ -306,12 +328,112 @@ describe('tabs de Logística', () => {
   });
 });
 
-describe('tabs de Granja', () => {
-  it('Granja ofrece sus cuatro vistas', async () => {
+describe('hub de Operaciones de escritorio', () => {
+  it('Admin ve los cinco grupos con Resumen del día activo', async () => {
     renderComo('Admin');
-    await abrirModulo('Granja');
-    expect(idsDeTabs()).toEqual(['granjas', 'salud', 'alimento', 'mantenimiento']);
-    expect(tabsActivos()).toEqual(['granjas']);
+    await abrirModulo('Operaciones y Bodegas');
+    expect(idsDeTabs()).toEqual(['resumen', 'granja', 'bodega', 'despacho', 'ventas']);
+    expect(tabsActivos()).toEqual(['resumen']);
+  });
+
+  it('Comercial ve solo Despacho y Ventas, sin sub-fila', async () => {
+    renderComo('Comercial');
+    await abrirModulo('Operaciones y Bodegas');
+    expect(idsDeTabs()).toEqual(['despacho', 'ventas']);
+    expect(bandasDeTabs()).toEqual(['primario']);
+  });
+
+  it('cada grupo monta su cuerpo y solo el suyo', async () => {
+    const user = userEvent.setup();
+    renderComo('Admin');
+    await abrirModulo('Operaciones y Bodegas');
+
+    expect(cuerpoMontado('/operaciones/ResumenDelDia')).toBe(true);
+    expect(screen.getAllByTestId('stub-modulo')).toHaveLength(1);
+
+    await user.click(document.querySelector('[data-tab-id="granja"]')!);
+    expect(cuerpoMontado('/Granjas')).toBe(true);
+    expect(cuerpoMontado('/operaciones/ResumenDelDia')).toBe(false);
+
+    await user.click(document.querySelector('[data-tab-id="despacho"]')!);
+    expect(cuerpoMontado('/operaciones/DespachoAdmin')).toBe(true);
+
+    await user.click(document.querySelector('[data-tab-id="ventas"]')!);
+    expect(cuerpoMontado('/CajaRuta')).toBe(true);
+    expect(screen.getAllByTestId('stub-modulo')).toHaveLength(1);
+  });
+
+  it('Granja y Bodega abren su sub-fila de vistas', async () => {
+    const user = userEvent.setup();
+    renderComo('Admin');
+    await abrirModulo('Operaciones y Bodegas');
+
+    await user.click(document.querySelector('[data-tab-id="granja"]')!);
+    expect(bandasDeTabs()).toEqual(['primario', 'secundario']);
+    expect(
+      Array.from(document.querySelectorAll('[data-banda="secundario"] [data-tab-id]'))
+        .map(el => el.getAttribute('data-tab-id')),
+    ).toEqual(['granjas', 'salud', 'alimento', 'mantenimiento']);
+
+    await user.click(document.querySelector('[data-banda="secundario"] [data-tab-id="salud"]')!);
+    expect(cuerpoMontado('/SaludAvicola')).toBe(true);
+    // La fila sigue ahí al elegir una vista: es la única forma de volver a las
+    // otras tres sin volver al hub.
+    expect(bandasDeTabs()).toEqual(['primario', 'secundario']);
+
+    await user.click(document.querySelector('[data-tab-id="bodega"]')!);
+    expect(
+      Array.from(document.querySelectorAll('[data-banda="secundario"] [data-tab-id]'))
+        .map(el => el.getAttribute('data-tab-id')),
+    ).toEqual(['existencias', 'control']);
+  });
+
+  it('Bodega cambia de vista desde el propio cuerpo', async () => {
+    // La vista de Control se elige desde la sub-fila, no desde un estado interno
+    // de BodegaAdmin: por eso BodegaAdmin recibe `vista` y `onVista` por props.
+    renderComo('Admin');
+    await abrirModulo('Operaciones y Bodegas');
+    await userEvent.setup().click(document.querySelector('[data-tab-id="bodega"]')!);
+    expect(
+      Array.from(document.querySelectorAll('[data-banda="secundario"] [data-tab-id="control"]'))
+        .length,
+    ).toBe(1);
+  });
+
+  it('buscar "granja" lleva al grupo Granja del hub', async () => {
+    const user = userEvent.setup();
+    renderComo('Admin');
+    await user.type(screen.getByRole('textbox'), 'granja');
+    await user.keyboard('{Enter}');
+    expect(idsDeTabs()).toContain('granja');
+    expect(cuerpoMontado('/Granjas')).toBe(true);
+  });
+
+  it('buscar "remisión" lleva a Despacho, no a un tab de Logística que ya no existe', async () => {
+    const user = userEvent.setup();
+    renderComo('Admin');
+    await user.type(screen.getByRole('textbox'), 'remisión');
+    await user.keyboard('{Enter}');
+    expect(idsDeTabs()).toContain('despacho');
+    expect(cuerpoMontado('/operaciones/DespachoAdmin')).toBe(true);
+  });
+
+  it('un Socio que busca "granja" se queda en su módulo, en vez de abrir uno vacío', async () => {
+    const user = userEvent.setup();
+    renderComo('Socio');
+    await abrirModulo('Office');
+    await user.type(screen.getByRole('textbox'), 'granja');
+    await user.keyboard('{Enter}');
+
+    // No ve el hub, así que la búsqueda no lo mueve: la granja no existe para él.
+    // Lo que importa no es que no haya fila de grupos —eso también pasaba cuando
+    // el defecto estaba— sino que siga viendo una pantalla con breadcrumb, con
+    // su entrada en el sidebar y con un cuerpo montado. Antes el shell llamaba a
+    // `setActiveTab('operaciones')` a ciegas y lo dejaba en blanco.
+    expect(breadcrumb()).toEqual(['Office', 'Correo']);
+    expect(modulosDelSidebar()).toContain('Office');
+    expect(cuerpoMontado('/Office')).toBe(true);
+    expect(screen.queryByTestId('stub-modulo')).toBeTruthy();
   });
 });
 
@@ -390,9 +512,12 @@ describe('breadcrumbs', () => {
     expect(breadcrumb()).toEqual(['Finanzas', 'Cobranza']);
   });
 
-  it('el hub de Operaciones no muestra el sub-tab en el breadcrumb', async () => {
+  it('el hub de Operaciones nombra el grupo activo en el breadcrumb', async () => {
+    const user = userEvent.setup();
     renderComo('Admin');
     await abrirModulo('Operaciones y Bodegas');
-    expect(breadcrumb()).toEqual(['Operaciones y Bodegas']);
+    expect(breadcrumb()).toEqual(['Operaciones y Bodegas', 'Resumen del día']);
+    await user.click(document.querySelector('[data-tab-id="ventas"]')!);
+    expect(breadcrumb()).toEqual(['Operaciones y Bodegas', 'Ventas']);
   });
 });

@@ -1,6 +1,6 @@
 import React from "react";
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Bot, ChevronRight, ChevronDown, DollarSign, LogOut, PackageOpen, Plus, Send, Settings, User as UserIcon, X, Loader2, Info, Sparkles, Menu, Search, Egg, Sun, Moon, Shield, FileText, Users, ClipboardList, CreditCard, Tag, Mail, Truck } from 'lucide-react';
+import { Bot, ChevronRight, ChevronDown, DollarSign, LogOut, Plus, Send, Settings, User as UserIcon, X, Loader2, Info, Sparkles, Menu, Search, Egg, Sun, Moon, Shield, FileText, Users, ClipboardList, CreditCard, Tag, Mail, Truck } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { cn } from './lib/utils';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -13,6 +13,8 @@ import TableroRutas from "./components/TableroRutas";
 import Cobranza from "./components/Cobranza";
 import Granjas from "./components/Granjas";
 import OperacionesAdmin from "./components/operaciones";
+import ResumenDelDia from "./components/operaciones/ResumenDelDia";
+import DespachoAdmin from "./components/operaciones/DespachoAdmin";
 import DespachoMovil from "./components/DespachoMovil";
 import BodegaMovil from "./components/BodegaMovil";
 import CamioneroMovil from "./components/CamioneroMovil";
@@ -39,7 +41,7 @@ import {
   rolesEfectivos, modulosVisibles, labelDeModulo, moduloPorDefecto,
   espacioOfficeDe,
   subTabsDe, subTabPorDefecto, subTabsOperacionesMovil, subTabMovilEfectivo,
-  subTabsLogisticaDe, subTabsInternosDe, breadcrumbDe, esRolMovil,
+  subTabsLogisticaDe, subTabsInternosDe, breadcrumbDe, esRolMovil, destinoGrupoOperaciones,
   tipoReporteDe, idSubTabReporte,
 } from './nav/modulos';
 
@@ -199,7 +201,6 @@ const nuevoItems = useMemo(() => {
     if (currentUser.role === 'Despachador' || currentUser.role === 'Bodeguero') return items;
     if (activeTab === 'logistica') {
       items.push({ label: 'Guía de Despacho', icon: ClipboardList, tab: 'logistica', subTab: 'guias' });
-      items.push({ label: 'Venta (Caja)', icon: CreditCard, tab: 'logistica', subTab: 'caja' });
     } else if (activeTab === 'clientes') {
       items.push({ label: 'Cliente', icon: Users, tab: 'clientes' });
     } else if (activeTab === 'admin') {
@@ -214,11 +215,18 @@ const nuevoItems = useMemo(() => {
       if (userRoles.includes('Admin')) {
         items.push({ label: 'Gasto', icon: DollarSign, tab: 'finanzas', accion: 'gasto' });
       }
-    } else if (activeTab === 'granja') {
-      items.push({ label: 'Granja', icon: Egg, tab: 'granja', subTab: 'granjas' });
     } else if (activeTab === 'operaciones') {
-      items.push({ label: 'Producción', icon: PackageOpen, tab: 'operaciones', subTab: 'produccion' });
-      items.push({ label: 'Remisión', icon: FileText, tab: 'operaciones', subTab: 'remisiones' });
+      // Las acciones se leen de la fila que el usuario ya ve, igual que las de
+      // Vinculaciones. Así Remisión y Venta (Caja) dejan de ser dos puertas fijas
+      // que se ofrecían a cualquiera —un Camionero con "Nuevo > Producción" lo
+      // llevaba a un id que no montaba nada— y pasan a existir donde está el
+      // trabajo: Admin y Comercial las ven, un Bodeguero no.
+      const grupos = new Set(subTabsDe('operaciones', userRoles).map(t => t.id));
+      if (grupos.has('despacho')) items.push({ label: 'Remisión', icon: FileText, tab: 'operaciones', subTab: 'despacho' });
+      if (grupos.has('ventas')) items.push({ label: 'Venta (Caja)', icon: CreditCard, tab: 'operaciones', subTab: 'ventas' });
+      // El alta de Granja sigue siendo de Admin, que es lo que declara
+      // SUBTABS_GRANJA. Antes vivía en el módulo Granja que ya no existe.
+      if (grupos.has('granja')) items.push({ label: 'Granja', icon: Egg, tab: 'operaciones', subTab: 'granja' });
     } else if (activeTab === 'office') {
       // "Nueva regla" sigue el espacio: pertenece a Vinculaciones, que es el
       // único de los tres con `roles: ['Admin']`, así que se decide por rol y no
@@ -237,6 +245,24 @@ const nuevoItems = useMemo(() => {
     return items;
   }, [activeTab, subTab, userRoles, finanzasEsSoloLectura]);
 
+  /**
+   * Navegación de la búsqueda hacia un grupo del hub de Operaciones.
+   *
+   * Delega en `destinoGrupoOperaciones`, que devuelve `null` cuando ese rol no
+   * tiene Operaciones. El `null` es lo que evita el defecto que tenía esta
+   * búsqueda: entrar al módulo igual, a ciegas, dejaba a un Socio con el módulo
+   * activo sin fila y sin cuerpo. Sin destino no se toca `activeTab` ni `subTab`,
+   * así que el texto buscado se queda a la vista y el usuario sigue donde estaba,
+   * que es un sitio del que puede salir.
+   */
+  const irAGrupoOperaciones = (grupo: string) => {
+    const destino = destinoGrupoOperaciones(grupo, userRoles);
+    if (!destino) return;
+    subTabManual.current = true;
+    setActiveTab(destino.modulo);
+    setSubTab(destino.subTab);
+  };
+
   const handleSearch = (q: string) => {
     setSearchQuery(q);
     if (!q.trim()) return;
@@ -254,8 +280,12 @@ const nuevoItems = useMemo(() => {
       setActiveTab('office'); setSubTab('documentos');
     } else if (lower.includes('guia') || lower.includes('despacho') || lower.includes('camion')) {
       setActiveTab('logistica'); setSubTab('guias');
-    } else if (lower.includes('remision')) {
-      setActiveTab('logistica'); setSubTab('remisiones');
+    } else if (lower.includes('remision') || lower.includes('remisión')) {
+      // Las remisiones son el grupo Despacho del hub, no un tab de Logística. Las
+      // dos formas del texto cuentan porque la gente escribe la tilde: la búsqueda
+      // comparaba solo `remision`, así que "remisión" —como se escribe— no
+      // llevaba a ninguna parte.
+      irAGrupoOperaciones('despacho');
     } else if (lower.includes('cliente')) {
       setActiveTab('clientes');
 } else if (lower.includes('flujo')) {
@@ -264,7 +294,9 @@ const nuevoItems = useMemo(() => {
       subTabManual.current = true;
       setActiveTab('finanzas'); setSubTab(idSubTabReporte('flujo-caja'));
     } else if (lower.includes('venta') || lower.includes('caja') || lower.includes('tiquete')) {
-      setActiveTab('logistica'); setSubTab('caja');
+      // "Venta (Caja)" era una puerta suelta dentro de Logística; ahora es el grupo
+      // Ventas del hub, con el mismo criterio de rol que las demás búsquedas.
+      irAGrupoOperaciones('ventas');
     } else if (lower.includes('factura') || lower.includes('cobro')) {
       // "Facturación" pasó a ser el tab Documentos de Finanzas. Se decide por
       // rol porque un Comercial sí lo ve y un Socio no: mandarlo a un tab
@@ -280,7 +312,8 @@ const nuevoItems = useMemo(() => {
       subTabManual.current = true;
       setActiveTab('finanzas'); setSubTab(subTabPorDefecto('finanzas', userRoles));
     } else if (lower.includes('granja') || lower.includes('galero')) {
-      setActiveTab('granja'); setSubTab('granjas');
+      // La granja dejó de ser módulo y pasó a ser grupo del hub de Operaciones.
+      irAGrupoOperaciones('granja');
     } else if (lower.includes('etiqueta') || lower.includes('qr')) {
       setActiveTab('logistica'); setSubTab('etiquetas');
     } else if (lower.includes('usuario') || lower.includes('rol') || lower.includes('admin')) {
@@ -671,18 +704,6 @@ const nuevoItems = useMemo(() => {
               </div>
             );
           })()}
-          {activeTab === 'granja' && (
-            <div className="space-y-6">
-              {renderFilaTabs(subTabsDe('granja', userRoles), 'primario')}
-              <div className="animate-in fade-in">
-                {subTab === 'granjas' && <Granjas currentUser={currentUser} />}
-                {subTab === 'salud' && <SaludAvicola currentUser={currentUser} />}
-                {subTab === 'alimento' && <Alimento currentUser={currentUser} />}
-                {subTab === 'mantenimiento' && <Mantenimiento currentUser={currentUser} />}
-              </div>
-            </div>
-          )}
-
           {activeTab === 'admin' && <Admin currentUser={currentUser} initialTab={subTab as any} />}
 
           {activeTab === 'operaciones' && esRolMovil(userRoles) && (() => {
@@ -701,7 +722,35 @@ const nuevoItems = useMemo(() => {
             );
           })()}
           {activeTab === 'operaciones' && !esRolMovil(userRoles) && (
-            <OperacionesAdmin currentUser={currentUser} />
+            <div className="space-y-6" data-testid="operaciones-hub">
+              {/* Cinco grupos en una fila, y no los que elija el componente: la
+                  fila sale de `SUBTABS_OPERACIONES_DESKTOP`, la misma fuente que
+                  el default y el breadcrumb. Antes la dibujaba `BodegaAdmin` con
+                  su propia lista, que por eso era dos y no cinco. */}
+              {renderFilaTabs(subTabsDe('operaciones', userRoles), 'primario')}
+              {/* Granja y Bodega tienen sub-fila: sus cuatro vistas de granja y
+                  sus dos de bodega. Igual que los tipos de reporte de Analítica,
+                  la fila se resuelve también cuando el sub-tab activo ya es un
+                  elemento de la sub-fila, para que no desaparezca al elegirlo. */}
+              {renderFilaTabs(subTabsInternosDe('operaciones', subTab), 'secundario')}
+              <div className="animate-in fade-in">
+                {subTab === 'resumen' && <ResumenDelDia currentUser={currentUser} />}
+                {subTab === 'granja' && <Granjas currentUser={currentUser} />}
+                {subTab === 'granjas' && <Granjas currentUser={currentUser} />}
+                {subTab === 'salud' && <SaludAvicola currentUser={currentUser} />}
+                {subTab === 'alimento' && <Alimento currentUser={currentUser} />}
+                {subTab === 'mantenimiento' && <Mantenimiento currentUser={currentUser} />}
+                {(subTab === 'bodega' || subTab === 'existencias' || subTab === 'control') && (
+                  <OperacionesAdmin
+                    currentUser={currentUser}
+                    vista={subTab === 'control' ? 'control' : 'existencias'}
+                    onVista={v => setSubTab(v)}
+                  />
+                )}
+                {subTab === 'despacho' && <DespachoAdmin currentUser={currentUser} />}
+                {subTab === 'ventas' && <CajaRuta currentUser={currentUser} />}
+              </div>
+            </div>
           )}
 
           {activeTab === 'logistica' && (
@@ -715,8 +764,6 @@ const nuevoItems = useMemo(() => {
               <div className="animate-in fade-in">
                 {subTab === 'logistica' && <Logistica currentUser={currentUser} />}
                 {subTab === 'guias' && <Logistica currentUser={currentUser} initialTab="guias" />}
-                {subTab === 'remisiones' && <Logistica currentUser={currentUser} initialTab="remisiones" />}
-                {subTab === 'caja' && <CajaRuta currentUser={currentUser} />}
                 {subTab === 'tablero' && <TableroRutas currentUser={currentUser} />}
                 {subTab === 'etiquetas' && <Etiquetas currentUser={currentUser} />}
                 {subTab === 'pesos' && <Pesos currentUser={currentUser} />}
