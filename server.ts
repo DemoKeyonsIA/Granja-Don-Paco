@@ -7413,6 +7413,10 @@ async function startServer() {
   });
 }
 
-if (process.argv[1] && !process.argv[1].includes('vitest')) {
+// El listener solo arranca cuando este archivo es el punto de entrada. Las pruebas
+// y `scripts/generar-fixtures-vistas.ts` necesitan la app sin un puerto abierto: con
+// él abierto, la base del fixture queda bloqueada por el proceso y el script no
+// puede borrarla al terminar.
+if (process.argv[1] && !process.argv[1].includes('vitest') && !process.env.GDP_NO_LISTEN) {
   startServer();
 }

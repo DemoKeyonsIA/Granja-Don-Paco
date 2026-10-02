@@ -256,7 +256,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
       if (!res.ok) { const data = await res.json(); throw new Error(data.error); }
 
       const cliente = getCliente(selectedCliente);
-      await fetch('/api/facturacion/crear-documento', {
+      const resDoc = await fetch('/api/facturacion/crear-documento', {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({
@@ -274,6 +274,21 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
       setIsCreating(false);
       setWizardStep(1);
       await fetchData();
+
+      // La factura ya quedó guardada, así que esto no es un fallo de la venta:
+      // es una venta sin respaldo fiscal. Antes se avisaba "Factura creada y
+      // documento fiscal generado" sin haber mirado la respuesta de este fetch,
+      // así que un 500 del proveedor documentista dejaba al vendedor creyendo que
+      // había facturado. Ahora el aviso dice exactamente qué pasó.
+      if (!resDoc.ok) {
+        const motivo = await resDoc.json().catch(() => ({}) as { error?: string });
+        toast.error(
+          'Factura guardada, pero el documento fiscal NO se generó' +
+          (motivo?.error ? `: ${motivo.error}` : '. Revísala en Documentos.'),
+        );
+        return;
+      }
+
       toast.success('Factura creada y documento fiscal generado');
     } catch (err: any) {
       toast.error(err.message);

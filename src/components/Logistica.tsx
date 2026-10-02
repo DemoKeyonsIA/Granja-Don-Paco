@@ -120,9 +120,15 @@ export default function Logistica({ currentUser, initialTab }: LogisticaProps) {
   // ==================== MÉTRICAS DEL CAMIÓN (flujo real) ====================
   const totalCargado = guiasDelCamion.reduce((acc: number, g: any) => acc + Number(g.totalCartones || 0), 0);
   const totalVendido = guiasDelCamion.reduce((acc: number, g: any) => acc + Number(g.totalVendido || 0), 0);
-  const stockCamion = inventario
-    .filter((i: any) => i.ubicacion === camion.nombre)
-    .reduce((acc: number, i: any) => acc + Number(i.cantidad), 0);
+  // `camion` es `null` hasta que la lista de camiones llega y el efecto elige el
+  // primero. Leer `camion.nombre` en ese primer render tumbaba el módulo entero,
+  // y como el ErrorBoundary se come la excepción, lo que veía el usuario era una
+  // pantalla en blanco sin ningún aviso.
+  const stockCamion = camion
+    ? inventario
+      .filter((i: any) => i.ubicacion === camion.nombre)
+      .reduce((acc: number, i: any) => acc + Number(i.cantidad), 0)
+    : 0;
   const merma = totalCargado - totalVendido - stockCamion;
   const etiquetasEnBodega = etiquetas.filter((e: any) => e.estado === 'EnBodega');
   const totalEtiquetasEnBodega = etiquetasEnBodega.reduce((a: number, e: any) => a + Number(e.cantidad), 0);
