@@ -78,23 +78,20 @@ export default function App() {
     }
   };
   
-  if (!currentUser) {
-    return (
-      <>
-        <Toaster richColors position="top-center" />
+  return (
+    <>
+      {/* Uno solo para las dos ramas: dentro de cada `if` cabía perfecto, pero
+          cualquier tercera rama que se añadiera después iba a duplicar los avisos. */}
+      <Toaster richColors position="top-center" />
+      {!currentUser ? (
         <ErrorBoundary>
           <Login onLogin={setCurrentUser} />
         </ErrorBoundary>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <Toaster richColors position="top-center" />
-      <ErrorBoundary>
-        <AppLayout currentUser={currentUser} onLogout={handleLogout} darkMode={darkMode} onToggleDark={() => setDarkMode(!darkMode)} />
-      </ErrorBoundary>
+      ) : (
+        <ErrorBoundary>
+          <AppLayout currentUser={currentUser} onLogout={handleLogout} darkMode={darkMode} onToggleDark={() => setDarkMode(!darkMode)} />
+        </ErrorBoundary>
+      )}
     </>
   );
 }

@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { drizzle } from 'drizzle-orm/libsql';
-import { createClient } from '@libsql/client';
 import * as schema from '../src/db/schema';
 import type { Express } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { ejecutarDdl, desactivarFks } from './helpers/db';
+import { ejecutarDdl, desactivarFks, abrirClienteDePrueba } from './helpers/db';
 
 let app: Express;
 const DB_PATH = path.resolve(process.cwd(), '.test-e2e.db');
@@ -14,7 +13,7 @@ const DB_PATH = path.resolve(process.cwd(), '.test-e2e.db');
 
 beforeAll(async () => {
   if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
-  const client = createClient({ url: `file:${DB_PATH}` });
+  const client = abrirClienteDePrueba(`file:${DB_PATH}`);
   await ejecutarDdl(client);
   await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['1', 'Administrador', 'admin@e2e.com', 'Admin'] });
   await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['vendedor-e2e', 'Vendedor E2E', 'vendedor@e2e.com', 'Comercial'] });
@@ -276,7 +275,7 @@ describe('Phase 3 — Facturación Electrónica, Etiquetas y Pesos', () => {
 
   it('5.2 — Crear factura para documento electrónico', async () => {
     // Insert factura directly (bypass inventory check which is Phase 1 concern)
-    const client = createClient({ url: `file:${DB_PATH}` });
+    const client = abrirClienteDePrueba(`file:${DB_PATH}`);
     desactivarFks(client);
     facturaId = crypto.randomUUID();
     await client.execute({

@@ -1,5 +1,5 @@
 {
-  "_generatedAt": "2026-10-02T18:56:45.083Z",
+  "_generatedAt": "2026-10-04T19:05:48.518Z",
   "_nota": "Generado por scripts/generar-fixtures-vistas.ts contra el servidor real sobre un dataset sembrado. Las respuestas son literales: si un endpoint cambia de forma, regenerar y revisar el diff es parte del cambio.",
   "_semilla": [
     {
@@ -7,7 +7,7 @@
       "status": 201
     },
     {
-      "paso": "PUT /api/galerones/5c72f4a2-9d33-467f-a142-b204a83994e1",
+      "paso": "PUT /api/galerones/ddf4bcd4-a4eb-4650-a026-94a56b331f16",
       "status": 200
     },
     {
@@ -123,6 +123,10 @@
       "status": 201
     },
     {
+      "paso": "POST /api/logistica/caja/fin-dia",
+      "status": 200
+    },
+    {
       "paso": "POST /api/tipos-carton",
       "status": 201
     },
@@ -168,7 +172,7 @@
       "status": 200,
       "body": [
         {
-          "id": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+          "id": "c535cdd6-3014-4380-939f-84aa058de6dd",
           "nombre": "Camión 9",
           "placa": "CR-009",
           "camioneroId": null,
@@ -229,7 +233,7 @@
       "status": 200,
       "body": [
         {
-          "id": "7406bdf6-def1-4cea-969c-8758e9e21116",
+          "id": "9fd5f0ac-ce44-4510-986c-2dac32c2cb9a",
           "tipoAlimento": "Alimento balanceado",
           "proveedor": "Nutrimental",
           "loteAlimento": "AL-001",
@@ -237,9 +241,9 @@
           "cantidadRecibida": 40,
           "cantidadActual": 37,
           "unidad": "sacos",
-          "galeronAsociado": "5c72f4a2-9d33-467f-a142-b204a83994e1",
+          "galeronAsociado": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
           "loteAvesAsociado": null,
-          "fechaIngreso": "2026-10-02T18:56:44.859Z",
+          "fechaIngreso": "2026-10-04T19:05:48.094Z",
           "responsable": "Bodeguero",
           "merma": 0,
           "estado": "Activo"
@@ -250,13 +254,13 @@
       "status": 200,
       "body": [
         {
-          "id": "aa08472f-9046-42bb-a595-d8cf1213952e",
-          "inventarioAlimentoId": "7406bdf6-def1-4cea-969c-8758e9e21116",
-          "galeronId": "5c72f4a2-9d33-467f-a142-b204a83994e1",
+          "id": "50e50f7f-45bd-4677-b804-e58a5c02ed5e",
+          "inventarioAlimentoId": "9fd5f0ac-ce44-4510-986c-2dac32c2cb9a",
+          "galeronId": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
           "loteAvesId": null,
           "cantidadConsumida": 3,
           "unidad": "sacos",
-          "fecha": "2026-10-02T18:56:44.869Z",
+          "fecha": "2026-10-04T19:05:48.117Z",
           "responsable": "Encargado",
           "observaciones": "Ración de la mañana"
         }
@@ -273,15 +277,15 @@
       "status": 200,
       "body": [
         {
-          "id": "215c4f0d-313c-4e80-82b9-a0cadae2d013",
-          "cargaId": "215c4f0d-313c-4e80-82b9-a0cadae2d013",
+          "id": "7c677d44-cf46-485b-8710-7905419c9464",
+          "cargaId": "7c677d44-cf46-485b-8710-7905419c9464",
           "vehiculo": null,
           "camionId": null,
           "creadoPorId": null,
           "confirmadoPorId": null,
           "granjaOrigenId": null,
           "bodegaDestinoId": "Bodega Central",
-          "fechaSalida": "2026-10-02T18:56:44.475Z",
+          "fechaSalida": "2026-10-04T19:05:47.289Z",
           "fechaLlegada": null,
           "responsableEntrega": null,
           "responsableTransporte": "Pendiente",
@@ -295,7 +299,7 @@
       "status": 200,
       "body": [
         {
-          "id": "8d917b68-98f8-48df-aa81-743189b7221c",
+          "id": "09cc1895-b2bc-4baa-b31b-83cc15120e73",
           "nombre": "Granja El Alto",
           "ubicacion": "Alajuela, CR",
           "tipo_produccion": "Posture",
@@ -308,14 +312,14 @@
       "status": 200,
       "body": [
         {
-          "id": "1d7611bc-b7f2-497d-89da-00e8739bd6ec",
+          "id": "d744b895-c6cc-4c4c-872c-062d4b27e0b4",
           "producto": "Huevos - Grande",
           "cantidad": 800,
           "tipo": "Ingreso Manual",
           "origen": "Granja El Alto",
           "destino": "Bodega Central",
-          "fecha": "2026-10-02T18:56:44.103Z",
-          "referencia_id": "bc668d76-425f-40ea-bbee-3f26f2a3a3d0",
+          "fecha": "2026-10-04T19:05:46.624Z",
+          "referencia_id": "be61809f-16ad-403f-b813-2c6755c95c05",
           "estado": null,
           "reportadoPor": null,
           "guiaId": null,
@@ -331,14 +335,14 @@
           "cantidadEsperada": null
         },
         {
-          "id": "662c35fb-e085-46ce-91a0-42da1765451a",
+          "id": "82f8b667-7cda-47cf-ad46-76b5e7594d14",
           "producto": "Huevos - Grande",
           "cantidad": 60,
           "tipo": "Entrada Producción",
-          "origen": "5c72f4a2-9d33-467f-a142-b204a83994e1",
+          "origen": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
           "destino": "Granja",
-          "fecha": "2026-10-02T18:56:44.463Z",
-          "referencia_id": "1f04c88c-fa5e-45d5-9656-bf80c0b8579f",
+          "fecha": "2026-10-04T19:05:47.273Z",
+          "referencia_id": "5274f116-db58-4495-a94a-28f5e871e9de",
           "estado": null,
           "reportadoPor": null,
           "guiaId": null,
@@ -354,14 +358,14 @@
           "cantidadEsperada": null
         },
         {
-          "id": "2a9a8ee4-e5e7-414f-b6f1-92a5ac0bbc79",
+          "id": "bdb41aa2-77c9-4574-9b89-11bf72aba6a4",
           "producto": "Huevos - Grande",
           "cantidad": 40,
           "tipo": "Traslado",
           "origen": "Granja",
           "destino": "Bodega Central",
-          "fecha": "2026-10-02T18:56:44.476Z",
-          "referencia_id": "215c4f0d-313c-4e80-82b9-a0cadae2d013",
+          "fecha": "2026-10-04T19:05:47.289Z",
+          "referencia_id": "7c677d44-cf46-485b-8710-7905419c9464",
           "estado": "Pendiente",
           "reportadoPor": "Pendiente",
           "guiaId": null,
@@ -377,19 +381,19 @@
           "cantidadEsperada": null
         },
         {
-          "id": "a922c3c3-2daf-4cc2-b42d-9ee9b752866e",
+          "id": "4c984574-b78e-4370-b5d3-0ab53d3523bd",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "tipo": "Carga Camión",
           "origen": "Bodega Central",
           "destino": "Camión 9",
-          "fecha": "2026-10-02T18:56:44.713Z",
-          "referencia_id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "fecha": "2026-10-04T19:05:47.712Z",
+          "referencia_id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "estado": "Cargada",
           "reportadoPor": "Camionero",
-          "guiaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-          "consecutivo": "GD-20261002-1790967404712",
-          "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+          "guiaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
+          "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
           "camionNombre": "Camión 9",
           "granjaOrigenId": null,
           "granjaOrigenNombre": null,
@@ -400,19 +404,19 @@
           "cantidadEsperada": null
         },
         {
-          "id": "56a78f16-0429-4222-9628-c02d52fddc50",
+          "id": "23465db9-5273-4854-9edd-c71af4027dec",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "tipo": "Carga Camión",
           "origen": "Bodega Central",
           "destino": "Camión 9",
-          "fecha": "2026-10-02T18:56:44.715Z",
-          "referencia_id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "fecha": "2026-10-04T19:05:47.718Z",
+          "referencia_id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "estado": "Cargada",
           "reportadoPor": "Camionero",
-          "guiaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-          "consecutivo": "GD-20261002-1790967404712",
-          "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+          "guiaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
+          "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
           "camionNombre": "Camión 9",
           "granjaOrigenId": null,
           "granjaOrigenNombre": null,
@@ -423,19 +427,19 @@
           "cantidadEsperada": null
         },
         {
-          "id": "c1f810d3-6089-46b8-8499-9c57d7630a39",
+          "id": "c2afcdd7-9156-4a97-a384-34460eb5890a",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "tipo": "Carga Camión",
           "origen": "Bodega Central",
           "destino": "Camión 9",
-          "fecha": "2026-10-02T18:56:44.715Z",
-          "referencia_id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "fecha": "2026-10-04T19:05:47.721Z",
+          "referencia_id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "estado": "Cargada",
           "reportadoPor": "Camionero",
-          "guiaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-          "consecutivo": "GD-20261002-1790967404712",
-          "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+          "guiaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
+          "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
           "camionNombre": "Camión 9",
           "granjaOrigenId": null,
           "granjaOrigenNombre": null,
@@ -446,19 +450,19 @@
           "cantidadEsperada": null
         },
         {
-          "id": "cb1e255d-ec43-478e-9297-bb4f8732a2b2",
+          "id": "b91fa1c0-c3eb-4203-8d3d-a4ed42ef5b27",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "tipo": "Carga Camión",
           "origen": "Bodega Central",
           "destino": "Camión 9",
-          "fecha": "2026-10-02T18:56:44.716Z",
-          "referencia_id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "fecha": "2026-10-04T19:05:47.725Z",
+          "referencia_id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "estado": "Cargada",
           "reportadoPor": "Camionero",
-          "guiaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-          "consecutivo": "GD-20261002-1790967404712",
-          "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+          "guiaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
+          "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
           "camionNombre": "Camión 9",
           "granjaOrigenId": null,
           "granjaOrigenNombre": null,
@@ -469,19 +473,19 @@
           "cantidadEsperada": null
         },
         {
-          "id": "74c2805a-cda9-4993-a965-74f1e0bc1db6",
+          "id": "1c188b5d-47ed-4fe9-a07b-75dd19de42fa",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "tipo": "Carga Camión",
           "origen": "Bodega Central",
           "destino": "Camión 9",
-          "fecha": "2026-10-02T18:56:44.717Z",
-          "referencia_id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "fecha": "2026-10-04T19:05:47.727Z",
+          "referencia_id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "estado": "Cargada",
           "reportadoPor": "Camionero",
-          "guiaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-          "consecutivo": "GD-20261002-1790967404712",
-          "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+          "guiaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
+          "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
           "camionNombre": "Camión 9",
           "granjaOrigenId": null,
           "granjaOrigenNombre": null,
@@ -492,19 +496,19 @@
           "cantidadEsperada": null
         },
         {
-          "id": "dbc3563b-2573-471d-b79e-229a8f604856",
+          "id": "8979a88d-03f3-4e19-a931-352e7dce6b0e",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "tipo": "Carga Camión",
           "origen": "Bodega Central",
           "destino": "Camión 9",
-          "fecha": "2026-10-02T18:56:44.717Z",
-          "referencia_id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "fecha": "2026-10-04T19:05:47.730Z",
+          "referencia_id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "estado": "Cargada",
           "reportadoPor": "Camionero",
-          "guiaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-          "consecutivo": "GD-20261002-1790967404712",
-          "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+          "guiaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
+          "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
           "camionNombre": "Camión 9",
           "granjaOrigenId": null,
           "granjaOrigenNombre": null,
@@ -515,19 +519,19 @@
           "cantidadEsperada": null
         },
         {
-          "id": "e7defed5-2bbe-47bd-b0b4-d9cf3985719e",
+          "id": "1eecebcf-2d99-48dc-b41b-cb1eeac25b1b",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "tipo": "Carga Camión",
           "origen": "Bodega Central",
           "destino": "Camión 9",
-          "fecha": "2026-10-02T18:56:44.718Z",
-          "referencia_id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "fecha": "2026-10-04T19:05:47.732Z",
+          "referencia_id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "estado": "Cargada",
           "reportadoPor": "Camionero",
-          "guiaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-          "consecutivo": "GD-20261002-1790967404712",
-          "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+          "guiaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
+          "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
           "camionNombre": "Camión 9",
           "granjaOrigenId": null,
           "granjaOrigenNombre": null,
@@ -538,19 +542,19 @@
           "cantidadEsperada": null
         },
         {
-          "id": "5cd84738-e531-4145-a8e2-140303f9cd8c",
+          "id": "38a6c5ac-b953-4810-bf8e-c9eafbf444d3",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "tipo": "Carga Camión",
           "origen": "Bodega Central",
           "destino": "Camión 9",
-          "fecha": "2026-10-02T18:56:44.719Z",
-          "referencia_id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "fecha": "2026-10-04T19:05:47.734Z",
+          "referencia_id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "estado": "Cargada",
           "reportadoPor": "Camionero",
-          "guiaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-          "consecutivo": "GD-20261002-1790967404712",
-          "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+          "guiaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
+          "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
           "camionNombre": "Camión 9",
           "granjaOrigenId": null,
           "granjaOrigenNombre": null,
@@ -561,19 +565,19 @@
           "cantidadEsperada": null
         },
         {
-          "id": "5b1a5cf5-1b77-48d5-959c-bec8f2953a94",
+          "id": "d7639c43-6867-46f4-a616-0b0b657f3ce5",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "tipo": "Carga Camión",
           "origen": "Bodega Central",
           "destino": "Camión 9",
-          "fecha": "2026-10-02T18:56:44.720Z",
-          "referencia_id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "fecha": "2026-10-04T19:05:47.737Z",
+          "referencia_id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "estado": "Cargada",
           "reportadoPor": "Camionero",
-          "guiaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-          "consecutivo": "GD-20261002-1790967404712",
-          "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+          "guiaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
+          "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
           "camionNombre": "Camión 9",
           "granjaOrigenId": null,
           "granjaOrigenNombre": null,
@@ -589,12 +593,12 @@
       "status": 200,
       "body": [
         {
-          "id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-          "consecutivo": "GD-20261002-1790967404712",
-          "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
-          "rutaId": "99f5409b-6ee7-4ea0-a53c-43b91ba4a78e",
-          "fecha": "2026-10-02T18:56:44.712Z",
-          "horaCarga": "12:56:44",
+          "id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
+          "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
+          "rutaId": "6c6ca8da-ded7-421b-86bd-a72b5b87d2e3",
+          "fecha": "2026-10-04T19:05:47.709Z",
+          "horaCarga": "13:05:47",
           "responsableCarga": "Bodeguero",
           "responsableTransporte": "Camionero",
           "totalCartones": 270,
@@ -604,8 +608,8 @@
           "firmasJson": null,
           "rutaOrdenJson": null,
           "recibidoEn": null,
-          "finDiaFecha": null,
-          "estadoLogico": "Cargada",
+          "finDiaFecha": "2026-10-04T19:05:47.909Z",
+          "estadoLogico": "CajaCerrada",
           "camionNombre": "Camión 9",
           "totalEtiquetas": 9
         }
@@ -615,7 +619,7 @@
       "status": 200,
       "body": [
         {
-          "id": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+          "id": "c535cdd6-3014-4380-939f-84aa058de6dd",
           "nombre": "Camión 9",
           "placa": "CR-009",
           "camioneroId": null,
@@ -623,14 +627,14 @@
           "vendedor_id": "u-ven",
           "capacidad_cartones": 300,
           "estado": "Activo",
-          "guiaActivaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "guiaActivaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "guiaActiva": {
-            "id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-            "consecutivo": "GD-20261002-1790967404712",
-            "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
-            "rutaId": "99f5409b-6ee7-4ea0-a53c-43b91ba4a78e",
-            "fecha": "2026-10-02T18:56:44.712Z",
-            "horaCarga": "12:56:44",
+            "id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+            "consecutivo": "GD-20261004-1791140747709",
+            "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
+            "rutaId": "6c6ca8da-ded7-421b-86bd-a72b5b87d2e3",
+            "fecha": "2026-10-04T19:05:47.709Z",
+            "horaCarga": "13:05:47",
             "responsableCarga": "Bodeguero",
             "responsableTransporte": "Camionero",
             "totalCartones": 270,
@@ -640,7 +644,7 @@
             "firmasJson": null,
             "rutaOrdenJson": null,
             "recibidoEn": null,
-            "finDiaFecha": null
+            "finDiaFecha": "2026-10-04T19:05:47.909Z"
           }
         }
       ]
@@ -656,7 +660,7 @@
           "precioBase": 16000,
           "categoria": "Huevos",
           "estado": "Activo",
-          "fechaCreacion": "2026-10-02T18:56:43.242Z",
+          "fechaCreacion": "2026-10-04T19:05:45.905Z",
           "vidaUtilDias": 28,
           "diasAvisoVencimiento": 7
         },
@@ -668,7 +672,7 @@
           "precioBase": 13500,
           "categoria": "Huevos",
           "estado": "Activo",
-          "fechaCreacion": "2026-10-02T18:56:43.248Z",
+          "fechaCreacion": "2026-10-04T19:05:45.919Z",
           "vidaUtilDias": 28,
           "diasAvisoVencimiento": 7
         },
@@ -680,7 +684,7 @@
           "precioBase": 9000,
           "categoria": "Alimento",
           "estado": "Activo",
-          "fechaCreacion": "2026-10-02T18:56:43.255Z",
+          "fechaCreacion": "2026-10-04T19:05:45.931Z",
           "vidaUtilDias": 28,
           "diasAvisoVencimiento": 7
         }
@@ -690,34 +694,34 @@
       "status": 200,
       "body": [
         {
-          "id": "a26b751b-edb4-4c3d-b14e-67642092f7bd",
+          "id": "1741f6ff-8477-428d-9196-b9967b7a3c5f",
           "producto": "Huevos - Grande",
           "cantidad": 530,
           "unidad": "cartones",
           "ubicacion": "Bodega Central",
           "lote": null,
           "fecha_caducidad": null,
-          "ultima_actualizacion": "2026-10-02T18:56:44.719Z"
+          "ultima_actualizacion": "2026-10-04T19:05:47.736Z"
         },
         {
-          "id": "067d0280-a515-4490-a85c-56ea752f90de",
+          "id": "93c9bc81-2629-443e-ae3b-00f2fa0a40e1",
           "producto": "Huevos - Grande",
           "cantidad": 20,
           "unidad": "cartones",
           "ubicacion": "Granja",
           "lote": null,
           "fecha_caducidad": null,
-          "ultima_actualizacion": "2026-10-02T18:56:44.463Z"
+          "ultima_actualizacion": "2026-10-04T19:05:47.273Z"
         },
         {
-          "id": "9dee2cd9-8918-4fa8-aa72-fb0ca283c3b2",
+          "id": "faaf9a64-c66c-4d63-88cf-dbd03fe83189",
           "producto": "Huevos - Grande",
           "cantidad": 270,
           "unidad": "cartones",
           "ubicacion": "Camión 9",
           "lote": null,
           "fecha_caducidad": null,
-          "ultima_actualizacion": "2026-10-02T18:56:44.720Z"
+          "ultima_actualizacion": "2026-10-04T19:05:47.737Z"
         }
       ]
     },
@@ -725,7 +729,7 @@
       "status": 200,
       "body": [
         {
-          "id": "beddb3e3-af5b-40c8-97d2-22b763157b2b",
+          "id": "3449c366-21b4-476b-96e0-08d58e31ce5d",
           "nombre": "Pulpería El Ángel",
           "tipo_documento": "Fisica",
           "documento_id": null,
@@ -742,7 +746,7 @@
           "promedio_compra": 0,
           "estado": "Activo",
           "notas": null,
-          "fecha_creacion": "2026-10-02T18:56:44.073Z",
+          "fecha_creacion": "2026-10-04T19:05:46.585Z",
           "prioridad": "Normal",
           "ventana_entrega_ini": null,
           "ventana_entrega_fin": null,
@@ -750,7 +754,7 @@
           "demanda_promedio_cartones": 0
         },
         {
-          "id": "3f48eb66-92de-4a84-a8fb-7d53aca7dec0",
+          "id": "fb2a1aa8-a927-4858-b746-62bc9b7942bb",
           "nombre": "Supermercado Don Pepito",
           "tipo_documento": "Fisica",
           "documento_id": null,
@@ -767,7 +771,7 @@
           "promedio_compra": 0,
           "estado": "Activo",
           "notas": null,
-          "fecha_creacion": "2026-10-02T18:56:44.083Z",
+          "fecha_creacion": "2026-10-04T19:05:46.598Z",
           "prioridad": "Normal",
           "ventana_entrega_ini": null,
           "ventana_entrega_fin": null,
@@ -782,7 +786,7 @@
         "total": 2,
         "clientes": [
           {
-            "id": "beddb3e3-af5b-40c8-97d2-22b763157b2b",
+            "id": "3449c366-21b4-476b-96e0-08d58e31ce5d",
             "nombre": "Pulpería El Ángel",
             "tipoDocumento": "Fisica",
             "documentoId": null,
@@ -796,7 +800,7 @@
             "saldoPendiente": 0,
             "promedioCompra": 0,
             "notas": "",
-            "fechaCreacion": "2026-10-02T18:56:44.073Z",
+            "fechaCreacion": "2026-10-04T19:05:46.585Z",
             "segmento": "B",
             "comportamiento": "Puntual",
             "pedidos90d": 1,
@@ -810,10 +814,10 @@
             "vencido": 0,
             "facturas30d": 1,
             "tiquetes30d": 0,
-            "ultimaCompra": "2026-10-02"
+            "ultimaCompra": "2026-10-04"
           },
           {
-            "id": "3f48eb66-92de-4a84-a8fb-7d53aca7dec0",
+            "id": "fb2a1aa8-a927-4858-b746-62bc9b7942bb",
             "nombre": "Supermercado Don Pepito",
             "tipoDocumento": "Fisica",
             "documentoId": null,
@@ -827,7 +831,7 @@
             "saldoPendiente": 240000,
             "promedioCompra": 0,
             "notas": "",
-            "fechaCreacion": "2026-10-02T18:56:44.083Z",
+            "fechaCreacion": "2026-10-04T19:05:46.598Z",
             "segmento": "A",
             "comportamiento": "Puntual",
             "pedidos90d": 1,
@@ -841,7 +845,7 @@
             "vencido": 240000,
             "facturas30d": 1,
             "tiquetes30d": 0,
-            "ultimaCompra": "2026-10-01"
+            "ultimaCompra": "2026-10-03"
           }
         ]
       }
@@ -853,7 +857,7 @@
           "etiqueta": "octubre de 2026"
         },
         "totalClientes": 2,
-        "ventaDelMes": 162000,
+        "ventaDelMes": 642000,
         "carteraTotal": 240000,
         "vencidoTotal": 240000,
         "pctVencido": 100,
@@ -869,7 +873,7 @@
         },
         "worklist": [
           {
-            "clienteId": "3f48eb66-92de-4a84-a8fb-7d53aca7dec0",
+            "clienteId": "fb2a1aa8-a927-4858-b746-62bc9b7942bb",
             "nombre": "Supermercado Don Pepito",
             "score": 19,
             "diasVencido": 1,
@@ -917,7 +921,7 @@
       "status": 200,
       "body": [
         {
-          "id": "99f5409b-6ee7-4ea0-a53c-43b91ba4a78e",
+          "id": "6c6ca8da-ded7-421b-86bd-a72b5b87d2e3",
           "nombre": "Ruta Norte",
           "vendedor_asignado": "u-ven",
           "cliente_ids": null,
@@ -934,11 +938,11 @@
       "status": 200,
       "body": [
         {
-          "id": "a3ddf71b-b003-42c5-a87e-8e4a4db876a9",
+          "id": "dde85c5e-b7d9-4d6c-8baf-47a4c1c5ddc3",
           "consecutivo": "FAC-0001",
-          "fecha": "2026-10-01",
-          "fechaVencimiento": "2026-10-01",
-          "clienteId": "3f48eb66-92de-4a84-a8fb-7d53aca7dec0",
+          "fecha": "2026-10-03",
+          "fechaVencimiento": "2026-10-03",
+          "clienteId": "fb2a1aa8-a927-4858-b746-62bc9b7942bb",
           "vendedorId": "u-admin",
           "subtotal": 480000,
           "descuento": 0,
@@ -950,11 +954,11 @@
           "camionId": null
         },
         {
-          "id": "7dbaa9f3-4f2e-44f9-97fa-7feaf553d6ca",
+          "id": "251d5a9d-b83a-40e0-953a-29260ed826d4",
           "consecutivo": "FAC-0002",
-          "fecha": "2026-10-02",
-          "fechaVencimiento": "2026-10-02",
-          "clienteId": "beddb3e3-af5b-40c8-97d2-22b763157b2b",
+          "fecha": "2026-10-04",
+          "fechaVencimiento": "2026-10-04",
+          "clienteId": "3449c366-21b4-476b-96e0-08d58e31ce5d",
           "vendedorId": "u-admin",
           "subtotal": 162000,
           "descuento": 0,
@@ -971,12 +975,12 @@
       "status": 200,
       "body": [
         {
-          "id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-          "consecutivo": "GD-20261002-1790967404712",
-          "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
-          "rutaId": "99f5409b-6ee7-4ea0-a53c-43b91ba4a78e",
-          "fecha": "2026-10-02T18:56:44.712Z",
-          "horaCarga": "12:56:44",
+          "id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
+          "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
+          "rutaId": "6c6ca8da-ded7-421b-86bd-a72b5b87d2e3",
+          "fecha": "2026-10-04T19:05:47.709Z",
+          "horaCarga": "13:05:47",
           "responsableCarga": "Bodeguero",
           "responsableTransporte": "Camionero",
           "totalCartones": 270,
@@ -986,8 +990,8 @@
           "firmasJson": null,
           "rutaOrdenJson": null,
           "recibidoEn": null,
-          "finDiaFecha": null,
-          "estadoLogico": "Cargada",
+          "finDiaFecha": "2026-10-04T19:05:47.909Z",
+          "estadoLogico": "CajaCerrada",
           "camionNombre": "Camión 9",
           "placa": "CR-009",
           "totalEtiquetas": 9,
@@ -1001,15 +1005,15 @@
       "status": 200,
       "body": [
         {
-          "id": "8aeb4a80-1e5a-4fdc-b0ff-e20f7c664218",
-          "codigoUnico": "ETQ-20261002-8AEB4A80",
+          "id": "d214a1c6-bf46-4fa1-bd51-2092f5d1a4c6",
+          "codigoUnico": "ETQ-20261004-D214A1C6",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1019,20 +1023,20 @@
           "lote": "L-1",
           "guiaRemisionId": null,
           "pesoBodega": null,
-          "guiaDespachoId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "guiaDespachoId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "fechaRecepcion": null,
           "tipoCarton": null
         },
         {
-          "id": "0af86954-fc79-47ed-b06a-cf0c5f4595db",
-          "codigoUnico": "ETQ-20261002-0AF86954",
+          "id": "f7934362-7157-4eed-a52c-47ec82bed674",
+          "codigoUnico": "ETQ-20261004-F7934362",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1042,20 +1046,20 @@
           "lote": "L-2",
           "guiaRemisionId": null,
           "pesoBodega": null,
-          "guiaDespachoId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "guiaDespachoId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "fechaRecepcion": null,
           "tipoCarton": null
         },
         {
-          "id": "6267539a-4fe3-4546-b28f-32a712ab2531",
-          "codigoUnico": "ETQ-20261002-6267539A",
+          "id": "c3e59af7-20b7-4132-be4c-ab339f24502f",
+          "codigoUnico": "ETQ-20261004-C3E59AF7",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1065,20 +1069,20 @@
           "lote": "L-3",
           "guiaRemisionId": null,
           "pesoBodega": null,
-          "guiaDespachoId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "guiaDespachoId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "fechaRecepcion": null,
           "tipoCarton": null
         },
         {
-          "id": "0b0d0b58-73a3-4775-8283-cba4191f4b08",
-          "codigoUnico": "ETQ-20261002-0B0D0B58",
+          "id": "1165aa23-c431-44ea-ac2e-d4ed2a789a60",
+          "codigoUnico": "ETQ-20261004-1165AA23",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1088,20 +1092,20 @@
           "lote": "L-4",
           "guiaRemisionId": null,
           "pesoBodega": null,
-          "guiaDespachoId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "guiaDespachoId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "fechaRecepcion": null,
           "tipoCarton": null
         },
         {
-          "id": "7ef5c2fb-7c63-4832-b283-6a6748975a6a",
-          "codigoUnico": "ETQ-20261002-7EF5C2FB",
+          "id": "b4d3acce-dcc5-4e89-978d-d6f9d81173e9",
+          "codigoUnico": "ETQ-20261004-B4D3ACCE",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1111,20 +1115,20 @@
           "lote": "L-5",
           "guiaRemisionId": null,
           "pesoBodega": null,
-          "guiaDespachoId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "guiaDespachoId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "fechaRecepcion": null,
           "tipoCarton": null
         },
         {
-          "id": "7ef0a78b-6127-46f0-943b-3ee0d6b98315",
-          "codigoUnico": "ETQ-20261002-7EF0A78B",
+          "id": "87a1e63c-1b46-4fa5-9ac2-4eb7a91d993d",
+          "codigoUnico": "ETQ-20261004-87A1E63C",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1134,20 +1138,20 @@
           "lote": "L-6",
           "guiaRemisionId": null,
           "pesoBodega": null,
-          "guiaDespachoId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "guiaDespachoId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "fechaRecepcion": null,
           "tipoCarton": null
         },
         {
-          "id": "6829e8ff-2b43-4ec9-b979-4b988f2d822a",
-          "codigoUnico": "ETQ-20261002-6829E8FF",
+          "id": "5a4209c9-ded8-44b8-9302-619377267d85",
+          "codigoUnico": "ETQ-20261004-5A4209C9",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1157,20 +1161,20 @@
           "lote": "L-7",
           "guiaRemisionId": null,
           "pesoBodega": null,
-          "guiaDespachoId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "guiaDespachoId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "fechaRecepcion": null,
           "tipoCarton": null
         },
         {
-          "id": "b7bb4465-6962-4491-900e-a021ba7df211",
-          "codigoUnico": "ETQ-20261002-B7BB4465",
+          "id": "cc8494ce-daaf-4380-ab00-65c0ac718c66",
+          "codigoUnico": "ETQ-20261004-CC8494CE",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1180,20 +1184,20 @@
           "lote": "L-8",
           "guiaRemisionId": null,
           "pesoBodega": null,
-          "guiaDespachoId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "guiaDespachoId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "fechaRecepcion": null,
           "tipoCarton": null
         },
         {
-          "id": "b4399992-3bbb-4b4e-b21f-3c900832ade5",
-          "codigoUnico": "ETQ-20261002-B4399992",
+          "id": "1c6e8197-f646-4928-8f85-ee7d8fe001a1",
+          "codigoUnico": "ETQ-20261004-1C6E8197",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1203,20 +1207,20 @@
           "lote": "L-9",
           "guiaRemisionId": null,
           "pesoBodega": null,
-          "guiaDespachoId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "guiaDespachoId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "fechaRecepcion": null,
           "tipoCarton": null
         },
         {
-          "id": "9ee4649f-e8e1-45cc-91fd-151839d58b63",
-          "codigoUnico": "ETQ-20261002-9EE4649F",
+          "id": "fc0e2323-84ab-44e7-bba3-8b50e20acff7",
+          "codigoUnico": "ETQ-20261004-FC0E2323",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1231,15 +1235,15 @@
           "tipoCarton": null
         },
         {
-          "id": "b395fa7c-a36b-4569-ac0c-900295303ac8",
-          "codigoUnico": "ETQ-20261002-B395FA7C",
+          "id": "c730a54e-91bd-4a4e-a171-2a66ab65b784",
+          "codigoUnico": "ETQ-20261004-C730A54E",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1254,15 +1258,15 @@
           "tipoCarton": null
         },
         {
-          "id": "b67fadc6-9e31-4754-96ef-cff91d6807d4",
-          "codigoUnico": "ETQ-20261002-B67FADC6",
+          "id": "d1ed2956-05cb-4e35-8eb7-03fa090533ba",
+          "codigoUnico": "ETQ-20261004-D1ED2956",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1277,15 +1281,15 @@
           "tipoCarton": null
         },
         {
-          "id": "15f6d095-be67-4c4b-a707-d3852eae91be",
-          "codigoUnico": "ETQ-20261002-15F6D095",
+          "id": "ee72ce06-ac65-4f03-9666-2ac921b24f5c",
+          "codigoUnico": "ETQ-20261004-EE72CE06",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1300,15 +1304,15 @@
           "tipoCarton": null
         },
         {
-          "id": "43f9143f-2262-4aec-9599-6b83a2eb3979",
-          "codigoUnico": "ETQ-20261002-43F9143F",
+          "id": "e31e8f0f-d860-46e8-9918-86b6b9591f35",
+          "codigoUnico": "ETQ-20261004-E31E8F0F",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1323,15 +1327,15 @@
           "tipoCarton": null
         },
         {
-          "id": "a8b0bddc-f4a5-4949-ad92-1345c7f42197",
-          "codigoUnico": "ETQ-20261002-A8B0BDDC",
+          "id": "7c0a2395-0e40-4d96-b52e-7c6030cc6ff9",
+          "codigoUnico": "ETQ-20261004-7C0A2395",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1346,15 +1350,15 @@
           "tipoCarton": null
         },
         {
-          "id": "1ede6e37-d3bf-4733-9c80-0bc8f84492ea",
-          "codigoUnico": "ETQ-20261002-1EDE6E37",
+          "id": "df98cead-00d0-4804-97b8-f9bd1b54039d",
+          "codigoUnico": "ETQ-20261004-DF98CEAD",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1369,15 +1373,15 @@
           "tipoCarton": null
         },
         {
-          "id": "9cb0f113-3768-472a-ac8d-8d04d58a26cd",
-          "codigoUnico": "ETQ-20261002-9CB0F113",
+          "id": "5b4dc04f-01e3-4f63-b5e2-ce2a4d7be896",
+          "codigoUnico": "ETQ-20261004-5B4DC04F",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1392,15 +1396,15 @@
           "tipoCarton": null
         },
         {
-          "id": "4084899d-3802-4fdc-aa6b-a7f884d6c504",
-          "codigoUnico": "ETQ-20261002-4084899D",
+          "id": "3281dfc1-c4f7-48a1-b6ea-586fd74f1274",
+          "codigoUnico": "ETQ-20261004-3281DFC1",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1415,15 +1419,15 @@
           "tipoCarton": null
         },
         {
-          "id": "7b050649-1867-4254-b1cd-56f45818f316",
-          "codigoUnico": "ETQ-20261002-7B050649",
+          "id": "68ec87c6-1853-4127-81c1-56e66dfc7a9b",
+          "codigoUnico": "ETQ-20261004-68EC87C6",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1438,15 +1442,15 @@
           "tipoCarton": null
         },
         {
-          "id": "d824b59a-8d80-4d76-985f-b67784a6bee4",
-          "codigoUnico": "ETQ-20261002-D824B59A",
+          "id": "c9c421c8-ff3f-4c6a-a559-5ac4aaeb503c",
+          "codigoUnico": "ETQ-20261004-C9C421C8",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1461,15 +1465,15 @@
           "tipoCarton": null
         },
         {
-          "id": "1aa9df51-1b8a-424b-9e39-557fa91a332e",
-          "codigoUnico": "ETQ-20261002-1AA9DF51",
+          "id": "ed0fb0a9-87e2-461c-b131-d4e22959ed92",
+          "codigoUnico": "ETQ-20261004-ED0FB0A9",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1484,15 +1488,15 @@
           "tipoCarton": null
         },
         {
-          "id": "02548bae-b53a-4452-a8ed-d440130f67f8",
-          "codigoUnico": "ETQ-20261002-02548BAE",
+          "id": "1a3b8d90-bfab-40cb-8c36-a3a6ba860fb6",
+          "codigoUnico": "ETQ-20261004-1A3B8D90",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1507,15 +1511,15 @@
           "tipoCarton": null
         },
         {
-          "id": "ec7215a7-0adc-4e92-abb8-f992ef9a2692",
-          "codigoUnico": "ETQ-20261002-EC7215A7",
+          "id": "8f9410f8-bf3c-46eb-9533-cca1adb3befb",
+          "codigoUnico": "ETQ-20261004-8F9410F8",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1530,15 +1534,15 @@
           "tipoCarton": null
         },
         {
-          "id": "9711b5d7-9bf6-4355-a091-f129bffc5e91",
-          "codigoUnico": "ETQ-20261002-9711B5D7",
+          "id": "a9694225-5bb0-4f53-a573-133a901d8c77",
+          "codigoUnico": "ETQ-20261004-A9694225",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -1558,8 +1562,8 @@
       "status": 200,
       "body": [
         {
-          "id": "5c72f4a2-9d33-467f-a142-b204a83994e1",
-          "granjaId": "8d917b68-98f8-48df-aa81-743189b7221c",
+          "id": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
+          "granjaId": "09cc1895-b2bc-4baa-b31b-83cc15120e73",
           "nombre": "Galerón Núcleo",
           "capacidad_maxima": 6000,
           "aves_en_produccion": 4500,
@@ -1570,8 +1574,8 @@
           "estado": "Activo"
         },
         {
-          "id": "af8a218d-80ea-473a-9d67-c387dde155fb",
-          "granjaId": "8d917b68-98f8-48df-aa81-743189b7221c",
+          "id": "185c0e1f-5137-4ec4-a15f-4efa9b331438",
+          "granjaId": "09cc1895-b2bc-4baa-b31b-83cc15120e73",
           "nombre": "Galerón 2",
           "capacidad_maxima": 4000,
           "aves_en_produccion": 0,
@@ -1587,7 +1591,7 @@
       "status": 200,
       "body": [
         {
-          "id": "57f28514-db92-4d93-a328-91eb990b3206",
+          "id": "d08ac0f3-990e-4740-be06-0f05e6755384",
           "origen": "Granja",
           "producto": "Huevos - Grande",
           "etiquetaId": null,
@@ -1599,7 +1603,7 @@
           "evidencia": null,
           "aprobacion": null,
           "impactoFinanciero": 96000,
-          "fecha": "2026-10-02T18:56:44.878Z",
+          "fecha": "2026-10-04T19:05:48.140Z",
           "observaciones": "Cajones mojados en el galerón",
           "rutaId": null,
           "guiaId": null,
@@ -1622,18 +1626,18 @@
       "status": 200,
       "body": [
         {
-          "id": "d7a99258-c3c5-472f-9932-63bf08c16d18",
+          "id": "9e6e2aca-7983-416b-98f4-9a1ec7b594b5",
           "nombre": "Cartón de 30 huevos",
           "unidades": 30,
           "estado": "Activo",
-          "fechaCreacion": "2026-10-02T18:56:44.794Z"
+          "fechaCreacion": "2026-10-04T19:05:47.958Z"
         },
         {
-          "id": "32e3c936-4924-4d44-a2eb-40f2351f100d",
+          "id": "0ef51e37-529d-485f-8355-46436a535f1e",
           "nombre": "Cartón de 12 huevos",
           "unidades": 12,
           "estado": "Activo",
-          "fechaCreacion": "2026-10-02T18:56:44.803Z"
+          "fechaCreacion": "2026-10-04T19:05:47.980Z"
         }
       ]
     },
@@ -1644,8 +1648,23 @@
     "/api/facturacion/rutas-dia": {
       "status": 200,
       "body": {
-        "fecha": "2026-10-02",
-        "rutas": []
+        "fecha": "2026-10-04",
+        "rutas": [
+          {
+            "guiaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+            "consecutivo": "GD-20261004-1791140747709",
+            "camionNombre": "Camión 9",
+            "fecha": "2026-10-04T19:05:47.909Z",
+            "estado": "Cargada",
+            "totalCartones": 270,
+            "vendidos": 0,
+            "totalGenerado": 0,
+            "tiquetesEmitidos": 0,
+            "retornos": 0,
+            "consolidada": false,
+            "nFacturas": 0
+          }
+        ]
       }
     },
     "/api/finanzas/resumen": {
@@ -1751,7 +1770,7 @@
         "alertas": [
           {
             "tipo": "Vacuna vencida",
-            "detalle": "Newcastle — 8d917b68-98f8-48df-aa81-743189b7221c",
+            "detalle": "Newcastle — 09cc1895-b2bc-4baa-b31b-83cc15120e73",
             "nivel": "Crítica"
           }
         ]
@@ -1761,9 +1780,9 @@
       "status": 200,
       "body": [
         {
-          "id": "67e72be7-895a-4778-aa8c-d0ffd739b966",
-          "galeronId": "5c72f4a2-9d33-467f-a142-b204a83994e1",
-          "fecha_ingreso": "2026-10-02T18:56:44.045Z",
+          "id": "2836403f-9d6c-4ebe-8d41-4f1a33eb6341",
+          "galeronId": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
+          "fecha_ingreso": "2026-10-04T19:05:46.556Z",
           "cantidad_inicial": 4500,
           "linea_genetica": "ISA Brown",
           "estado": "Activo"
@@ -1774,9 +1793,9 @@
       "status": 200,
       "body": [
         {
-          "id": "e8a8c720-ba71-41aa-b743-e4a76c627718",
-          "galeronId": "5c72f4a2-9d33-467f-a142-b204a83994e1",
-          "fecha": "2026-09-27",
+          "id": "fc6adef0-6633-4e4b-a0a7-7671f540fea3",
+          "galeronId": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
+          "fecha": "2026-09-29",
           "tipo": "Correctivo",
           "descripcion": "Cambio de cama",
           "estado": "Pendiente"
@@ -1787,9 +1806,9 @@
       "status": 200,
       "body": [
         {
-          "id": "111cf9df-66e3-467f-8abb-b2da30518d3a",
-          "granjaId": "8d917b68-98f8-48df-aa81-743189b7221c",
-          "galeronId": "5c72f4a2-9d33-467f-a142-b204a83994e1",
+          "id": "458b08c2-6b0f-4e0e-adc7-62cc9cf80823",
+          "granjaId": "09cc1895-b2bc-4baa-b31b-83cc15120e73",
+          "galeronId": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
           "categoria": "Mortalidad",
           "severidad": "Alta",
           "descripcion": "Aumento de mortalidad en el sector 3 del galerón",
@@ -1800,7 +1819,7 @@
           "estado": "Reportado",
           "reportadoPorId": "u-admin",
           "reportadoPorNombre": "Administrador",
-          "fecha": "2026-10-02T18:56:44.850Z",
+          "fecha": "2026-10-04T19:05:48.077Z",
           "resueltoPor": null,
           "resumen": null,
           "granjaNombre": "Granja El Alto",
@@ -1812,11 +1831,11 @@
       "status": 200,
       "body": [
         {
-          "id": "952a0a5d-87bb-45fc-94ea-a7887e7afb0e",
+          "id": "96dab984-7ca6-40e2-8e06-ee9d179fafae",
           "nombre": "Bebedero línea 1",
           "tipo": "Bebedero",
-          "granjaId": "8d917b68-98f8-48df-aa81-743189b7221c",
-          "galeronId": "5c72f4a2-9d33-467f-a142-b204a83994e1",
+          "granjaId": "09cc1895-b2bc-4baa-b31b-83cc15120e73",
+          "galeronId": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
           "ubicacion": "Galerón Núcleo",
           "estado": "Operativo",
           "fechaUltimoMantenimiento": null,
@@ -1829,10 +1848,10 @@
       "status": 200,
       "body": [
         {
-          "id": "af72311e-097a-4e46-bfed-2d9d9011e4d8",
-          "activoId": "952a0a5d-87bb-45fc-94ea-a7887e7afb0e",
+          "id": "38ff264a-495e-450f-9f52-cf30cb50da0a",
+          "activoId": "96dab984-7ca6-40e2-8e06-ee9d179fafae",
           "tipo": "Correctivo",
-          "fechaProgramada": "2026-10-02",
+          "fechaProgramada": "2026-10-04",
           "fechaEjecutada": null,
           "responsable": "Encargado",
           "estado": "Pendiente",
@@ -1851,10 +1870,10 @@
         "vencidas": [],
         "proximas": [
           {
-            "id": "af72311e-097a-4e46-bfed-2d9d9011e4d8",
-            "activoId": "952a0a5d-87bb-45fc-94ea-a7887e7afb0e",
+            "id": "38ff264a-495e-450f-9f52-cf30cb50da0a",
+            "activoId": "96dab984-7ca6-40e2-8e06-ee9d179fafae",
             "tipo": "Correctivo",
-            "fechaProgramada": "2026-10-02",
+            "fechaProgramada": "2026-10-04",
             "fechaEjecutada": null,
             "responsable": "Encargado",
             "estado": "Pendiente",
@@ -1911,7 +1930,7 @@
       "status": 200,
       "body": {
         "ubicacion": "Bodega Central",
-        "generadoEn": "2026-10-02T18:56:45.027Z",
+        "generadoEn": "2026-10-04T19:05:48.412Z",
         "kpis": {
           "stockTotal": 530,
           "etiquetados": 0,
@@ -1944,7 +1963,7 @@
         "colaFEFO": [
           {
             "tipo": "agregado",
-            "id": "a26b751b-edb4-4c3d-b14e-67642092f7bd",
+            "id": "1741f6ff-8477-428d-9196-b9967b7a3c5f",
             "codigoUnico": null,
             "producto": "Huevos - Grande",
             "tipoCarton": null,
@@ -1967,7 +1986,7 @@
         "inventarioAgregado": [
           {
             "tipo": "agregado",
-            "id": "a26b751b-edb4-4c3d-b14e-67642092f7bd",
+            "id": "1741f6ff-8477-428d-9196-b9967b7a3c5f",
             "codigoUnico": null,
             "producto": "Huevos - Grande",
             "tipoCarton": null,
@@ -1990,19 +2009,19 @@
     "/api/logistica/tablero": {
       "status": 200,
       "body": {
-        "fecha": "2026-10-02T18:56:45.031Z",
+        "fecha": "2026-10-04T19:05:48.419Z",
         "guias": [
           {
-            "guiaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-            "consecutivo": "GD-20261002-1790967404712",
+            "guiaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+            "consecutivo": "GD-20261004-1791140747709",
             "estado": "Cargada",
-            "estadoLogico": "Cargada",
-            "camionId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+            "estadoLogico": "CajaCerrada",
+            "camionId": "c535cdd6-3014-4380-939f-84aa058de6dd",
             "camionNombre": "Camión 9",
-            "rutaId": "99f5409b-6ee7-4ea0-a53c-43b91ba4a78e",
+            "rutaId": "6c6ca8da-ded7-421b-86bd-a72b5b87d2e3",
             "rutaNombre": "Ruta Norte",
             "vendedorNombre": "Vendedor Ruta",
-            "finDiaFecha": null,
+            "finDiaFecha": "2026-10-04T19:05:47.909Z",
             "totalCargado": 270,
             "cartonesVendidos": 0,
             "cartonesRetornados": 0,
@@ -2020,64 +2039,64 @@
             "saltosSecuencia": [],
             "detalleEtiquetas": [
               {
-                "etiquetaId": "8aeb4a80-1e5a-4fdc-b0ff-e20f7c664218",
-                "codigoUnico": "ETQ-20261002-8AEB4A80",
+                "etiquetaId": "d214a1c6-bf46-4fa1-bd51-2092f5d1a4c6",
+                "codigoUnico": "ETQ-20261004-D214A1C6",
                 "producto": "Huevos - Grande",
                 "cartones": 30,
                 "estado": "Cargada"
               },
               {
-                "etiquetaId": "0af86954-fc79-47ed-b06a-cf0c5f4595db",
-                "codigoUnico": "ETQ-20261002-0AF86954",
+                "etiquetaId": "f7934362-7157-4eed-a52c-47ec82bed674",
+                "codigoUnico": "ETQ-20261004-F7934362",
                 "producto": "Huevos - Grande",
                 "cartones": 30,
                 "estado": "Cargada"
               },
               {
-                "etiquetaId": "6267539a-4fe3-4546-b28f-32a712ab2531",
-                "codigoUnico": "ETQ-20261002-6267539A",
+                "etiquetaId": "c3e59af7-20b7-4132-be4c-ab339f24502f",
+                "codigoUnico": "ETQ-20261004-C3E59AF7",
                 "producto": "Huevos - Grande",
                 "cartones": 30,
                 "estado": "Cargada"
               },
               {
-                "etiquetaId": "0b0d0b58-73a3-4775-8283-cba4191f4b08",
-                "codigoUnico": "ETQ-20261002-0B0D0B58",
+                "etiquetaId": "1165aa23-c431-44ea-ac2e-d4ed2a789a60",
+                "codigoUnico": "ETQ-20261004-1165AA23",
                 "producto": "Huevos - Grande",
                 "cartones": 30,
                 "estado": "Cargada"
               },
               {
-                "etiquetaId": "7ef5c2fb-7c63-4832-b283-6a6748975a6a",
-                "codigoUnico": "ETQ-20261002-7EF5C2FB",
+                "etiquetaId": "b4d3acce-dcc5-4e89-978d-d6f9d81173e9",
+                "codigoUnico": "ETQ-20261004-B4D3ACCE",
                 "producto": "Huevos - Grande",
                 "cartones": 30,
                 "estado": "Cargada"
               },
               {
-                "etiquetaId": "7ef0a78b-6127-46f0-943b-3ee0d6b98315",
-                "codigoUnico": "ETQ-20261002-7EF0A78B",
+                "etiquetaId": "87a1e63c-1b46-4fa5-9ac2-4eb7a91d993d",
+                "codigoUnico": "ETQ-20261004-87A1E63C",
                 "producto": "Huevos - Grande",
                 "cartones": 30,
                 "estado": "Cargada"
               },
               {
-                "etiquetaId": "6829e8ff-2b43-4ec9-b979-4b988f2d822a",
-                "codigoUnico": "ETQ-20261002-6829E8FF",
+                "etiquetaId": "5a4209c9-ded8-44b8-9302-619377267d85",
+                "codigoUnico": "ETQ-20261004-5A4209C9",
                 "producto": "Huevos - Grande",
                 "cartones": 30,
                 "estado": "Cargada"
               },
               {
-                "etiquetaId": "b7bb4465-6962-4491-900e-a021ba7df211",
-                "codigoUnico": "ETQ-20261002-B7BB4465",
+                "etiquetaId": "cc8494ce-daaf-4380-ab00-65c0ac718c66",
+                "codigoUnico": "ETQ-20261004-CC8494CE",
                 "producto": "Huevos - Grande",
                 "cartones": 30,
                 "estado": "Cargada"
               },
               {
-                "etiquetaId": "b4399992-3bbb-4b4e-b21f-3c900832ade5",
-                "codigoUnico": "ETQ-20261002-B4399992",
+                "etiquetaId": "1c6e8197-f646-4928-8f85-ee7d8fe001a1",
+                "codigoUnico": "ETQ-20261004-1C6E8197",
                 "producto": "Huevos - Grande",
                 "cartones": 30,
                 "estado": "Cargada"
@@ -2099,8 +2118,8 @@
       "status": 200,
       "body": [
         {
-          "id": "408a2a7c-a95e-48a1-8baa-d456e6009436",
-          "referenciaId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+          "id": "cffb9dd8-6768-4b1e-9b21-63a3296d410a",
+          "referenciaId": "c535cdd6-3014-4380-939f-84aa058de6dd",
           "tipoReferencia": "Camion",
           "producto": "Huevos - Grande",
           "cantidadUnidades": 60,
@@ -2110,14 +2129,14 @@
           "diferencia": 15,
           "basculaUtilizada": "Báscula 1",
           "responsable": "Bodeguero",
-          "fecha": "2026-10-02T18:56:44.605Z",
+          "fecha": "2026-10-04T19:05:47.469Z",
           "ubicacion": "Bodega Central",
           "observaciones": null,
           "estado": "Conforme"
         },
         {
-          "id": "2f695f13-c3cc-4c4e-9071-056235f4c2db",
-          "referenciaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "id": "a443a1af-693a-4de9-9a23-cea1356e418d",
+          "referenciaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "tipoReferencia": "Carga Camión",
           "producto": "Huevos - Grande",
           "cantidadUnidades": 270,
@@ -2127,7 +2146,7 @@
           "diferencia": 780,
           "basculaUtilizada": null,
           "responsable": "Bodeguero",
-          "fecha": "2026-10-02T18:56:44.720Z",
+          "fecha": "2026-10-04T19:05:47.737Z",
           "ubicacion": "Camión 9",
           "observaciones": "Carga de 270 cartones",
           "estado": "ConDiferencia"
@@ -2158,14 +2177,14 @@
       "status": 200,
       "body": [
         {
-          "id": "ae16062c-aae2-49d0-b34f-bb7892d7016a",
+          "id": "ac1da900-832d-4c21-9a75-203ecdd8c529",
           "nombre": "Lista Ruta Norte 2026",
           "tipo": "Ruta",
-          "rutaAsociada": "99f5409b-6ee7-4ea0-a53c-43b91ba4a78e",
+          "rutaAsociada": "6c6ca8da-ded7-421b-86bd-a72b5b87d2e3",
           "clienteId": null,
           "estado": "Activa",
-          "fechaInicio": "2026-10-02T18:56:44.812Z",
-          "fechaFin": "2026-10-02",
+          "fechaInicio": "2026-10-04T19:05:48.001Z",
+          "fechaFin": "2026-10-04",
           "aprobadoPor": "u-admin"
         }
       ]
@@ -2178,15 +2197,15 @@
       "status": 200,
       "body": [
         {
-          "id": "79224387-8830-4b6b-b345-3dc97cba153f",
-          "granjaId": "8d917b68-98f8-48df-aa81-743189b7221c",
-          "galeronId": "5c72f4a2-9d33-467f-a142-b204a83994e1",
+          "id": "13eaf445-978c-4bc6-8a86-9b1b502906e1",
+          "granjaId": "09cc1895-b2bc-4baa-b31b-83cc15120e73",
+          "galeronId": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
           "loteId": null,
           "tipoVacuna": "Newcastle",
           "proveedor": "Vecinal",
           "dosis": "1ml",
           "metodoAplicacion": "Inyección",
-          "fechaProgramada": "2026-09-27",
+          "fechaProgramada": "2026-09-29",
           "fechaAplicada": null,
           "responsable": "Encargado",
           "estado": "Programada",
@@ -2194,7 +2213,7 @@
           "observaciones": "Segunda dosis del lote",
           "reaccionIncidencia": null,
           "proximaFecha": null,
-          "fechaCreacion": "2026-10-02T18:56:44.575Z"
+          "fechaCreacion": "2026-10-04T19:05:47.413Z"
         }
       ]
     },
@@ -2203,15 +2222,15 @@
       "body": {
         "proximas": [
           {
-            "id": "79224387-8830-4b6b-b345-3dc97cba153f",
-            "granjaId": "8d917b68-98f8-48df-aa81-743189b7221c",
-            "galeronId": "5c72f4a2-9d33-467f-a142-b204a83994e1",
+            "id": "13eaf445-978c-4bc6-8a86-9b1b502906e1",
+            "granjaId": "09cc1895-b2bc-4baa-b31b-83cc15120e73",
+            "galeronId": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
             "loteId": null,
             "tipoVacuna": "Newcastle",
             "proveedor": "Vecinal",
             "dosis": "1ml",
             "metodoAplicacion": "Inyección",
-            "fechaProgramada": "2026-09-27",
+            "fechaProgramada": "2026-09-29",
             "fechaAplicada": null,
             "responsable": "Encargado",
             "estado": "Programada",
@@ -2219,20 +2238,20 @@
             "observaciones": "Segunda dosis del lote",
             "reaccionIncidencia": null,
             "proximaFecha": null,
-            "fechaCreacion": "2026-10-02T18:56:44.575Z"
+            "fechaCreacion": "2026-10-04T19:05:47.413Z"
           }
         ],
         "vencidas": [
           {
-            "id": "79224387-8830-4b6b-b345-3dc97cba153f",
-            "granjaId": "8d917b68-98f8-48df-aa81-743189b7221c",
-            "galeronId": "5c72f4a2-9d33-467f-a142-b204a83994e1",
+            "id": "13eaf445-978c-4bc6-8a86-9b1b502906e1",
+            "granjaId": "09cc1895-b2bc-4baa-b31b-83cc15120e73",
+            "galeronId": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
             "loteId": null,
             "tipoVacuna": "Newcastle",
             "proveedor": "Vecinal",
             "dosis": "1ml",
             "metodoAplicacion": "Inyección",
-            "fechaProgramada": "2026-09-27",
+            "fechaProgramada": "2026-09-29",
             "fechaAplicada": null,
             "responsable": "Encargado",
             "estado": "Programada",
@@ -2240,7 +2259,7 @@
             "observaciones": "Segunda dosis del lote",
             "reaccionIncidencia": null,
             "proximaFecha": null,
-            "fechaCreacion": "2026-10-02T18:56:44.575Z"
+            "fechaCreacion": "2026-10-04T19:05:47.413Z"
           }
         ],
         "totalProgramadas": 1
@@ -2250,16 +2269,16 @@
       "status": 200,
       "body": [
         {
-          "id": "5b1f017a-bb33-46f2-bd6e-d19a46567fdf",
-          "fecha": "2026-10-02",
+          "id": "62afb677-31a5-46c4-a403-ea970cb0f2ef",
+          "fecha": "2026-10-04",
           "categoria": "Diésel",
           "monto": 45000,
           "descripcion": "Peaje ruta 27",
           "usuarioId": "u-admin"
         },
         {
-          "id": "e8e21ba2-584f-4d5a-a1c7-3affbcc86a33",
-          "fecha": "2026-10-01",
+          "id": "89aad940-c8d5-4c07-8e57-b2f16b0fcc00",
+          "fecha": "2026-10-03",
           "categoria": "Planilla",
           "monto": 900000,
           "descripcion": "Quincena",
@@ -2271,7 +2290,7 @@
       "status": 200,
       "body": {
         "granja": {
-          "id": "8d917b68-98f8-48df-aa81-743189b7221c",
+          "id": "09cc1895-b2bc-4baa-b31b-83cc15120e73",
           "nombre": "Granja El Alto",
           "ubicacion": "Alajuela, CR",
           "tipo_produccion": "Posture",
@@ -2280,7 +2299,7 @@
         },
         "galerones": [
           {
-            "id": "5c72f4a2-9d33-467f-a142-b204a83994e1",
+            "id": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
             "nombre": "Galerón Núcleo",
             "capacidad_maxima": 6000,
             "estado": "Activo",
@@ -2290,9 +2309,9 @@
             "notas": null,
             "lotes": [
               {
-                "id": "67e72be7-895a-4778-aa8c-d0ffd739b966",
-                "galeronId": "5c72f4a2-9d33-467f-a142-b204a83994e1",
-                "fecha_ingreso": "2026-10-02T18:56:44.045Z",
+                "id": "2836403f-9d6c-4ebe-8d41-4f1a33eb6341",
+                "galeronId": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
+                "fecha_ingreso": "2026-10-04T19:05:46.556Z",
                 "cantidad_inicial": 4500,
                 "linea_genetica": "ISA Brown",
                 "estado": "Activo"
@@ -2309,7 +2328,7 @@
             "consumoTotal": 3,
             "produccionHistorial": [
               {
-                "fecha": "2026-10-02T18:56:44.463Z",
+                "fecha": "2026-10-04T19:05:47.273Z",
                 "tipo": "Huevos - Grande",
                 "cantidad": 60
               }
@@ -2317,7 +2336,7 @@
             "mantenimientos": []
           },
           {
-            "id": "af8a218d-80ea-473a-9d67-c387dde155fb",
+            "id": "185c0e1f-5137-4ec4-a15f-4efa9b331438",
             "nombre": "Galerón 2",
             "capacidad_maxima": 4000,
             "estado": "Activo",
@@ -2355,7 +2374,7 @@
       "status": 200,
       "body": {
         "cliente": {
-          "id": "3f48eb66-92de-4a84-a8fb-7d53aca7dec0",
+          "id": "fb2a1aa8-a927-4858-b746-62bc9b7942bb",
           "nombre": "Supermercado Don Pepito",
           "tipoDocumento": "Fisica",
           "documentoId": null,
@@ -2370,9 +2389,9 @@
           "notas": null
         },
         "kpis": {
-          "pedidos30d": 0,
+          "pedidos30d": 1,
           "ticketProm": 480000,
-          "ultimaCompra": "2026-10-01",
+          "ultimaCompra": "2026-10-03",
           "diasUltima": 1,
           "venta12m": 480000,
           "deuda": 240000,
@@ -2386,9 +2405,9 @@
         },
         "facturas": [
           {
-            "id": "a3ddf71b-b003-42c5-a87e-8e4a4db876a9",
+            "id": "dde85c5e-b7d9-4d6c-8baf-47a4c1c5ddc3",
             "consecutivo": "FAC-0001",
-            "fecha": "2026-10-01",
+            "fecha": "2026-10-03",
             "total": 480000,
             "condicionPago": "Credito",
             "estado": "Pendiente",
@@ -2401,7 +2420,7 @@
             "tipo": "Factura",
             "consecutivo": "FAC-0001",
             "monto": 480000,
-            "fecha": "2026-10-01",
+            "fecha": "2026-10-03",
             "estado": "Pendiente"
           }
         ],
@@ -2423,15 +2442,15 @@
       "status": 200,
       "body": {
         "etiqueta": {
-          "id": "8aeb4a80-1e5a-4fdc-b0ff-e20f7c664218",
-          "codigoUnico": "ETQ-20261002-8AEB4A80",
+          "id": "d214a1c6-bf46-4fa1-bd51-2092f5d1a4c6",
+          "codigoUnico": "ETQ-20261004-D214A1C6",
           "producto": "Huevos - Grande",
           "cantidad": 30,
           "pesoBruto": 15,
           "pesoNeto": 14.2,
-          "fechaProduccion": "2026-10-02T18:56:44.118Z",
-          "fechaEmpaque": "2026-10-02T18:56:44.118Z",
-          "fechaVencimiento": "2026-10-30T18:56:44.118Z",
+          "fechaProduccion": "2026-10-04T19:05:46.641Z",
+          "fechaEmpaque": "2026-10-04T19:05:46.641Z",
+          "fechaVencimiento": "2026-11-01T19:05:46.641Z",
           "granjaOrigen": "Granja El Alto",
           "galeronOrigen": "Galerón Núcleo",
           "clasificacion": null,
@@ -2441,14 +2460,14 @@
           "lote": "L-1",
           "guiaRemisionId": null,
           "pesoBodega": null,
-          "guiaDespachoId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+          "guiaDespachoId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
           "fechaRecepcion": null,
           "tipoCarton": null
         },
         "pesos": [
           {
-            "id": "408a2a7c-a95e-48a1-8baa-d456e6009436",
-            "referenciaId": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+            "id": "cffb9dd8-6768-4b1e-9b21-63a3296d410a",
+            "referenciaId": "c535cdd6-3014-4380-939f-84aa058de6dd",
             "tipoReferencia": "Camion",
             "producto": "Huevos - Grande",
             "cantidadUnidades": 60,
@@ -2458,14 +2477,14 @@
             "diferencia": 15,
             "basculaUtilizada": "Báscula 1",
             "responsable": "Bodeguero",
-            "fecha": "2026-10-02T18:56:44.605Z",
+            "fecha": "2026-10-04T19:05:47.469Z",
             "ubicacion": "Bodega Central",
             "observaciones": null,
             "estado": "Conforme"
           },
           {
-            "id": "2f695f13-c3cc-4c4e-9071-056235f4c2db",
-            "referenciaId": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+            "id": "a443a1af-693a-4de9-9a23-cea1356e418d",
+            "referenciaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
             "tipoReferencia": "Carga Camión",
             "producto": "Huevos - Grande",
             "cantidadUnidades": 270,
@@ -2475,7 +2494,7 @@
             "diferencia": 780,
             "basculaUtilizada": null,
             "responsable": "Bodeguero",
-            "fecha": "2026-10-02T18:56:44.720Z",
+            "fecha": "2026-10-04T19:05:47.737Z",
             "ubicacion": "Camión 9",
             "observaciones": "Carga de 270 cartones",
             "estado": "ConDiferencia"
@@ -2483,63 +2502,207 @@
         ],
         "traza": [
           {
-            "id": "a7410a3d-6b93-43e4-a1be-d623c50034c2",
-            "etiquetaId": "8aeb4a80-1e5a-4fdc-b0ff-e20f7c664218",
+            "id": "257da66e-be40-478c-b9f3-628a5e96d54f",
+            "etiquetaId": "d214a1c6-bf46-4fa1-bd51-2092f5d1a4c6",
             "tipoEvento": "Generada",
             "ubicacion": "Granja",
-            "documentoRef": "ETQ-20261002-8AEB4A80",
+            "documentoRef": "ETQ-20261004-D214A1C6",
             "usuarioId": null,
-            "fecha": "2026-10-02T18:56:44.125Z",
+            "fecha": "2026-10-04T19:05:46.651Z",
             "observaciones": "Lote L-1"
           },
           {
-            "id": "fd400593-d27f-40d2-b56c-8300da17e869",
-            "etiquetaId": "8aeb4a80-1e5a-4fdc-b0ff-e20f7c664218",
+            "id": "6c77f897-060a-4942-a354-c276f5ba081c",
+            "etiquetaId": "d214a1c6-bf46-4fa1-bd51-2092f5d1a4c6",
             "tipoEvento": "Cargada",
             "ubicacion": "Camión 9",
-            "documentoRef": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
+            "documentoRef": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
             "usuarioId": "u-admin",
-            "fecha": "2026-10-02T18:56:44.771Z",
+            "fecha": "2026-10-04T19:05:47.851Z",
             "observaciones": null
           }
         ],
         "guia": null,
         "despacho": {
-          "id": "0bfac515-89db-43a9-bcab-044f10d0b9fc",
-          "consecutivo": "GD-20261002-1790967404712",
+          "id": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
           "estado": "Cargada",
           "pesoSalida": 915,
           "pesoLlegada": null,
           "camion": {
-            "id": "7a3ef38d-e696-4dca-a18c-362cf7322f89",
+            "id": "c535cdd6-3014-4380-939f-84aa058de6dd",
             "nombre": "Camión 9",
             "placa": "CR-009"
           },
           "ruta": {
-            "id": "99f5409b-6ee7-4ea0-a53c-43b91ba4a78e",
+            "id": "6c6ca8da-ded7-421b-86bd-a72b5b87d2e3",
             "nombre": "Ruta Norte"
           }
         }
       }
     },
+    "logistica-cuadre-central": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "puedeCuadrar": true,
+        "requiereAprobacion": false,
+        "toleranciaMermaDefault": 0.02,
+        "cuadre": {
+          "guiaId": "05ffbe07-44f6-4c88-8fe8-acde7e23640b",
+          "consecutivo": "GD-20261004-1791140747709",
+          "estado": "Cargada",
+          "finDiaFecha": "2026-10-04T19:05:47.909Z",
+          "camionNombre": "Camión 9",
+          "cargado": 270,
+          "vendidos": 0,
+          "cartonesAnulados": 0,
+          "retornados": 0,
+          "cartonesReingresar": 270,
+          "restanteCamion": 270,
+          "merma": 0,
+          "mermaPct": 0,
+          "descuadreFisico": 0,
+          "mermaPorProducto": [
+            {
+              "producto": "Huevos - Grande",
+              "cargado": 270,
+              "reingresar": 270,
+              "merma": 0
+            }
+          ],
+          "efectivo": 0,
+          "credito": 0,
+          "totalGenerado": 0,
+          "detalleRetornos": [],
+          "etiquetasReingresar": [
+            {
+              "etiquetaId": "d214a1c6-bf46-4fa1-bd51-2092f5d1a4c6",
+              "codigoUnico": "ETQ-20261004-D214A1C6",
+              "producto": "Huevos - Grande",
+              "cartones": 30,
+              "estado": "Cargada"
+            },
+            {
+              "etiquetaId": "f7934362-7157-4eed-a52c-47ec82bed674",
+              "codigoUnico": "ETQ-20261004-F7934362",
+              "producto": "Huevos - Grande",
+              "cartones": 30,
+              "estado": "Cargada"
+            },
+            {
+              "etiquetaId": "c3e59af7-20b7-4132-be4c-ab339f24502f",
+              "codigoUnico": "ETQ-20261004-C3E59AF7",
+              "producto": "Huevos - Grande",
+              "cartones": 30,
+              "estado": "Cargada"
+            },
+            {
+              "etiquetaId": "1165aa23-c431-44ea-ac2e-d4ed2a789a60",
+              "codigoUnico": "ETQ-20261004-1165AA23",
+              "producto": "Huevos - Grande",
+              "cartones": 30,
+              "estado": "Cargada"
+            },
+            {
+              "etiquetaId": "b4d3acce-dcc5-4e89-978d-d6f9d81173e9",
+              "codigoUnico": "ETQ-20261004-B4D3ACCE",
+              "producto": "Huevos - Grande",
+              "cartones": 30,
+              "estado": "Cargada"
+            },
+            {
+              "etiquetaId": "87a1e63c-1b46-4fa5-9ac2-4eb7a91d993d",
+              "codigoUnico": "ETQ-20261004-87A1E63C",
+              "producto": "Huevos - Grande",
+              "cartones": 30,
+              "estado": "Cargada"
+            },
+            {
+              "etiquetaId": "5a4209c9-ded8-44b8-9302-619377267d85",
+              "codigoUnico": "ETQ-20261004-5A4209C9",
+              "producto": "Huevos - Grande",
+              "cartones": 30,
+              "estado": "Cargada"
+            },
+            {
+              "etiquetaId": "cc8494ce-daaf-4380-ab00-65c0ac718c66",
+              "codigoUnico": "ETQ-20261004-CC8494CE",
+              "producto": "Huevos - Grande",
+              "cartones": 30,
+              "estado": "Cargada"
+            },
+            {
+              "etiquetaId": "1c6e8197-f646-4928-8f85-ee7d8fe001a1",
+              "codigoUnico": "ETQ-20261004-1C6E8197",
+              "producto": "Huevos - Grande",
+              "cartones": 30,
+              "estado": "Cargada"
+            }
+          ]
+        }
+      }
+    },
+    "operaciones-cargas": {
+      "status": 200,
+      "body": [
+        {
+          "cargaId": "7c677d44-cf46-485b-8710-7905419c9464",
+          "camionId": null,
+          "camionNombre": null,
+          "camionPlaca": null,
+          "camioneroId": null,
+          "camioneroNombre": null,
+          "creadoPorNombre": null,
+          "creadoPorId": null,
+          "fechaSalida": "2026-10-04T19:05:47.289Z",
+          "estado": "Pendiente",
+          "motivoRechazo": null,
+          "items": [
+            {
+              "trasladoId": "7c677d44-cf46-485b-8710-7905419c9464",
+              "granjaOrigenId": null,
+              "producto": "Huevos - Grande",
+              "cantidad": 40
+            }
+          ]
+        }
+      ]
+    },
     "precio-detalle": {
       "status": 200,
       "body": [
         {
-          "id": "d3420482-0592-4ffc-9967-81ffacadb373",
-          "listaId": "ae16062c-aae2-49d0-b34f-bb7892d7016a",
+          "id": "ef4de117-05ed-4801-baee-3a403aaf4c4a",
+          "listaId": "ac1da900-832d-4c21-9a75-203ecdd8c529",
           "producto": "Huevos - Grande",
           "precioUnitario": 16000,
           "descuentoMaximo": 5,
           "unidad": "cartones"
         },
         {
-          "id": "e8232cce-02ac-43df-8dcf-7dd563a9faaf",
-          "listaId": "ae16062c-aae2-49d0-b34f-bb7892d7016a",
+          "id": "1524ecdb-c628-4fd2-8c3e-d1a4251b577f",
+          "listaId": "ac1da900-832d-4c21-9a75-203ecdd8c529",
           "producto": "Huevos - Chico",
           "precioUnitario": 13500,
           "descuentoMaximo": 0,
           "unidad": "cartones"
+        }
+      ]
+    },
+    "produccion-historial": {
+      "status": 200,
+      "body": [
+        {
+          "id": "5274f116-db58-4495-a94a-28f5e871e9de",
+          "loteId": "2836403f-9d6c-4ebe-8d41-4f1a33eb6341",
+          "granjaId": "09cc1895-b2bc-4baa-b31b-83cc15120e73",
+          "galeronId": "ddf4bcd4-a4eb-4650-a026-94a56b331f16",
+          "fecha": "2026-10-04T19:05:47.273Z",
+          "tipo_producto": "Huevos - Grande",
+          "cantidad": 60,
+          "unidad": "cartones",
+          "estado": "Disponible"
         }
       ]
     }

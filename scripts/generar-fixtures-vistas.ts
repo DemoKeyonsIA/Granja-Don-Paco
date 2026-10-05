@@ -91,6 +91,30 @@ const ENDPOINTS_PARAM: { patron: string; etiqueta: string }[] = [
   { patron: '/api/clientes/{clienteId}/360', etiqueta: 'cliente-360' },
   { patron: '/api/precio-excepciones/{clienteId}', etiqueta: 'precio-excepciones' },
   { patron: '/api/etiquetas/trazabilidad/{codigo}', etiqueta: 'etiqueta-trazabilidad' },
+
+  // Los cuatro siguientes no se piden al montar: la vista los consulta cuando el
+  // usuario elige algo (una guía, una lista de precios, una granja, un camionero).
+  // Antes quedaban fuera de `ENDPOINTS` y `cobertura()` los reportaba como
+  // "endpoints que faltan" en cada regeneración, que no era cierto: lo que faltaba
+  // era una captura con sus parámetros, no el endpoint.
+  { patron: '/api/logistica/cuadre-central?guiaId={guiaId}', etiqueta: 'logistica-cuadre-central' },
+  { patron: '/api/operaciones/cargas?camioneroId={camioneroId}', etiqueta: 'operaciones-cargas' },
+  { patron: '/api/precios/detalle/{listaId}', etiqueta: 'precio-detalle' },
+  { patron: '/api/produccion/historial?granjaId={granjaId}&desde={desde}&hasta={hasta}', etiqueta: 'produccion-historial' },
+];
+
+/**
+ * Endpoints que el servidor expone y que ninguna vista pide al montar.
+ *
+ * No son sobras: `RegistroGasto.tsx`, `MantenimientosTab` y `Cliente360.tsx` los
+ * usan, pero solo con POST, PUT y DELETE. Se dejan en la lista porque la fixture
+ * también documenta la API y `smoke.test.ts` los recorre; lo que no se debe es que
+ * el reporte los acuse de estar sobras cada vez que se regenera.
+ */
+const ENDPOINTS_SIN_VISTA: string[] = [
+  '/api/gastos',
+  '/api/mantenimientos',
+  '/api/precio-excepciones',
 ];
 
 const HOY = new Date().toISOString().split('T')[0];
@@ -144,11 +168,29 @@ function fetchesDeLasVistas(): string[] {
 /** Los GET de `ENDPOINTS` contra lo que las vistas piden, por prefijo. */
 function cobertura(): { faltan: string[]; sobran: string[] } {
   const pedidas = fetchesDeLasVistas();
-  const declarados = ENDPOINTS.map(e => e.replace(/:.*$/, '')).sort();
-  const calza = (k: string, p: string) => p === k || p.startsWith(k + '/');
+  // Las rutas parametrizadas también están capturadas. Se normalizan igual que el
+  // lado de las vistas —quitando `{...}` y el `?query`— porque la vista que pide
+  // `/api/granjas/${id}` deja ver solo `/api/granjas`: son el mismo prefijo.
+  const declarado = (ruta: string) =>
+    ruta
+      .split('?')[0]
+      .replace(/\{[^}]+\}/g, '')
+      .replace(/\/{2,}/g, '/')
+      .replace(/\/$/, '');
+  const declarados = [...ENDPOINTS, ...ENDPOINTS_PARAM.map(p => p.patron)]
+    .map(declarado)
+    .filter(Boolean)
+    .sort();
+  // Bidireccional: la vista revela un prefijo (`/api/granjas`) y la ruta real lo
+  // continúa (`/api/granjas/detalle`), así que cualquiera de los dos puede ser el
+  // más corto. Con una sola dirección, cada ruta parametrizada se reportaba como
+  // faltante y sobrante a la vez.
+  const calza = (k: string, p: string) => p === k || p.startsWith(`${k}/`) || k.startsWith(`${p}/`);
   return {
     faltan: pedidas.filter(p => !declarados.some(k => calza(k, p))),
-    sobran: declarados.filter(k => !pedidas.some(p => calza(k, p))),
+    sobran: declarados.filter(
+      k => !ENDPOINTS_SIN_VISTA.includes(k) && !pedidas.some(p => calza(k, p)),
+    ),
   };
 }
 
@@ -367,6 +409,21 @@ async function main() {
     responsableTransporte: 'Camionero', pesoSalida: 915,
   });
 
+  // El cuadre en central exige que la caja del día esté cerrada. Sin este paso
+  // `GET /api/logistica/cuadre-central` contestaba 409 y la fixture acababa
+  // guardando un error, que es justo lo que el guard de `smoke-flujos.test.tsx`
+  // prohíbe: si una captura viene con 4xx, los smokes de vista ya no distinguen
+  // un error del servidor de un error de la vista. Va justo después de crear la
+  // guía porque, cerrado el día, la guía ya no admite ventas nuevas.
+  //
+  // El id se saca de la lista y no del POST: `POST /api/logistica/guias` no devuelve
+  // la guía en la raíz y mandar `undefined` ahí devuelve un 400 ("Se requiere
+  // guiaId") que el seed avisa pero no detiene.
+  const guias = (await get('/api/logistica/guias')).body as any[];
+  await post('/api/logistica/caja/fin-dia', {
+    guiaId: guias[0]?.id, responsable: 'Vendedor Ruta',
+  });
+
   // --- Catálogos que las vistas muestrean ----------------------------------------
   await post('/api/tipos-carton', { nombre: 'Cartón de 30 huevos', unidades: 30 });
   await post('/api/tipos-carton', { nombre: 'Cartón de 12 huevos', unidades: 12 });
@@ -422,21 +479,23 @@ async function main() {
 
   // Las rutas con `:param` se resuelven contra los ids que dejó la siembra.
   const etiquetas = (await get('/api/etiquetas')).body as any[];
+  const listasPrecios = (await get('/api/precios/listas')).body as any[];
   const reales: Record<string, string | undefined> = {
     granjaId,
     clienteId: pepito?.id,
     codigo: etiquetas[0]?.codigoUnico,
+    guiaId: guias[0]?.id,
+    listaId: listasPrecios[0]?.id ?? lista.body?.id,
+    // `CamioneroMovil` se llama a sí mismo con el usuario en sesión.
+    camioneroId: ADMIN,
+    desde: AYER,
+    hasta: HOY,
   };
   for (const { patron, etiqueta } of ENDPOINTS_PARAM) {
     const url = patron.replace(/\{(\w+)\}/g, (_, k: string) => String(reales[k] ?? 'inexistente'));
     fixtures[etiqueta] = await get(url);
   }
 
-  const nombres = (await get('/api/precios/listas')).body as any[];
-  const listaPrecios = (nombres[0]?.id ?? lista.body?.id);
-  if (listaPrecios) {
-    fixtures['precio-detalle'] = await get(`/api/precios/detalle/${listaPrecios}`);
-  }
   const hilos = (await get('/api/office/mensajes')).body as any[];
   if (hilos[0]?.threadId ?? hilos[0]?.id) {
     fixtures['office-thread'] = await get(`/api/office/mensajes/${hilos[0].threadId ?? hilos[0].id}`);

@@ -26,19 +26,18 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { drizzle } from 'drizzle-orm/libsql';
-import { createClient } from '@libsql/client';
 import * as schema from '../src/db/schema';
 import type { Express } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { ejecutarDdl } from './helpers/db';
+import { ejecutarDdl, abrirClienteDePrueba } from './helpers/db';
 
 let app: Express;
 const DB_PATH = path.resolve(process.cwd(), '.test-smoke.db');
 
 beforeAll(async () => {
   if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
-  const client = createClient({ url: `file:${DB_PATH}` });
+  const client = abrirClienteDePrueba(`file:${DB_PATH}`);
   await ejecutarDdl(client);
   await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['1', 'Administrador', 'admin@granja.com', 'Admin'] });
   const testDb = drizzle(client, { schema });
@@ -47,8 +46,19 @@ beforeAll(async () => {
   app = await mod.createApp(true, testDb);
 });
 
+/**
+ * El cierre del cliente y el borrado del `.db` los hace `helpers/db`, que registra
+ * todo lo abierto con `abrirClienteDePrueba`. Este archivo era el que más veces
+ * mataba al worker de Vitest ("Worker exited unexpectedly", ~1 de cada 3 corridas,
+ * solo con `--pool=forks`; con `threads`, nunca) porque borraba la base con el handle
+ * nativo de libsql todavía abierto.
+ *
+ * Este `afterAll` ya no borra nada: se deja solo el `unlinkSync` defensivo de antes
+ * por si el archivo quedó de una corrida anterior. El borrado real va después del
+ * `close()`, en el helper.
+ */
 afterAll(() => {
-  try { if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH); } catch {}
+  if (fs.existsSync(DB_PATH)) { try { fs.unlinkSync(DB_PATH); } catch { /* EBUSY */ } }
 });
 
 // ---------------------------------------------------------------------------

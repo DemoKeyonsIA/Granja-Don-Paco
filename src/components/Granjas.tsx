@@ -100,7 +100,10 @@ export default function Granjas({ currentUser }: Props) {
       const detalles = productosConCantidad.map(p => ({ producto: p.nombre, cantidad: recolCantidades[p.id] || 0 }));
       const res = await fetch('/api/produccion/recoleccion', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ galeron: recolGaleron, detalles })
+        // `granjaId` acota la búsqueda del galerón: el nombre no es único entre
+        // granjas y sin esto una granja con el mismo nombre de galerón que otra
+        // registraba la recolección en el galerón de la otra.
+        body: JSON.stringify({ galeron: recolGaleron, granjaId: recolGranjaId || undefined, detalles })
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error registrando recolección'); }
       toast.success('Recolección registrada. Inventario actualizado en Granja.');
@@ -993,7 +996,11 @@ function ProduccionTab({ granjaId, galerones }: { granjaId: string; galerones: G
       ].filter(d => d.cantidad > 0);
       const res = await fetch('/api/produccion/recoleccion', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ galeron: galeron.nombre, detalles, responsable: responsable.trim(), observaciones: observaciones.trim() })
+        // Ya se tiene el galerón por id, así que se manda el id en vez de dejar que
+        // el servidor lo busque por nombre: el nombre se repite entre granjas.
+        // `granjaId` es el de la granja abierta en pantalla, no una propiedad del
+        // galerón: `/api/produccion/galerones` no lo devuelve.
+        body: JSON.stringify({ galeron: galeron.nombre, galeronId: galeron.id, granjaId, detalles, responsable: responsable.trim(), observaciones: observaciones.trim() })
       });
       if (res.ok) {
         toast.success('Recolección registrada');

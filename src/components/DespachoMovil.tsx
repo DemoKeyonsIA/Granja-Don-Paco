@@ -123,7 +123,12 @@ export default function DespachoMovil({ currentUser }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // El id va además del nombre porque el nombre no es único: dos granjas
+          // pueden tener un "Galerón Central" cada una, y el servidor resolvía por
+          // nombre, así que la segunda granja producía en el galerón de la primera.
           galeron: galeronSel.nombre,
+          galeronId: galeronSel.id,
+          granjaId: granjaSel.id,
           detalles: [
             { tamano: 'Grande', cantidad: Number(grandes) },
             { tamano: 'Mediano', cantidad: Number(medianos) },

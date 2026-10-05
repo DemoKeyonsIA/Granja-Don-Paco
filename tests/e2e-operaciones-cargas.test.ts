@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { drizzle } from 'drizzle-orm/libsql';
-import { createClient } from '@libsql/client';
 import * as schema from '../src/db/schema';
 import type { Express } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { ejecutarDdl } from './helpers/db';
+import { ejecutarDdl, abrirClienteDePrueba } from './helpers/db';
 
 let app: Express;
 const DB_PATH = path.resolve(process.cwd(), '.test-operaciones-cargas.db');
@@ -49,7 +48,7 @@ async function crearTraslado(cargaId: string, producto: string, cantidad: number
 
 beforeAll(async () => {
   if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
-  const client = createClient({ url: `file:${DB_PATH}` });
+  const client = abrirClienteDePrueba(`file:${DB_PATH}`);
   await ejecutarDdl(client);
   await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['1', 'Administrador', 'admin@granja.com', 'Admin'] });
   const testDb = drizzle(client, { schema });

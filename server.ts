@@ -482,9 +482,36 @@ ${JSON.stringify(historicalData, null, 2)}`;
       const usuario = (req as any).usuario; // resuelto por requirePermission (Bearer o x-user-id → BD)
       const usuarioId = (usuario && usuario.id) || 'system';
       
-      if (!factura || !detalles || !Array.isArray(detalles)) {
+      if (!factura || !Array.isArray(detalles)) {
         return res.status(400).json({ error: "Datos de factura y detalles inválidos" });
       }
+
+      // Un body incompleto es un 400, no un 500. Antes `fecha`, `subtotal`,
+      // `descuento`, `condicion_pago` y `estado` llegaban como `undefined` y
+      // SQLite contestaba NOT NULL; y la búsqueda de cliente con
+      // `eq(clientes.id, undefined)` —que ni siquiera es un valor legal para
+      // Drizzle— reventaba con el volcado del SQL en el mensaje. Eso convertía un
+      // `curl` mal formado en un error de servidor ilegible.
+      //
+      // Los defaults que se rellenan aquí son los que el servidor puede saber
+      // mejor que el cliente: la fecha es ahora porque la factura nace ahora, y el
+      // descuento es cero porque no hay descuento. Lo que sí es verdad del negocio
+      // —a quién se factura y en qué plazo— se exige, en vez de inventarlo.
+      const faltan: string[] = [];
+      if (!factura.clienteId) faltan.push('factura.clienteId');
+      if (!factura.condicion_pago) faltan.push('factura.condicion_pago');
+      if (detalles.length === 0) faltan.push('detalles (al menos una línea)');
+      detalles.forEach((det: any, i: number) => {
+        if (!det?.producto) faltan.push(`detalles[${i}].producto`);
+        if (det?.cantidad === undefined || det?.cantidad === null) faltan.push(`detalles[${i}].cantidad`);
+      });
+      if (faltan.length) {
+        return res.status(400).json({ error: `Faltan datos de la venta: ${faltan.join(', ')}` });
+      }
+
+      if (!factura.fecha) factura.fecha = new Date().toISOString();
+      if (factura.descuento === undefined || factura.descuento === null) factura.descuento = 0;
+      if (!factura.estado) factura.estado = 'Pendiente';
 
       const facturaId = factura.id || crypto.randomUUID();
       factura.id = facturaId;
@@ -563,6 +590,35 @@ ${JSON.stringify(historicalData, null, 2)}`;
         const subtotalCalc = detalles.reduce((a: number, d: any) => a + Number(d.subtotal || d.cantidad * d.precio_unitario), 0);
         factura.subtotal = subtotalCalc;
         factura.total = subtotalCalc - Number(factura.descuento || 0);
+      }
+
+      // `precio_unitario` no se exige al cliente porque una lista de precios puede
+      // aportarlo, pero después de intentar eso sí tiene que existir: `subtotal` y
+      // `precio_unitario` son NOT NULL en detalles_factura, y sin precio la línea
+      // era un 500. El subtotal de cada línea se deriva aquí para que ninguna
+      // dependable del cliente lo deje en null.
+      const sinPrecio: string[] = [];
+      for (const det of detalles) {
+        if (det.precio_unitario === undefined || det.precio_unitario === null) sinPrecio.push(String(det.producto));
+      }
+      if (sinPrecio.length) {
+        return res.status(400).json({
+          error: `Sin precio unitario y sin lista de precios que lo resuelva: ${sinPrecio.join(', ')}`,
+        });
+      }
+      for (const det of detalles) {
+        const precio = Number(det.precio_unitario);
+        det.precio_unitario = precio;
+        if (det.subtotal === undefined || det.subtotal === null) det.subtotal = Number(det.cantidad) * precio;
+      }
+
+      // El total se acepta si viene, pero se completa si no: un total ausente era
+      // NOT NULL y la factura se perdía entera aunque las líneas fueran correctas.
+      if (factura.subtotal === undefined || factura.subtotal === null) {
+        factura.subtotal = detalles.reduce((a: number, d: any) => a + Number(d.subtotal), 0);
+      }
+      if (factura.total === undefined || factura.total === null) {
+        factura.total = Number(factura.subtotal) - Number(factura.descuento || 0);
       }
 
       let consecutivoAsignado = '';
@@ -794,20 +850,47 @@ ${JSON.stringify(historicalData, null, 2)}`;
 
   app.post("/api/produccion/recoleccion", async (req, res) => {
     try {
-      const { galeron, detalles } = req.body;
-      
-      if (!galeron || !detalles || !Array.isArray(detalles)) {
+      const { galeron, galeronId, granjaId, detalles } = req.body;
+
+      if ((!galeron && !galeronId) || !detalles || !Array.isArray(detalles)) {
         return res.status(400).json({ error: "Datos de recolección inválidos" });
       }
 
-      await db.transaction(async (tx) => {
-        // Find galeron ID
-        const galeronRecord = await tx.query.galerones.findFirst({
-          where: eq(galerones.nombre, galeron)
+      // El galerón se resolvía por nombre y a nivel global: `findFirst(nombre)`
+      // devolvía el primero, así que con dos granjas que tienen un "Galerón Central"
+      // cada uno, la recolección de la segunda granja se guardaba en el galerón de
+      // la primera. No daba error, daba producción en la granja equivocada, que es
+      // peor. Se acepta el id (que es lo que manda la vista) y, si solo llega el
+      // nombre, se acota a la granja indicada; sin granja, un nombre ambiguo se
+      // rechaza en vez de adivinarse.
+      let galeronRecord: typeof galerones.$inferSelect | undefined;
+      if (galeronId) {
+        galeronRecord = await db.query.galerones.findFirst({ where: eq(galerones.id, galeronId) });
+      } else {
+        const porNombre = await db.query.galerones.findMany({ where: eq(galerones.nombre, galeron) });
+        if (granjaId) {
+          galeronRecord = porNombre.find(g => g.granjaId === granjaId);
+        } else if (porNombre.length > 1) {
+          return res.status(400).json({
+            error: `"${galeron}" existe en ${porNombre.length} granjas: indica cuál con granjaId o galeronId`,
+          });
+        } else {
+          galeronRecord = porNombre[0];
+        }
+      }
+
+      if (!galeronRecord) {
+        // Fuera de la transacción a propósito: antes este `throw` la abortaba y el
+        // catch la devolvía como 500, cuando es un nombre equivocado del cliente.
+        return res.status(400).json({ error: `Galerón no encontrado: ${galeronId ?? galeron}` });
+      }
+      if (granjaId && galeronRecord.granjaId !== granjaId) {
+        return res.status(400).json({
+          error: `El galerón ${galeronRecord.nombre} no pertenece a esa granja`,
         });
+      }
 
-        if (!galeronRecord) throw new Error("Galerón no encontrado");
-
+      await db.transaction(async (tx) => {
         // Find active lote for this galeron
         const loteRecord = await tx.query.lotes_aves.findFirst({
           where: and(
@@ -1060,6 +1143,40 @@ ${JSON.stringify(historicalData, null, 2)}`;
         return res.status(400).json({ error: "Falta nombre de la granja" });
       }
 
+      // `galerones` se acepta como array de objetos `{ nombre, capacidad_maxima }`, y
+      // si mandas `['Galerón Uno']` se responds 400 diciendo cuál entrada está mal.
+      // Antes `g.nombre` sobre un string daba `undefined` y SQLite contestaba
+      // NOT NULL en `galerones.nombre`, así que un cliente que se equivocaba de
+      // formato se comía un 500 con el SQL entero en el mensaje.
+      let galeronesNormalizados: { nombre: string; capacidad_maxima: number }[] | null = null;
+      if (galeronesData !== undefined && galeronesData !== null) {
+        if (!Array.isArray(galeronesData)) {
+          return res.status(400).json({ error: "galerones debe ser una lista" });
+        }
+        const malos: string[] = [];
+        galeronesNormalizados = [];
+        galeronesData.forEach((g: any, i: number) => {
+          if (!g || typeof g !== 'object' || Array.isArray(g)) {
+            malos.push(`galerones[${i}] no es un objeto con nombre y capacidad_maxima`);
+            return;
+          }
+          if (!g.nombre || typeof g.nombre !== 'string') {
+            malos.push(`galerones[${i}].nombre`);
+            return;
+          }
+          // `Number(undefined)` es NaN, que SQLite no es NOT NULL pero tampoco es un
+          // número: se cuela como 0 y la capacidad real se pierde sin avisar.
+          const capacidad = Number(g.capacidad_maxima);
+          galeronesNormalizados!.push({
+            nombre: g.nombre,
+            capacidad_maxima: Number.isFinite(capacidad) ? capacidad : 0,
+          });
+        });
+        if (malos.length) {
+          return res.status(400).json({ error: `Galerones inválidos: ${malos.join('; ')}` });
+        }
+      }
+
       await db.transaction(async (tx) => {
         const granjaId = crypto.randomUUID();
         await tx.insert(granjas).values({
@@ -1071,12 +1188,12 @@ ${JSON.stringify(historicalData, null, 2)}`;
           estado: 'Activo'
         });
 
-        if (galeronesData && Array.isArray(galeronesData) && galeronesData.length > 0) {
-          const galeronesToInsert = galeronesData.map((g: any) => ({
+        if (galeronesNormalizados && galeronesNormalizados.length > 0) {
+          const galeronesToInsert = galeronesNormalizados.map(g => ({
             id: crypto.randomUUID(),
             granjaId,
             nombre: g.nombre,
-            capacidad_maxima: Number(g.capacidad_maxima),
+            capacidad_maxima: g.capacidad_maxima,
             fecha_ultimo_mantenimiento: null,
             estado: 'Activo'
           }));
@@ -1360,8 +1477,14 @@ ${JSON.stringify(historicalData, null, 2)}`;
       const { granjaId, desde, hasta } = req.query;
       let data = await db.query.produccion_diaria.findMany();
       if (granjaId) data = data.filter(p => p.granjaId === granjaId);
-      if (desde) data = data.filter(p => String(p.fecha) >= String(desde));
-      if (hasta) data = data.filter(p => String(p.fecha) <= String(hasta));
+      // `fecha` es un timestamp ISO completo y las vistas mandan los límites como
+      // fecha corta (`<input type="date">`): comparar los textos tal cual hacía que
+      // '2026-10-04T12:34:56.000Z' <= '2026-10-04' fuera falso y el rango de un solo
+      // día saliera siempre vacío. Comparar solo la parte de la fecha lo arregla y
+      // deja el límite superior incluido, que es lo que el usuario espera.
+      const dia = (v: unknown) => String(v ?? '').slice(0, 10);
+      if (desde) data = data.filter(p => dia(p.fecha) >= dia(desde));
+      if (hasta) data = data.filter(p => dia(p.fecha) <= dia(hasta));
       res.json(data);
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
@@ -5320,17 +5443,45 @@ ${JSON.stringify(historicalData, null, 2)}`;
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
 
+  /**
+   * `insumosUsados` y `checklist` son columnas TEXT que guardan JSON (el esquema lo
+   * dice en el comentario), pero se insertaban tal cual venían. Si el cliente manda
+   * el array que la columna describe —`[{ item, ok }]`— el bind lo convertía a
+   * `"[object Object]"` y la consulta fallaba con un 500 que no tenía nada que ver
+   * con el mantenimiento. Aquí se normaliza: array → texto JSON, texto → texto.
+   *
+   * Devuelve `null` para lo que no viene, para no pisar con un `"null"` en
+   * texto lo que el `|| null` de antes dejaba en NULL.
+   */
+  const comoJson = (valor: unknown): string | null => {
+    if (valor === undefined || valor === null) return null;
+    if (typeof valor === 'string') return valor;
+    return JSON.stringify(valor);
+  };
+
+  /**
+   * Lo que `comoJson` sabe guardar sin dejar basura: texto, o el array que la
+   * columna describe. Un objeto suelto o un número también se serializarían sin
+   * quejarse, pero no hay código que los vuelva a leer, así que se rechazan con
+   * 400 en vez de quedar guardados como texto que nadie puede interpretar.
+   */
+  const jsonValido = (valor: unknown): boolean =>
+    valor === undefined || valor === null || typeof valor === 'string' || Array.isArray(valor);
+
   app.post("/api/ordenes-mantenimiento", async (req, res) => {
     try {
       const { activoId, tipo, fechaProgramada, responsable, insumosUsados, costo, observaciones, checklist } = req.body;
       if (!activoId || !tipo || !fechaProgramada || !responsable) {
         return res.status(400).json({ error: "Faltan datos de orden de mantenimiento" });
       }
+      if (!jsonValido(insumosUsados) || !jsonValido(checklist)) {
+        return res.status(400).json({ error: "insumosUsados y checklist deben ser un array o un texto" });
+      }
       const id = crypto.randomUUID();
       await db.insert(ordenes_mantenimiento).values({
         id, activoId, tipo, fechaProgramada, responsable, estado: 'Pendiente',
-        insumosUsados: insumosUsados || null, costo: Number(costo) || 0,
-        observaciones: observaciones || null, checklist: checklist || null
+        insumosUsados: comoJson(insumosUsados), costo: Number(costo) || 0,
+        observaciones: observaciones || null, checklist: comoJson(checklist)
       });
       res.status(201).json({ success: true, id });
     } catch (error: any) { res.status(500).json({ error: error.message }); }
@@ -5342,13 +5493,16 @@ ${JSON.stringify(historicalData, null, 2)}`;
       const existente = await db.query.ordenes_mantenimiento.findFirst({ where: eq(ordenes_mantenimiento.id, id) });
       if (!existente) return res.status(404).json({ error: "Orden de mantenimiento no encontrada" });
       const { estado, fechaEjecutada, costo, observaciones, proximaFecha, insumosUsados } = req.body;
+      if (!jsonValido(insumosUsados)) {
+        return res.status(400).json({ error: "insumosUsados debe ser un array o un texto" });
+      }
       const updateData: any = {};
       if (estado) updateData.estado = estado;
       if (fechaEjecutada) updateData.fechaEjecutada = fechaEjecutada;
       if (costo !== undefined) updateData.costo = Number(costo);
       if (observaciones) updateData.observaciones = observaciones;
       if (proximaFecha) updateData.proximaFecha = proximaFecha;
-      if (insumosUsados) updateData.insumosUsados = insumosUsados;
+      if (insumosUsados !== undefined) updateData.insumosUsados = comoJson(insumosUsados);
       await db.update(ordenes_mantenimiento).set(updateData).where(eq(ordenes_mantenimiento.id, id));
       res.json({ success: true });
     } catch (error: any) { res.status(500).json({ error: error.message }); }

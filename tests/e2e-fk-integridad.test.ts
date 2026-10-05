@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { drizzle } from 'drizzle-orm/libsql';
-import { createClient } from '@libsql/client';
+import { abrirClienteDePrueba } from './helpers/db';
 import * as schema from '../src/db/schema';
 import type { Express } from 'express';
 import fs from 'fs';
@@ -20,7 +20,7 @@ const DB_PATH = path.resolve(process.cwd(), '.test-fk-on.db');
  */
 beforeAll(async () => {
   if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
-  const client = createClient({ url: `file:${DB_PATH}` });
+  const client = abrirClienteDePrueba(`file:${DB_PATH}`);
   for (const sql of CREATE_TABLES) {
     await client.execute(sql);
   }

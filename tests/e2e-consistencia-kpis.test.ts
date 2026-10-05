@@ -15,12 +15,11 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { drizzle } from 'drizzle-orm/libsql';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
-import { createClient } from '@libsql/client';
 import * as schema from '../src/db/schema';
 import type { Express } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { ejecutarDdl } from './helpers/db';
+import { ejecutarDdl, abrirClienteDePrueba } from './helpers/db';
 
 let app: Express;
 let testDb: LibSQLDatabase<typeof schema>;
@@ -34,7 +33,7 @@ const como = (req: request.Test) => req.set('x-user-id', ADMIN);
 
 beforeAll(async () => {
   if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
-  const client = createClient({ url: `file:${DB_PATH}` });
+  const client = abrirClienteDePrueba(`file:${DB_PATH}`);
   await ejecutarDdl(client);
   testDb = drizzle(client, { schema });
 
