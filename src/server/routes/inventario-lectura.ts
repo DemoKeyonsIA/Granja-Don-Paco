@@ -1,10 +1,20 @@
 import * as schema from '../../db/schema';
+import { tieneRol } from '../clientes-scope';
 
 /** Lecturas de existencias y kardex enriquecido para Bodega y Operaciones. */
 export function registrarRutasLecturaInventario(app: any, db: any, requirePermission: (...args: any[]) => any) {
   app.get("/api/inventario", requirePermission ? requirePermission(['inventario', 'inventario_bodega', 'ventas'], 'view') : undefined, async (req, res) => {
     try {
-      const data = await db.query.inventario.findMany();
+      let data = await db.query.inventario.findMany();
+      const usuario = (req as any).usuario;
+      if (usuario && tieneRol(usuario, 'Comercial') && !tieneRol(usuario, 'Admin')) {
+        const camiones = await db.query.camiones.findMany();
+        const ubicacionesAsignadas = new Set(camiones
+          .filter((camion: any) => String(camion.camioneroId || '') === String(usuario.id) || String(camion.vendedor_id || '') === String(usuario.id))
+          .map((camion: any) => String(camion.nombre || '').trim())
+          .filter(Boolean));
+        data = data.filter((item: any) => ubicacionesAsignadas.has(String(item.ubicacion || '').trim()));
+      }
       res.json(data);
     } catch (error: any) {
       res.status(500).json({ error: error.message });

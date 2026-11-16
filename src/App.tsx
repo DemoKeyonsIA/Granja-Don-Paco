@@ -141,9 +141,13 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
   useEffect(() => {
     if (activeTab !== 'operaciones') return;
     if (subTab === 'despacho-precios' || subTab === 'ventas-precios') {
-      subTabManual.current = true;
-      setActiveTab('admin');
-      setSubTab('precios-negociacion');
+      if (userRoles.includes('Admin')) {
+        subTabManual.current = true;
+        setActiveTab('admin');
+        setSubTab('precios-negociacion');
+      } else {
+        setSubTab(subTabPorDefecto('operaciones', userRoles));
+      }
       return;
     }
     const canonico = despachoCanonico(subTab, userRoles);
@@ -309,6 +313,17 @@ const nuevoItems = useMemo(() => {
     setSubTab(paso ? interno : destino.subTab);
   };
 
+  const navegarAModuloVisible = (moduloId: string, vista?: string) => {
+    if (!modulosVisibles(userRoles).some(modulo => modulo.id === moduloId)) {
+      toast.error('Esta sección no está disponible para su perfil.');
+      return false;
+    }
+    subTabManual.current = true;
+    setActiveTab(moduloId);
+    if (vista) setSubTab(vista);
+    return true;
+  };
+
   const handleSearch = (q: string) => {
     setSearchQuery(q);
     if (!q.trim()) return;
@@ -319,11 +334,11 @@ const nuevoItems = useMemo(() => {
       // Documentos, que es donde sí se ven los adjuntos que una regla debería
       // haber vinculado.
       if (userRoles.includes('Admin')) { setActiveTab('admin'); setSubTab('vinculaciones'); }
-      else { setActiveTab('office'); setSubTab('documentos'); }
+      else { navegarAModuloVisible('office', 'documentos'); }
     } else if (lower.includes('correo') || lower.includes('email') || lower.includes('gmail') || lower.includes('bandeja')) {
-      setActiveTab('office'); setSubTab('correo');
+      navegarAModuloVisible('office', 'correo');
     } else if (lower.includes('drive') || lower.includes('documento') || lower.includes('carpeta') || lower.includes('adjunto')) {
-      setActiveTab('office'); setSubTab('documentos');
+      navegarAModuloVisible('office', 'documentos');
     } else if (lower.includes('guia') || lower.includes('despacho') || lower.includes('camion')) {
       // La guía de despacho es el cuerpo del grupo Despacho del hub (la GD-
       // completa: Bodega→Camión→Clientes) y además su primer paso, "Guías de
@@ -345,7 +360,7 @@ const nuevoItems = useMemo(() => {
       // Va antes de "caja" porque "flujo de caja" contiene las dos palabras y el
       // reporte de Analítica es a donde realmente lleva.
       subTabManual.current = true;
-      setActiveTab('finanzas'); setSubTab(idSubTabReporte('flujo-caja'));
+      navegarAModuloVisible('finanzas', idSubTabReporte('flujo-caja'));
     } else if (lower.includes('venta') || lower.includes('caja') || lower.includes('tiquete')) {
       // "Venta (Caja)" era una puerta suelta dentro de Logística; ahora es el grupo
       // La venta de ruta queda en Despacho y ruta junto con la entrega.
@@ -355,39 +370,49 @@ const nuevoItems = useMemo(() => {
       // rol porque un Comercial sí lo ve y un Socio no: mandarlo a un tab
       // invisible lo dejaba en la pantalla anterior, con el texto buscado a la
       // vista pero el resultado en otro lado.
-      subTabManual.current = true;
-      setActiveTab('finanzas');
-      setSubTab(userRoles.includes('Admin') || userRoles.includes('Comercial') ? 'documentos' : 'resumen');
+      if (userRoles.includes('Comercial')) {
+        subTabManual.current = true;
+        setActiveTab('operaciones'); setSubTab('facturar-movil');
+      } else {
+        navegarAModuloVisible('finanzas', userRoles.includes('Admin') ? 'documentos' : 'resumen');
+      }
     } else if (lower.includes('gasto')) {
       // El gasto ya no es un tab: es la acción "+ Nuevo → Gasto", que es de
       // Admin. Quien no es Admin aterriza en el primer tab que sí ve, no en
       // `resumen` a ciegas.
-      subTabManual.current = true;
-      setActiveTab('finanzas'); setSubTab(subTabPorDefecto('finanzas', userRoles));
+      if (userRoles.includes('Comercial')) setIsRegistroGastoOpen(true);
+      else navegarAModuloVisible('finanzas', subTabPorDefecto('finanzas', userRoles));
     } else if (lower.includes('granja') || lower.includes('galero')) {
       // La granja dejó de ser módulo y pasó a ser grupo del hub de Operaciones.
       irAGrupoOperaciones('granja');
     } else if (lower.includes('etiqueta') || lower.includes('qr')) {
       irAGrupoOperaciones('bodega', 'bodega-etiquetas');
     } else if (lower.includes('usuario') || lower.includes('rol') || lower.includes('admin')) {
-      setActiveTab('admin'); setSubTab('usuarios');
+      navegarAModuloVisible('admin', 'usuarios');
     } else if (lower.includes('camion') && (lower.includes('admin') || lower.includes('config'))) {
       setActiveTab('admin'); setSubTab('infraestructura');
     } else if (lower.includes('producto') && (lower.includes('tipo') || lower.includes('admin'))) {
       setActiveTab('admin'); setSubTab('productos');
     } else if (lower.includes('reporte')) {
-      subTabManual.current = true;
-      setActiveTab('finanzas'); setSubTab(idSubTabReporte('financiero'));
+      navegarAModuloVisible('finanzas', idSubTabReporte('financiero'));
     } else if (lower.includes('peso')) {
       irAGrupoOperaciones('bodega', 'bodega-pesos');
     } else if (lower.includes('precio')) {
       if (!userRoles.includes('Admin')) { toast.error('Solo Administración puede consultar y editar los rangos de negociación.'); return; }
-      subTabManual.current = true;
-      setActiveTab('admin'); setSubTab('precios-negociacion');
+      navegarAModuloVisible('admin', 'precios-negociacion');
     }
   };
 
   const modulos = useMemo(() => modulosVisibles(userRoles), [userRoles]);
+
+  // Las búsquedas antiguas podían seleccionar un módulo aunque el rol no lo
+  // viera en el menú. Corrige también pestañas restauradas de una sesión previa.
+  useEffect(() => {
+    if (!modulos.some(modulo => modulo.id === activeTab)) {
+      setActiveTab(moduloPorDefecto(userRoles));
+      setSubTab(subTabPorDefecto(moduloPorDefecto(userRoles), userRoles));
+    }
+  }, [activeTab, modulos, userRoles]);
 
   /**
  * Fila de tabs simple (una banda). `tono` replica los tres estilos heredados.
@@ -769,7 +794,7 @@ const nuevoItems = useMemo(() => {
               </div>
             );
           })()}
-          {activeTab === 'admin' && <Suspense fallback={<ModuleLoading />}><Admin currentUser={currentUser} initialTab={subTab as any} /></Suspense>}
+          {activeTab === 'admin' && userRoles.includes('Admin') && <Suspense fallback={<ModuleLoading />}><Admin currentUser={currentUser} initialTab={subTab as any} /></Suspense>}
 
           {activeTab === 'operaciones' && esRolMovil(userRoles) && (() => {
             const subTabs = subTabsOperacionesMovil(userRoles);
@@ -838,7 +863,7 @@ const nuevoItems = useMemo(() => {
             </div>
           )}
 
-          {activeTab === 'finanzas' && (
+          {activeTab === 'finanzas' && modulos.some(m => m.id === 'finanzas') && (
             <div className="space-y-6" data-testid="finanzas-hub">
               {renderFilaTabs(
                 subTabsDe('finanzas', userRoles),
@@ -867,7 +892,7 @@ const nuevoItems = useMemo(() => {
             </div>
           )}
 
-          {activeTab === 'office' && <Suspense fallback={<ModuleLoading />}>
+          {activeTab === 'office' && modulos.some(m => m.id === 'office') && <Suspense fallback={<ModuleLoading />}>
             <Office
               currentUser={currentUser}
               initialEspacio={espacioOfficeDe(subTab, userRoles)}
@@ -901,7 +926,9 @@ const nuevoItems = useMemo(() => {
               >
                 <Icon className={cn("w-5 h-5 mb-1", isActive && "scale-110")} />
                 <span className="text-[10px] font-bold leading-tight truncate max-w-[60px]">
-                  {item.shortLabel ?? labelDeModulo(item.id, userRoles).split(' ')[0]}
+                  {item.id === 'operaciones' && userRoles.includes('Comercial')
+                    ? 'Mi Ruta'
+                    : item.shortLabel ?? labelDeModulo(item.id, userRoles).split(' ')[0]}
                 </span>
               </button>
             );

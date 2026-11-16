@@ -12,6 +12,7 @@
  * Aplicación de referencia: PLAN-IA-UNIFICADA.md
  */
 import type { Role } from '../types';
+import { rolesParaUsuario } from '../lib/role-permissions';
 
 export type IconName =
   | 'DollarSign' | 'Egg' | 'Settings' | 'Mail'
@@ -344,10 +345,8 @@ export const SUBTABS_POR_MODULO: Partial<Record<ModuleId, SubTabDef[]>> = {
 // ---------------------------------------------------------------------------
 
 /** Normaliza `user.role` + `user.roles` al conjunto efectivo de roles. */
-export const rolesEfectivos = (rolPrincipal: Role, rolesExtra?: Role[]): Role[] => {
-  const r = rolesExtra?.length ? rolesExtra : [rolPrincipal];
-  return Array.from(new Set(r.filter(Boolean).map(rol => rol === 'Camionero' ? 'Comercial' : rol)));
-};
+export const rolesEfectivos = (rolPrincipal: Role, rolesExtra?: Role[]): Role[] =>
+  rolesParaUsuario(rolPrincipal, rolesExtra) as Role[];
 
 /** Módulos visibles para un conjunto de roles, en orden del sidebar. */
 export const modulosVisibles = (roles: Role[]): ModuloDef[] =>

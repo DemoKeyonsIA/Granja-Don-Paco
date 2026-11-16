@@ -1,9 +1,12 @@
 import { eq } from 'drizzle-orm';
 import * as schema from '../../db/schema';
+import { normalizarRol, rolesParaUsuario } from '../../lib/role-permissions';
 
 /** CRUD de usuarios con protección de historial referencial. */
 export function registrarRutasUsuarios(app: any, db: any, hashPassword: (password: string) => string, requirePermission: (...args: any[]) => any, logAudit?: (...args: any[]) => Promise<void>) {
   const { granjas, camiones, ventas_ruta, facturas, gastos, sesiones } = schema;
+  const rolesAdicionalesGuardables = (role: string, roles: string | string[] | null | undefined) =>
+    rolesParaUsuario(role, roles).filter(r => r !== normalizarRol(role)).join(',');
   // ==================== PHASE 5 — USERS ====================
 
   app.get("/api/users", requirePermission('usuarios', 'view'), async (req, res) => {
@@ -27,9 +30,10 @@ export function registrarRutasUsuarios(app: any, db: any, hashPassword: (passwor
       const existente = await db.query.users.findFirst({ where: eq(schema.users.email, String(email).trim()) });
       if (existente) return res.status(400).json({ error: "Ya existe un usuario con ese email" });
       const id = crypto.randomUUID();
+      const rolPrincipal = normalizarRol(String(role));
       await db.insert(schema.users).values({
-        id, name, email, role,
-        roles: roles ? String(roles) : '',
+        id, name, email, role: rolPrincipal,
+        roles: rolesAdicionalesGuardables(rolPrincipal, roles ? String(roles) : ''),
         activo: activo !== undefined ? !!activo : true,
       });
       try {
@@ -52,11 +56,13 @@ export function registrarRutasUsuarios(app: any, db: any, hashPassword: (passwor
         const dup = await db.query.users.findFirst({ where: eq(schema.users.email, String(email).trim()) });
         if (dup) return res.status(400).json({ error: "Ya existe un usuario con ese email" });
       }
+      const rolPrincipal = normalizarRol(String(role !== undefined && role !== null ? role : existente.role));
+      const rolesSolicitados = roles !== undefined ? String(roles) : existente.roles;
       await db.update(schema.users).set({
         name: name !== undefined && name !== null ? String(name) : existente.name,
         email: email !== undefined && email !== null ? String(email) : existente.email,
-        role: role !== undefined && role !== null ? String(role) : existente.role,
-        roles: roles !== undefined ? String(roles) : existente.roles,
+        role: rolPrincipal,
+        roles: rolesAdicionalesGuardables(rolPrincipal, rolesSolicitados),
         activo: activo !== undefined ? !!activo : existente.activo,
       }).where(eq(schema.users.id, id));
       if (password) {

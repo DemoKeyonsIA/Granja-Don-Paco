@@ -1,5 +1,6 @@
 import { eq, lt } from "drizzle-orm";
 import * as schema from "../../db/schema";
+import { rolesParaUsuario } from "../../lib/role-permissions";
 
 export function registrarRutasAutenticacion(app: any, db: any, authUser: any, getTokenFromReq: any, verifyPassword: any, normalizarRol: (role: string) => string) {
   const { sesiones } = schema;
@@ -25,8 +26,9 @@ export function registrarRutasAutenticacion(app: any, db: any, authUser: any, ge
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       });
       await db.delete(sesiones).where(lt(sesiones.expiresAt, new Date().toISOString()));
-      const roles = (usuario.roles && usuario.roles.trim()) ? usuario.roles.split(',').map(normalizarRol).filter(Boolean) : [normalizarRol(usuario.role)];
-      res.json({ token, user: { id: usuario.id, name: usuario.name, email: usuario.email, role: normalizarRol(usuario.role), roles } });
+      const role = normalizarRol(usuario.role);
+      const roles = rolesParaUsuario(role, usuario.roles || '');
+      res.json({ token, user: { id: usuario.id, name: usuario.name, email: usuario.email, role, roles } });
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
 

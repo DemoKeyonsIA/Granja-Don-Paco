@@ -166,7 +166,7 @@ export default function AdminUsuarios({ currentUser }: Props) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Nombre *" className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
             <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="Email *" className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
-            <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600">
+            <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value, roles: e.target.value === 'Comercial' ? f.roles.filter(r => r !== 'Admin') : f.roles }))} className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600">
               {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
             </select>
             <div className="relative">
@@ -177,7 +177,7 @@ export default function AdminUsuarios({ currentUser }: Props) {
               <p className="text-[10px] font-bold uppercase tracking-wide text-neutral-400 mb-1">Roles adicionales</p>
               <div className="flex flex-wrap gap-2">
                 {ROLES.map(r =>
-                  r !== form.role && (
+                  r !== form.role && !(form.role === 'Comercial' && r === 'Admin') && (
                     <button key={r} onClick={() => toggleRol(r)}
                       className={cn('px-2 py-1 rounded-full text-xs font-bold border transition-colors',
                         form.roles.includes(r) ? 'border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-900/20' : 'border-neutral-300 text-neutral-500 hover:border-neutral-400')}>
@@ -235,13 +235,13 @@ export default function AdminUsuarios({ currentUser }: Props) {
                           <input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="w-full px-2 py-1 border rounded text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
                         </td>
                         <td className="px-4 py-2">
-                          <select value={editForm.role} onChange={e => setEditForm({ ...editForm, role: e.target.value })} className="px-2 py-1 border rounded text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600">
+                          <select value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value, roles: e.target.value === 'Comercial' ? f.roles.filter(r => r !== 'Admin') : f.roles }))} className="px-2 py-1 border rounded text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600">
                             {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                           </select>
                         </td>
                         <td className="px-4 py-2">
                           <div className="flex flex-wrap gap-1">
-                            {ROLES.filter(r => r !== editForm.role).map(r => (
+                            {ROLES.filter(r => r !== editForm.role && !(editForm.role === 'Comercial' && r === 'Admin')).map(r => (
                               <button key={r} onClick={() => toggleRolEdit(r)}
                                 className={cn('px-1.5 py-0.5 rounded-full text-[10px] font-bold border',
                                   editForm.roles.includes(r) ? 'border-emerald-400 text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-900/20' : 'border-neutral-300 text-neutral-500')}>

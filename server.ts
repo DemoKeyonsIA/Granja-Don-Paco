@@ -45,7 +45,7 @@ import { getNeonDatabase } from "./src/db/neon";
 import { initializeNeonDatabase } from "./src/db/initialize-neon";
 export { getNeonDatabase } from "./src/db/neon";
 export { initializeNeonDatabase } from "./src/db/initialize-neon";
-import { normalizarRol, permisosParaRoles } from "./src/lib/role-permissions";
+import { normalizarRol, permisosParaRoles, rolesParaUsuario } from "./src/lib/role-permissions";
 export { backfillRecepcionesDesperdicio } from "./src/db/initialize";
 
 dotenv.config({ path: ".env.local" });
@@ -131,8 +131,9 @@ export async function createApp(testMode = false, testDb?: any, serveFrontend = 
     if (!uid || uid === 'system') return null;
     const [u] = await db.select().from(schema.users).where(eq(schema.users.id, uid)).limit(1);
     if (!u || (u.activo ?? true) === false) return null;
-    const roles = String(u.roles || u.role).split(',').map(normalizarRol).filter(Boolean);
-    return { id: u.id, name: u.name, email: u.email, role: normalizarRol(u.role), roles };
+    const role = normalizarRol(u.role);
+    const roles = rolesParaUsuario(role, String(u.roles || ''));
+    return { id: u.id, name: u.name, email: u.email, role, roles };
   }
 
   // Permission check middleware. El rol se resuelve de la BD (nunca del header).
@@ -166,8 +167,9 @@ export async function createApp(testMode = false, testDb?: any, serveFrontend = 
     if (!sesion || new Date(sesion.expiresAt).getTime() < Date.now()) return null;
     const [usuario] = await db.select().from(schema.users).where(eq(schema.users.id, sesion.userId)).limit(1);
     if (!usuario || (usuario.activo ?? true) === false) return null;
-    const roles = (usuario.roles && usuario.roles.trim()) ? usuario.roles.split(',').map(normalizarRol).filter(Boolean) : [normalizarRol(usuario.role)];
-    return { id: usuario.id, name: usuario.name, email: usuario.email, role: normalizarRol(usuario.role), roles };
+    const role = normalizarRol(usuario.role);
+    const roles = rolesParaUsuario(role, usuario.roles || '');
+    return { id: usuario.id, name: usuario.name, email: usuario.email, role, roles };
   }
 
   registrarRutasAutenticacion(app, db, authUser, getTokenFromReq, verifyPassword, normalizarRol);

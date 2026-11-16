@@ -13,7 +13,7 @@ export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     approve: [],
   },
   Comercial: {
-    view: ['rutas_propias', 'clientes_propios', 'ventas_propias', 'inventario_camion', 'facturacion', 'clientes', 'inventario', 'ventas', 'cargas_asignadas', 'traslados', 'catalogo', 'rutas'],
+    view: ['rutas_propias', 'clientes_propios', 'ventas_propias', 'inventario_camion', 'facturacion', 'clientes', 'inventario', 'ventas', 'cargas_asignadas', 'catalogo'],
     create: ['ventas', 'gastos_ruta', 'facturacion', 'notas_credito', 'caja'],
     approve: ['carga'],
   },
@@ -29,6 +29,20 @@ const ROLE_ALIASES: Record<string, string> = {
 
 export function normalizarRol(role: string): string {
   return ROLE_ALIASES[String(role || '').trim().toLowerCase()] || String(role || '').trim();
+}
+
+/**
+ * Roles efectivos desde el rol principal y los adicionales guardados.
+ * Una cuenta cuyo rol principal es Comercial es siempre una cuenta de vendedor:
+ * los roles heredados o mal asignados no deben convertirla en administrador.
+ */
+export function rolesParaUsuario(rolePrincipal: string, rolesExtra?: string | string[] | null): string[] {
+  const principal = normalizarRol(rolePrincipal);
+  const extras = Array.isArray(rolesExtra)
+    ? rolesExtra
+    : String(rolesExtra || '').split(',');
+  if (principal === 'Comercial') return ['Comercial'];
+  return Array.from(new Set([principal, ...extras.map(normalizarRol).filter(Boolean)]));
 }
 
 export function permisosParaRoles(roles: string[]): RolePermissions | null {
