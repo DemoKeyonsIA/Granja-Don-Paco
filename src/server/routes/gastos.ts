@@ -11,7 +11,12 @@ export function registrarRutasGastos(app: any, db: any, requirePermission: any) 
       if (idempotencyKey !== null && (!idempotencyKey || idempotencyKey.length > 160)) {
         return res.status(400).json({ error: 'Idempotency-Key debe tener entre 1 y 160 caracteres' });
       }
-      const categoriasPermitidas = new Set(['Diésel', 'Diesel', 'Hospedaje', 'Dieta', 'Viáticos', 'Mantenimiento', 'Insumos', 'Planilla', 'Otros']);
+      const categoriasAdmin = ['Diésel', 'Diesel', 'Hospedaje', 'Dieta', 'Dietas', 'Viáticos', 'Mantenimiento', 'Insumos', 'Planilla', 'Otros'];
+      const categoriasVendedor = ['Diésel', 'Diesel', 'Hospedaje', 'Dieta', 'Dietas', 'Otros'];
+      const roles = [(req as any).usuario?.role, ...((req as any).usuario?.roles || [])].filter(Boolean);
+      const esAdmin = roles.includes('Admin');
+      const esVendedor = roles.includes('Comercial') && !esAdmin;
+      const categoriasPermitidas = new Set(esVendedor ? categoriasVendedor : categoriasAdmin);
       const montoNumerico = Number(monto);
       const fechaGasto = fecha == null || fecha === '' ? new Date().toISOString() : String(fecha);
       if (!categoriasPermitidas.has(String(categoria || '')) || !Number.isFinite(montoNumerico) || montoNumerico <= 0 || !String(descripcion || '').trim() || Number.isNaN(Date.parse(fechaGasto))) {
@@ -20,13 +25,12 @@ export function registrarRutasGastos(app: any, db: any, requirePermission: any) 
       if (!['Efectivo', 'Transferencia', 'Tarjeta', 'Otro'].includes(String(medioPago))) return res.status(400).json({ error: 'Medio de pago inválido.' });
       const autor = String((req as any).usuario?.id || '');
       if (!autor) return res.status(401).json({ error: 'Se requiere una sesión válida para registrar gastos' });
-      const roles = [(req as any).usuario?.role, ...((req as any).usuario?.roles || [])].filter(Boolean);
-      if (roles.includes('Comercial') && !guiaId) return res.status(400).json({ error: 'El gasto del vendedor debe asociarse a su guía de ruta activa.' });
+      if (esVendedor && !guiaId) return res.status(400).json({ error: 'El gasto del vendedor debe asociarse a su guía de ruta activa.' });
       if (guiaId) {
         const guiaGasto = await db.query.guias_despacho.findFirst({ where: eq(guias_despacho.id, String(guiaId)) });
         if (!guiaGasto) return res.status(404).json({ error: 'Guía asociada al gasto no encontrada.' });
         if (guiaGasto.finDiaFecha || ['Cerrada', 'CerradaConDiferencia', 'Anulada'].includes(guiaGasto.estado)) return res.status(409).json({ error: 'La guía ya cerró; no se pueden agregar gastos a su caja.' });
-        if (!roles.includes('Admin')) {
+        if (!esAdmin) {
           const camion = guiaGasto.camionId ? await db.query.camiones.findFirst({ where: eq(camiones.id, guiaGasto.camionId) }) : null;
           if (!camion || (camion.camioneroId || camion.vendedor_id) !== autor || (guiaGasto.vendedorId && guiaGasto.vendedorId !== autor)) return res.status(403).json({ error: 'Solo puede registrar gastos en la guía activa de su camión.' });
         }

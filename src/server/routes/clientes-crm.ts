@@ -1,6 +1,7 @@
 import { eq, inArray } from 'drizzle-orm';
 import * as schema from '../../db/schema';
 import { agingPorFacturas, dso as dsoDe, diasVencidoDe, estaSaldada, esCredito, round2, saldoDe } from '../../lib/cobranza';
+import { clienteDisponibleParaUsuario, clientesVisiblesDelVendedor, tieneRol } from '../clientes-scope';
 
 /** Registra la cartera, análisis y perfil 360 de clientes. */
 export function registrarRutasCrmClientes(app: any, db: any, mapaPagadoPorFactura: (facturas: { id: string }[], pagosCargados?: any[]) => Promise<Map<string, number>>, requirePermission: (...args: any[]) => any) {
@@ -159,7 +160,14 @@ export function registrarRutasCrmClientes(app: any, db: any, mapaPagadoPorFactur
   app.get("/api/clientes/cartera", requirePermission('clientes', 'view'), async (req, res) => {
     try {
       const { filas } = await cargarCartera();
-      res.json({ total: filas.length, clientes: filas });
+      const usuario = (req as any).usuario;
+      const cartera = tieneRol(usuario, 'Comercial') && !tieneRol(usuario, 'Admin')
+        ? await clientesVisiblesDelVendedor(db, String(usuario.id)).then(asignados => {
+            const ids = new Set(asignados.map((c: any) => String(c.id)));
+            return filas.filter((f: any) => ids.has(String(f.id)));
+          })
+        : filas;
+      res.json({ total: cartera.length, clientes: cartera });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -261,6 +269,7 @@ export function registrarRutasCrmClientes(app: any, db: any, mapaPagadoPorFactur
       const { id } = req.params;
       const cliente = await db.query.clientes.findFirst({ where: eq(clientes.id, id) });
       if (!cliente) return res.status(404).json({ error: "Cliente no encontrado" });
+      if (!await clienteDisponibleParaUsuario(db, (req as any).usuario, id)) return res.status(404).json({ error: 'Cliente no encontrado en sus rutas asignadas.' });
 
       const fechaRef = Date.now();
       const desde30d = new Date(fechaRef - 30 * 86400000);

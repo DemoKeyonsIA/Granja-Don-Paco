@@ -13,7 +13,7 @@ export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     approve: [],
   },
   Comercial: {
-    view: ['rutas_propias', 'clientes_propios', 'ventas_propias', 'inventario_camion', 'facturacion', 'clientes', 'inventario', 'ventas', 'office', 'cargas_asignadas', 'traslados', 'catalogo', 'rutas'],
+    view: ['rutas_propias', 'clientes_propios', 'ventas_propias', 'inventario_camion', 'facturacion', 'clientes', 'inventario', 'ventas', 'cargas_asignadas', 'traslados', 'catalogo', 'rutas'],
     create: ['ventas', 'gastos_ruta', 'facturacion', 'notas_credito', 'caja'],
     approve: ['carga'],
   },

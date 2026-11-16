@@ -2,7 +2,7 @@ import { eq, and } from "drizzle-orm";
 import * as schema from "../../db/schema";
 
 export function registrarRutasAprobaciones(app: any, db: any, deps: { requirePermission: any; ApiError: any; httpError: any; logAudit: any; recordEventTx: any }) {
-  const { aprobaciones, guias_despacho, camiones, inventario, movimientosInventario, retornos_camion, etiquetas, cierres_caja_ruta, depositos_caja } = schema;
+  const { aprobaciones, guias_despacho, camiones, inventario, movimientosInventario, retornos_camion, etiquetas, cierres_caja_ruta, depositos_caja, clientes, rutas } = schema;
   const { requirePermission, ApiError, httpError, logAudit, recordEventTx } = deps;
   // ==================== PHASE 5 — APROBACIONES ====================
 
@@ -44,6 +44,7 @@ export function registrarRutasAprobaciones(app: any, db: any, deps: { requirePer
       let guiaCerrada: any = null;
       let aprobacionPrev: any = null;
       let ajusteConteoAplicado: any[] = [];
+      let clienteCreado: any = null;
       await db.transaction(async (tx: any) => {
         aprobacionPrev = await tx.query.aprobaciones.findFirst({ where: eq(aprobaciones.id, id) });
         if (!aprobacionPrev) throw new ApiError(404, 'Aprobación no encontrada');
@@ -115,6 +116,39 @@ export function registrarRutasAprobaciones(app: any, db: any, deps: { requirePer
           if (deposito.registradoPor === aprobadoPor) throw new ApiError(403, 'La persona que registró el depósito no puede aprobar su propia diferencia.');
           await tx.update(depositos_caja).set({ estado: estado === 'Aprobado' ? 'Conciliado' : 'Rechazado' }).where(eq(depositos_caja.id, deposito.id));
         }
+        if (aprobacionPrev.tipo === 'AltaClienteRuta' && estado === 'Aprobado') {
+          let datos: any;
+          try { datos = JSON.parse(aprobacionPrev.datos || '{}'); } catch { throw new ApiError(400, 'Los datos de la solicitud de cliente no son válidos.'); }
+          const ruta = await tx.query.rutas.findFirst({ where: eq(rutas.id, datos.rutaId || aprobacionPrev.referenciaId) });
+          if (!ruta || ruta.estado === 'Archivada') throw new ApiError(409, 'La ruta solicitada ya no está disponible.');
+          let vendedores: string[] = [];
+          try { const parsed = JSON.parse(ruta.vendedores || '[]'); vendedores = Array.isArray(parsed) ? parsed.map(String) : []; }
+          catch { vendedores = String(ruta.vendedores || '').split(',').map((v: string) => v.trim()).filter(Boolean); }
+          if (ruta.vendedor_asignado !== aprobacionPrev.solicitudUsuario && !vendedores.includes(aprobacionPrev.solicitudUsuario)) {
+            throw new ApiError(409, 'El vendedor ya no está asignado a la ruta. Reasigne la solicitud antes de aprobarla.');
+          }
+          const doc = String(datos.documento_id || '').trim();
+          if (doc) {
+            const duplicados = await tx.query.clientes.findMany();
+            if (duplicados.some((c: any) => String(c.documento_id || '').trim() === doc)) throw new ApiError(409, 'Ya existe un cliente con ese documento.');
+          }
+          const ahora = new Date().toISOString();
+          const clienteId = crypto.randomUUID();
+          clienteCreado = {
+            id: clienteId, nombre: String(datos.nombre || '').trim(), tipo_documento: datos.tipo_documento || 'Fisica',
+            documento_id: doc || null, telefono: datos.telefono || null, email: datos.email || null,
+            direccion: datos.direccion || null, provincia: datos.provincia || null, canton: datos.canton || null,
+            distrito: datos.distrito || null, ruta: ruta.nombre, condicion_pago: 'Contado', precio_especial: null,
+            limite_credito: 0, saldo_pendiente: 0, promedio_compra: 0, estado: 'Activo', notas: null, fecha_creacion: ahora,
+          };
+          if (!clienteCreado.nombre) throw new ApiError(400, 'El nombre del cliente es requerido.');
+          await tx.insert(clientes).values(clienteCreado);
+          let clienteIds: string[] = [];
+          try { const parsed = JSON.parse(ruta.cliente_ids || '[]'); clienteIds = Array.isArray(parsed) ? parsed.map(String) : []; }
+          catch { clienteIds = String(ruta.cliente_ids || '').split(',').map((v: string) => v.trim()).filter(Boolean); }
+          if (!clienteIds.includes(clienteId)) clienteIds.push(clienteId);
+          await tx.update(rutas).set({ cliente_ids: JSON.stringify(clienteIds) }).where(eq(rutas.id, ruta.id));
+        }
         await tx.update(aprobaciones).set(updateData).where(and(eq(aprobaciones.id, id), eq(aprobaciones.estado, 'Pendiente')));
 
         // Solo una aprobación administrativa posterior al cierre con diferencia
@@ -129,9 +163,10 @@ export function registrarRutasAprobaciones(app: any, db: any, deps: { requirePer
         }
       });
       if (guiaCerrada) await logAudit(aprobadoPor, 'Cerrar', 'GuiaDespacho', guiaCerrada.id, { estado: 'CerradaConDiferencia' }, { estado: 'Cerrada' }, 'Cuadre completado tras aprobación');
+      if (clienteCreado) await logAudit(aprobadoPor, 'CrearPorAprobacion', 'Cliente', clienteCreado.id, null, clienteCreado, `Solicitud del vendedor ${aprobacionPrev.solicitudUsuario}`);
       await logAudit(aprobadoPor, estado, 'Aprobación', id, { estado: 'Pendiente' }, updateData, motivoRechazo);
       if (ajusteConteoAplicado.length) await logAudit(aprobadoPor, 'AjusteConteoFisico', 'Inventario', id, null, ajusteConteoAplicado, 'Aprobación de segundo conteo; producto retenido en cuarentena');
-      res.json({ success: true, aprobadoPor, guiaCerradaId: guiaCerrada?.id || null, ajusteConteoAplicado });
+      res.json({ success: true, aprobadoPor, guiaCerradaId: guiaCerrada?.id || null, clienteCreadoId: clienteCreado?.id || null, ajusteConteoAplicado });
     } catch (error: any) { httpError(res, error); }
   });
 

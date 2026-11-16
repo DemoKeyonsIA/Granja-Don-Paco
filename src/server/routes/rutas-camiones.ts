@@ -1,5 +1,6 @@
 import { and, eq, ne } from 'drizzle-orm';
 import * as schema from '../../db/schema';
+import { rutasAsignadasDelVendedor, tieneRol } from '../clientes-scope';
 
 /** CRUD de rutas y camiones usados por despacho. */
 export function registrarRutasYCaminones(app: any, db: any, requirePermission?: (...args: any[]) => any, logAudit?: (...args: any[]) => Promise<void>) {
@@ -7,7 +8,10 @@ export function registrarRutasYCaminones(app: any, db: any, requirePermission?: 
   // ==================== RUTAS CRUD ====================
   app.get("/api/rutas", requirePermission ? requirePermission(['ventas', 'inventario_bodega'], 'view') : undefined, async (req, res) => {
     try {
-      const data = await db.query.rutas.findMany();
+      const usuario = (req as any).usuario;
+      const data = tieneRol(usuario, 'Comercial') && !tieneRol(usuario, 'Admin')
+        ? await rutasAsignadasDelVendedor(db, String(usuario.id))
+        : await db.query.rutas.findMany();
       res.json(data);
     } catch (error: any) {
       res.status(500).json({ error: error.message });

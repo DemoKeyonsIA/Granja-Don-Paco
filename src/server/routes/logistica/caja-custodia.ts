@@ -4,6 +4,7 @@ import { calcularCuadreIntegral } from '../../../lib/cuadre-integral';
 import { productoCatalogoPara } from '../../../lib/kilos';
 import { factorKilos } from '../../../lib/kilos';
 import { resumenDineroVentasRuta } from '../../../lib/finanzasRuta';
+import { clienteDisponibleParaUsuario } from '../../clientes-scope';
 
 /** Caja de ruta, custodia, aceptación de retornos, cuadre y tablero logístico. */
 export function registrarRutasCajaCustodia(
@@ -114,6 +115,7 @@ export function registrarRutasCajaCustodia(
       // El servidor resuelve la banda vigente; el vendedor puede proponer dentro
       // de ella, pero nunca modificar el precio por fuera del piso/techo.
       const clientePrecio = clienteId ? await db.query.clientes.findFirst({ where: eq(clientes.id, clienteId) }) : null;
+      if (clienteId && !await clienteDisponibleParaUsuario(db, req.usuario, String(clienteId))) return res.status(403).json({ error: 'Este cliente no pertenece a las rutas que tiene asignadas.' });
       const catalogoVenta = await db.query.productosCatalogo.findMany();
       const productoVenta: any = productoCatalogoPara(producto, catalogoVenta);
       if (!productoVenta || productoVenta.estado !== 'Activo') return res.status(409).json({ error: 'El producto no está activo en el catálogo.' });

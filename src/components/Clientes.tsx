@@ -72,6 +72,9 @@ function diasTranscurridos(fechaISO: string, ref?: number) {
 }
 
 export default function Clientes({ currentUser }: ClientesProps) {
+  const rolesActuales = currentUser.roles?.length ? currentUser.roles : [currentUser.role];
+  const esAdmin = rolesActuales.includes('Admin');
+  const esVendedor = rolesActuales.includes('Comercial') && !esAdmin;
   const canViewAnalysis = currentUser.role === 'Admin' || currentUser.role === 'Socio'
     || (currentUser.roles || []).some(role => role === 'Admin' || role === 'Socio');
   const [view, setView] = useState<'cartera' | 'analisis'>(canViewAnalysis ? 'analisis' : 'cartera');
@@ -104,27 +107,30 @@ export default function Clientes({ currentUser }: ClientesProps) {
   });
 
   const [rutas, setRutas] = useState<any[]>([]);
+  const [solicitudesCliente, setSolicitudesCliente] = useState<any[]>([]);
   const [drawerCliente, setDrawerCliente] = useState<Cliente | null>(null);
 
   const rutasSelect = useMemo(() => {
     const existentes = new Set((rutas as any[]).map(r => r.nombre));
-    const extra = newCliente.ruta && !existentes.has(newCliente.ruta) ? [{ id: 'actual', nombre: newCliente.ruta }] : [];
+    const extra = !esVendedor && newCliente.ruta && !existentes.has(newCliente.ruta) ? [{ id: 'actual', nombre: newCliente.ruta }] : [];
     return [...extra, ...(rutas as any[])];
-  }, [rutas, newCliente.ruta]);
+  }, [rutas, newCliente.ruta, esVendedor]);
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [resCliente, resCartera, resAnalisis, resRutas] = await Promise.all([
+      const [resCliente, resCartera, resAnalisis, resRutas, resSolicitudes] = await Promise.all([
         fetch('/api/clientes', { headers: headersUsuario() }),
         fetch('/api/clientes/cartera', { headers: headersUsuario() }),
         canViewAnalysis ? fetch('/api/clientes/analisis', { headers: headersUsuario() }) : Promise.resolve(null),
-        fetch('/api/rutas'),
+        fetch('/api/rutas', { headers: headersUsuario() }),
+        esVendedor ? fetch('/api/clientes/solicitudes', { headers: headersUsuario() }) : Promise.resolve(null),
       ]);
       if (resCliente.ok) setClientes(await resCliente.json());
       if (resCartera.ok) { const d = await resCartera.json(); setCartera(d.clientes || []); }
       if (resAnalisis?.ok) setAnalisis(await resAnalisis.json());
       if (resRutas.ok) setRutas(await resRutas.json());
+      if (resSolicitudes?.ok) setSolicitudesCliente(await resSolicitudes.json());
     } catch (err) {
       console.error(err);
     } finally {
@@ -135,7 +141,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
   useEffect(() => { fetchData(); }, []);
   useEffect(() => { if (!canViewAnalysis) setView('cartera'); }, [canViewAnalysis]);
 
-  const canEdit = currentUser.role === 'Admin' || (currentUser.roles || []).includes('Admin');
+  const canEdit = esAdmin;
 
   const headersUsuario = (json = false) => sessionHeaders(currentUser.id, json);
 
@@ -172,15 +178,16 @@ export default function Clientes({ currentUser }: ClientesProps) {
     e.preventDefault();
     if (!newCliente.nombre) return;
     try {
-      const res = await fetch('/api/clientes', {
+      const res = await fetch(esVendedor ? '/api/clientes/solicitudes' : '/api/clientes', {
         method: 'POST', headers: headersUsuario(true),
         body: JSON.stringify(newCliente)
       });
-      if (!res.ok) throw new Error('Error al crear cliente');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || (esVendedor ? 'No se pudo enviar la solicitud' : 'Error al crear cliente'));
       await fetchData();
       setIsAdding(false);
       resetForm();
-      toast.success('Cliente creado');
+      toast.success(esVendedor ? 'Solicitud enviada a Administración' : 'Cliente creado');
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -306,13 +313,13 @@ export default function Clientes({ currentUser }: ClientesProps) {
           {view === 'cartera' && (
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn" onClick={exportCSV}><Download className="w-4 h-4" /> Exportar</button>
-              {canEdit && (
+              {(canEdit || esVendedor) && (
                 <button
                   className="btn brand"
                   onClick={() => { setIsAdding(!isAdding); setEditingId(null); resetForm(); }}
                 >
                   {isAdding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                  {isAdding ? 'Cancelar' : 'Nuevo Cliente'}
+                  {isAdding ? 'Cancelar' : esVendedor ? 'Solicitar alta' : 'Nuevo Cliente'}
                 </button>
               )}
             </div>
@@ -335,10 +342,22 @@ export default function Clientes({ currentUser }: ClientesProps) {
 
         {view === 'cartera' && (
           <>
-            {isAdding && canEdit && (
+            {esVendedor && solicitudesCliente.length > 0 && (
+              <section className="panel" aria-label="Estado de solicitudes de alta">
+                <div className="panelbar"><strong>Solicitudes de clientes</strong><span>{solicitudesCliente.filter(s => s.estado === 'Pendiente').length} pendientes</span></div>
+                <div className="divide-y">
+                  {solicitudesCliente.slice(0, 3).map((s: any) => {
+                    let datos: any = {}; try { datos = JSON.parse(s.datos || '{}'); } catch { /* solicitud antigua */ }
+                    return <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"><span><b>{datos.nombre || s.descripcion}</b><span className="ml-2 text-neutral-500">{datos.ruta || ''}</span></span><span className={cn('rounded-full px-3 py-1 text-xs font-bold', s.estado === 'Aprobado' ? 'bg-emerald-100 text-emerald-800' : s.estado === 'Rechazado' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-900')}>{s.estado === 'Aprobado' ? 'Aprobada · ya está en su lista' : s.estado === 'Rechazado' ? `Rechazada${s.motivoRechazo ? ` · ${s.motivoRechazo}` : ''}` : 'En revisión'}</span></div>;
+                  })}
+                </div>
+              </section>
+            )}
+
+            {isAdding && (canEdit || esVendedor) && (
               <div className="modal-fixed">
                 <form className="modal" onSubmit={editingId ? handleUpdate : handleAdd}>
-                  <div className="modal-head"><h2>{editingId ? 'Editar Cliente' : 'Registrar Nuevo Cliente'}</h2><button type="button" className="btn ico" onClick={() => { setIsAdding(false); setEditingId(null); }}><X className="w-4 h-4" /></button></div>
+                  <div className="modal-head"><div><h2>{editingId ? 'Editar Cliente' : esVendedor ? 'Solicitar alta de cliente' : 'Registrar Nuevo Cliente'}</h2>{esVendedor && <p className="text-sm text-neutral-500">Administración revisará los datos antes de agregarlo a su ruta.</p>}</div><button type="button" className="btn ico" onClick={() => { setIsAdding(false); setEditingId(null); }}><X className="w-4 h-4" /></button></div>
                   <div className="modal-body">
                     <div className="grid">
                       <div className="field"><label>Nombre del Negocio <span className="req">*</span></label><input required type="text" value={newCliente.nombre} onChange={e => setNewCliente({ ...newCliente, nombre: e.target.value })} placeholder="Ej. Pulpería La Central" /></div>
@@ -350,9 +369,9 @@ export default function Clientes({ currentUser }: ClientesProps) {
                       <div className="field"><label>Nº Documento</label><input type="text" value={newCliente.documento_id} onChange={e => setNewCliente({ ...newCliente, documento_id: e.target.value })} placeholder="Cédula o jurídica" /></div>
                       <div className="field"><label>Teléfono</label><input type="text" value={newCliente.telefono} onChange={e => setNewCliente({ ...newCliente, telefono: e.target.value })} placeholder="8888-8888" /></div>
                       <div className="field"><label>Email</label><input type="email" value={newCliente.email} onChange={e => setNewCliente({ ...newCliente, email: e.target.value })} placeholder="correo@ejemplo.com" /></div>
-                      <div className="field"><label>Ruta / Vendedor</label>
-                        <select value={newCliente.ruta || ''} onChange={e => setNewCliente({ ...newCliente, ruta: e.target.value })}>
-                          <option value="">Sin ruta asignada</option>
+                      <div className="field"><label>Ruta {esVendedor && <span className="req">*</span>}</label>
+                        <select required={esVendedor} value={newCliente.ruta || ''} onChange={e => setNewCliente({ ...newCliente, ruta: e.target.value })}>
+                          {!esVendedor && <option value="">Sin ruta asignada</option>}
                           {rutasSelect.map((r: any) => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
                         </select>
                       </div>
@@ -365,19 +384,19 @@ export default function Clientes({ currentUser }: ClientesProps) {
                       </div>
                       <div className="field"><label>Cantón</label><input type="text" value={newCliente.canton || ''} onChange={e => setNewCliente({ ...newCliente, canton: e.target.value })} placeholder="Ej. Alajuela" /></div>
                       <div className="field"><label>Distrito</label><input type="text" value={newCliente.distrito || ''} onChange={e => setNewCliente({ ...newCliente, distrito: e.target.value })} placeholder="Ej. San Rafael" /></div>
-                      <div className="field"><label>Condición de Pago</label>
+                      {!esVendedor && <><div className="field"><label>Condición de Pago</label>
                         <select value={newCliente.condicion_pago} onChange={e => setNewCliente({ ...newCliente, condicion_pago: e.target.value as any })}>
                           <option value="Contado">Contado</option><option value="Credito">Crédito</option>
                         </select>
                       </div>
                       <div className="field"><label>Precio Especial (₡)</label><input type="number" value={newCliente.precio_especial || ''} onChange={e => setNewCliente({ ...newCliente, precio_especial: e.target.value ? Number(e.target.value) : null })} placeholder="Ej. 1450" /></div>
                       <div className="field"><label>Límite Crédito (₡)</label><input type="number" value={newCliente.limite_credito || ''} onChange={e => setNewCliente({ ...newCliente, limite_credito: e.target.value ? Number(e.target.value) : 0 })} placeholder="0" /></div>
-                      <div className="field full"><label>Notas internas</label><input type="text" value={newCliente.notas} onChange={e => setNewCliente({ ...newCliente, notas: e.target.value })} placeholder="Notas internas..." /></div>
+                      <div className="field full"><label>Notas internas</label><input type="text" value={newCliente.notas} onChange={e => setNewCliente({ ...newCliente, notas: e.target.value })} placeholder="Notas internas..." /></div></>}
                     </div>
                   </div>
                   <div className="modal-foot">
                     <button type="button" className="btn" onClick={() => { setIsAdding(false); setEditingId(null); }}>Cancelar</button>
-                    <button type="submit" className="btn brand"><Check className="w-4 h-4" /> {editingId ? 'Guardar Cambios' : 'Guardar Cliente'}</button>
+                    <button type="submit" className="btn brand"><Check className="w-4 h-4" /> {editingId ? 'Guardar Cambios' : esVendedor ? 'Enviar a aprobación' : 'Guardar Cliente'}</button>
                   </div>
                 </form>
               </div>

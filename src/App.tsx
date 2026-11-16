@@ -268,6 +268,7 @@ const nuevoItems = useMemo(() => {
         // SUBTABS_GRANJA. Antes vivía en el módulo Granja que ya no existe.
         if (grupos.has('granja')) items.push({ label: 'Granja', icon: Egg, tab: 'operaciones', subTab: 'granja' });
       }
+      if (userRoles.includes('Comercial')) items.push({ label: 'Registrar gasto de ruta', icon: DollarSign, tab: 'operaciones', accion: 'gasto' });
     } else if (activeTab === 'office') {
       // Office tiene dos espacios y los dos dan de alta: conectar una cuenta de
       // correo y subir un documento. "Nueva regla" ya no vive acá, está en Admin.

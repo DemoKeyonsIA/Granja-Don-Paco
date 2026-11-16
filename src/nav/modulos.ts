@@ -55,7 +55,7 @@ export const MODULOS: ModuloDef[] = [
     // `office` para no tocar rutas, sub-tabs ni endpoints (`/api/office/*`).
     label: 'Dirección',
     icon: 'Mail',
-    roles: ['Admin', 'Socio', 'Comercial'],
+    roles: ['Admin', 'Socio'],
   },
   {
     id: 'operaciones',
@@ -82,9 +82,10 @@ export const MODULOS: ModuloDef[] = [
   // columna derecha de Finanzas > Resumen.
   {
     id: 'finanzas',
-    label: 'Finanzas',
+    label: 'Gastos',
     icon: 'DollarSign',
-    roles: ['Admin', 'Socio', 'Comercial'],
+    roles: ['Admin', 'Socio'],
+    labelsPorRol: { Socio: 'Finanzas' },
   },
   {
     id: 'admin',
@@ -248,7 +249,7 @@ export const SUBTABS_ADMIN: SubTabDef[] = [
 ];
 
 /**
- * Sub-tabs de Finanzas: Resumen · Documentos · Gastos de ruta · Cobranza · Analítica.
+ * Sub-tabs del espacio administrativo de Gastos/Finanzas: Resumen · Documentos · Gastos de ruta · Cobranza · Analítica.
  *
  * La matriz por rol es explícita y no se deriva de "si no tiene `roles`, lo ve
  * todo", porque ese default ya causó el bug 2 del plan: un Comercial sin filtro
@@ -256,10 +257,10 @@ export const SUBTABS_ADMIN: SubTabDef[] = [
  *
  *   Admin    → todos
  *   Socio    → Resumen + Analítica
- *   Comercial→ Documentos
+ *   Comercial→ usa documentos desde su flujo móvil; no abre Finanzas ni ve sus reportes.
  *
- * Comercial entra solo a emitir documentos; sus pantallas de trabajo diario
- * viven en el flujo móvil de Operaciones. No tiene acceso a analítica.
+ * Los vendedores registran gastos desde su flujo de ruta. El resumen y la revisión
+ * contable quedan separados de esa captura operativa.
  */
 export const SUBTABS_FINANZAS: SubTabDef[] = [
   { id: 'resumen', label: 'Resumen', roles: ['Admin', 'Socio'] },

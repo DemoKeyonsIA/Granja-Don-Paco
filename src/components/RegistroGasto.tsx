@@ -1,10 +1,9 @@
 /**
- * Registro de Gasto: la acción del menú "+ Nuevo" en Finanzas.
+ * Registro de gasto: acción del menú "+ Nuevo" para Administración y vendedores de ruta.
  *
  * Antes era el segundo tab interno de `Finanzas.tsx`, junto a "Flujo de Caja".
  * Un tab para escribir un solo formulario daba la impresión de que había dos
- * formas de registrar un gasto; como acción del "+ Nuevo" queda donde pertenece
- * y Resumen gana el espacio.
+ * formas de registrar un gasto; como acción del "+ Nuevo" queda junto a la operación donde se genera.
  *
  * Al guardar no se toca el resumen: la pantalla que lo muestra lo vuelve a
  * pedir, así que no hay estado que invalidar desde acá.
@@ -16,7 +15,8 @@ import type { User } from '../types';
 import { cn } from '../lib/utils';
 import { loadSession } from '../lib/session';
 
-const CATEGORIAS = ['Diésel', 'Hospedaje', 'Dieta', 'Otros', 'Viáticos', 'Mantenimiento', 'Insumos', 'Planilla'] as const;
+const CATEGORIAS_ADMIN = ['Diésel', 'Hospedaje', 'Dieta', 'Otros', 'Viáticos', 'Mantenimiento', 'Insumos', 'Planilla'] as const;
+const CATEGORIAS_RUTA = ['Diésel', 'Hospedaje', 'Dieta', 'Otros'] as const;
 
 export default function RegistroGasto({
   currentUser,
@@ -27,6 +27,9 @@ export default function RegistroGasto({
   onClose: () => void;
   initialGuideId?: string;
 }) {
+  const roles = currentUser.roles?.length ? currentUser.roles : [currentUser.role];
+  const esVendedor = roles.includes('Comercial') && !roles.includes('Admin');
+  const categorias = esVendedor ? CATEGORIAS_RUTA : CATEGORIAS_ADMIN;
   const [categoria, setCategoria] = useState<string>('');
   const [monto, setMonto] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -43,7 +46,7 @@ export default function RegistroGasto({
 
   useEffect(() => { if (initialGuideId) setGuiaId(initialGuideId); }, [initialGuideId]);
 
-  const completo = Boolean(categoria && Number(monto) > 0 && descripcion.trim());
+  const completo = Boolean(categoria && Number(monto) > 0 && descripcion.trim() && (!esVendedor || guiaId));
 
   const guardar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,7 +106,7 @@ export default function RegistroGasto({
               className="w-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Seleccione una categoría</option>
-              {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+              {categorias.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
 
@@ -128,10 +131,11 @@ export default function RegistroGasto({
           </div>
 
           {!initialGuideId && <div className="space-y-2">
-            <label htmlFor="gasto-guia" className="text-sm font-bold text-neutral-700 dark:text-neutral-300">Ruta o jornada (opcional)</label>
-            <select id="gasto-guia" value={guiaId} onChange={e => setGuiaId(e.target.value)} className="w-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-sm">
+            <label htmlFor="gasto-guia" className="text-sm font-bold text-neutral-700 dark:text-neutral-300">{esVendedor ? 'Guía de ruta activa' : 'Ruta o jornada (opcional)'}</label>
+            <select id="gasto-guia" required={esVendedor} value={guiaId} onChange={e => setGuiaId(e.target.value)} className="w-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-sm">
               <option value="">Gasto general</option>{guiasActivas.map((g: any) => <option key={g.id} value={g.id}>{g.consecutivo} · {g.camionNombre || 'Camión'} · {g.rutaNombre || 'Ruta'}</option>)}
             </select>
+            {esVendedor && guiasActivas.length === 0 && <p className="text-xs font-semibold text-amber-700">No hay una ruta activa asignada. Puede guardar el gasto cuando tenga una guía abierta.</p>}
           </div>}
 
           <div className="space-y-2">

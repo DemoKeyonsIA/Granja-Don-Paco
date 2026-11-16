@@ -26,6 +26,7 @@ const NOMBRE_TIPO: Record<string, string> = {
   RetornoPendiente: 'Retorno pendiente de Bodega',
   PrecioFueraRango: 'Precio fuera del rango autorizado',
   DescuentoNoAutorizado: 'Descuento requiere aprobación',
+  AltaClienteRuta: 'Alta de cliente solicitada por vendedor',
 };
 
 export default function AprobacionesAdmin({ currentUser }: { currentUser: User }) {
@@ -71,7 +72,7 @@ export default function AprobacionesAdmin({ currentUser }: { currentUser: User }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'No se pudo resolver la aprobación');
-      toast.success(estado === 'Aprobado' ? 'Solicitud aprobada' : item.tipo === 'DiferenciaConteoBodega' ? 'Bodega debe realizar otro conteo' : 'Solicitud rechazada');
+      toast.success(estado === 'Aprobado' ? item.tipo === 'AltaClienteRuta' ? 'Cliente aprobado y agregado a la ruta' : 'Solicitud aprobada' : item.tipo === 'DiferenciaConteoBodega' ? 'Bodega debe realizar otro conteo' : 'Solicitud rechazada');
       setMotivos(prev => { const next = { ...prev }; delete next[item.id]; return next; });
       await cargar();
     } catch (error) {
@@ -110,7 +111,9 @@ export default function AprobacionesAdmin({ currentUser }: { currentUser: User }
         <div className="space-y-3">
           {items.map(item => {
             const esConteoFisico = item.tipo === 'DiferenciaConteoBodega';
+            const esAltaCliente = item.tipo === 'AltaClienteRuta';
             const datosConteo = esConteoFisico ? (() => { try { return JSON.parse(item.datos || '{}'); } catch { return {}; } })() : null;
+            const datosCliente = esAltaCliente ? (() => { try { return JSON.parse(item.datos || '{}'); } catch { return {}; } })() : null;
             const requiereReconteo = esConteoFisico && !datosConteo?.segundoConteo;
             return (
               <article key={item.id} className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
@@ -123,6 +126,17 @@ export default function AprobacionesAdmin({ currentUser }: { currentUser: User }
                   <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-extrabold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">Pendiente</span>
                 </div>
                 <p className="mt-3 text-xs text-neutral-500">Reportado por {item.solicitudUsuario} · {new Date(item.fechaSolicitud).toLocaleString()}</p>
+
+                {esAltaCliente && datosCliente && (
+                  <div className="mt-4 grid gap-x-6 gap-y-2 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950 sm:grid-cols-2 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+                    <p><span className="font-semibold">Ruta:</span> {datosCliente.ruta || '—'}</p>
+                    <p><span className="font-semibold">Identificación:</span> {datosCliente.tipo_documento || 'Física'} · {datosCliente.documento_id || 'No indicada'}</p>
+                    <p><span className="font-semibold">Teléfono:</span> {datosCliente.telefono || 'No indicado'}</p>
+                    <p><span className="font-semibold">Correo:</span> {datosCliente.email || 'No indicado'}</p>
+                    <p className="sm:col-span-2"><span className="font-semibold">Ubicación:</span> {[datosCliente.direccion, datosCliente.distrito, datosCliente.canton, datosCliente.provincia].filter(Boolean).join(', ') || 'No indicada'}</p>
+                    <p className="sm:col-span-2 text-xs">Al aprobar, el cliente se crea como contado y queda agregado a esta ruta.</p>
+                  </div>
+                )}
 
                 {esConteoFisico && (
                   <div className="mt-4 flex gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">

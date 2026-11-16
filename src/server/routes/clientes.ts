@@ -1,15 +1,67 @@
 import { eq } from 'drizzle-orm';
 import * as schema from '../../db/schema';
+import { clientesVisiblesDelVendedor, rutasAsignadasDelVendedor, tieneRol } from '../clientes-scope';
 
 /** Registra los endpoints CRUD básicos de clientes. */
 export function registrarRutasClientes(app: any, db: any, requirePermission: (...args: any[]) => any, logAudit?: (...args: any[]) => Promise<void>) {
   app.get("/api/clientes", requirePermission('clientes', 'view'), async (req, res) => {
     try {
-      const data = await db.query.clientes.findMany();
+      const usuario = (req as any).usuario;
+      const data = tieneRol(usuario, 'Comercial') && !tieneRol(usuario, 'Admin')
+        ? await clientesVisiblesDelVendedor(db, String(usuario.id))
+        : await db.query.clientes.findMany();
       res.json(data);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
+  });
+
+  app.get('/api/clientes/solicitudes', requirePermission('ventas', 'view'), async (req, res) => {
+    try {
+      const usuario = (req as any).usuario;
+      if (!tieneRol(usuario, 'Comercial') || tieneRol(usuario, 'Admin')) return res.status(403).json({ error: 'Esta consulta es para vendedores.' });
+      const solicitudes = await db.query.aprobaciones.findMany();
+      res.json(solicitudes.filter((a: any) => a.tipo === 'AltaClienteRuta' && a.solicitudUsuario === usuario.id)
+        .sort((a: any, b: any) => String(b.fechaSolicitud).localeCompare(String(a.fechaSolicitud))));
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.post('/api/clientes/solicitudes', requirePermission('ventas', 'create'), async (req, res) => {
+    try {
+      const usuario = (req as any).usuario;
+      if (!tieneRol(usuario, 'Comercial') || tieneRol(usuario, 'Admin')) return res.status(403).json({ error: 'Solo un vendedor puede solicitar un alta desde ruta.' });
+      const nombre = String(req.body?.nombre || '').trim();
+      const rutaNombre = String(req.body?.ruta || '').trim();
+      if (!nombre || !rutaNombre) return res.status(400).json({ error: 'Indique el nombre del cliente y la ruta asignada.' });
+      const rutas = await rutasAsignadasDelVendedor(db, String(usuario.id));
+      const ruta = rutas.find((r: any) => String(r.nombre).trim().toLocaleLowerCase() === rutaNombre.toLocaleLowerCase());
+      if (!ruta) return res.status(403).json({ error: 'Solo puede solicitar clientes para una ruta que tiene asignada.' });
+      const documento = String(req.body?.documento_id || '').trim();
+      if (documento) {
+        const existente = await db.query.clientes.findFirst({ where: eq(schema.clientes.documento_id, documento) });
+        if (existente) return res.status(409).json({ error: 'Ya existe un cliente con ese documento. Solicite acceso a Administración.' });
+      }
+      const clienteSolicitado = {
+        nombre,
+        tipo_documento: String(req.body?.tipo_documento || 'Fisica'),
+        documento_id: documento || null,
+        telefono: String(req.body?.telefono || '').trim() || null,
+        email: String(req.body?.email || '').trim() || null,
+        direccion: String(req.body?.direccion || '').trim() || null,
+        provincia: String(req.body?.provincia || '').trim() || null,
+        canton: String(req.body?.canton || '').trim() || null,
+        distrito: String(req.body?.distrito || '').trim() || null,
+        ruta: ruta.nombre,
+        rutaId: ruta.id,
+      };
+      const id = crypto.randomUUID();
+      await db.insert(schema.aprobaciones).values({
+        id, tipo: 'AltaClienteRuta', modulo: 'Clientes', referenciaId: ruta.id,
+        solicitudUsuario: String(usuario.id), descripcion: `Alta de ${nombre} para ${ruta.nombre}`,
+        datos: JSON.stringify(clienteSolicitado), estado: 'Pendiente', fechaSolicitud: new Date().toISOString(),
+      });
+      res.status(201).json({ success: true, id, message: 'Solicitud enviada a Administración.' });
+    } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
 
   app.post("/api/clientes", requirePermission('clientes', 'create'), async (req, res) => {

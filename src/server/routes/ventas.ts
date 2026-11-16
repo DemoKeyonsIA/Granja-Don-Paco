@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import * as schema from "../../db/schema";
 import { saldoDe, round2, fechaVencimientoDe } from "../../lib/cobranza";
 import { siguienteConsecutivo, getClienteConsumidorFinal } from "../services/consecutivos";
+import { clienteDisponibleParaUsuario } from '../clientes-scope';
 
 export function registrarRutasComerciales(app: any, db: any, deps: { requirePermission: any; ApiError: any; getPrecioParaProducto: any; logAudit: any; recordEvent: any }) {
   const { facturas, detallesFactura, inventario, clientes, guias_despacho, camiones, etiquetas, pagos } = schema;
@@ -70,6 +71,9 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
         : null;
       if (factura.clienteId && !esConsumidorFinal && !clienteValido) {
         return res.status(400).json({ error: `Cliente no existe: ${factura.clienteId}` });
+      }
+      if (factura.clienteId && !esConsumidorFinal && !await clienteDisponibleParaUsuario(db, usuario, String(factura.clienteId))) {
+        return res.status(403).json({ error: 'Este cliente no pertenece a las rutas que tiene asignadas.' });
       }
 
       // F2: resolve truck from guía despacho (or camion_id) — bug antiguo usaba 'Camión Ruta 1' hardcodeado
