@@ -1,10 +1,13 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import * as schema from './schema';
 import { hashPassword } from '../lib/password';
 
 /** Seeds the fresh demo database after Drizzle has applied the schema. */
 export async function initializeNeonDatabase(db: any) {
   const now = new Date().toISOString();
+
+  // Keep the per-ticket FEFO allocation for transparent returns and traceability.
+  await db.execute(sql`ALTER TABLE ventas_ruta_kg ADD COLUMN IF NOT EXISTS etiquetas_asignadas_json TEXT`);
 
   {
     const passwordHash = hashPassword(process.env.GDP_DEMO_PASSWORD || '1234');

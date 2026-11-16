@@ -32,7 +32,6 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   // POS state
   const [clienteId, setClienteId] = useState<string>('');
   const [producto, setProducto] = useState<string>('');
-  const [etiquetaId, setEtiquetaId] = useState<string>('');
   const [cantidad, setCantidad] = useState<number>(1);
   const [descuento, setDescuento] = useState<number>(0);
   const [cobro, setCobro] = useState<'Efectivo' | 'Credito' | 'Transferencia'>('Efectivo');
@@ -143,28 +142,24 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   const descuentoPermitido = Math.min(descuentoPorPiso, descuentoPorcentaje);
 
   const etiquetasDisponibles = (guia?.detalle || []).filter((e: any) => e.estadoEtiqueta === 'Cargada');
-  const etiquetaSeleccionada = etiquetasDisponibles.find((e: any) => e.etiquetaId === etiquetaId);
-  const disponibleEtiquetaKg = Number(etiquetaSeleccionada?.saldoKg ?? etiquetaSeleccionada?.pesoNeto ?? 0);
   const unidadRuta = 'kg';
 
   const resetPos = () => {
-    setClienteId(''); setEtiquetaId(''); setCantidad(1); setDescuento(0); setCobro('Efectivo');
+    setClienteId(''); setCantidad(1); setDescuento(0); setCobro('Efectivo');
   };
 
   const vender = async () => {
     if (!guiaId) return toast.error('Seleccione una guía activa');
     if (!producto) return toast.error('Seleccione un producto');
     if (!clienteId) return toast.error('Seleccione un cliente');
-    if (!etiquetaId) return toast.error('Seleccione la etiqueta de la carga física entregada');
     if (!cantidad || cantidad <= 0) return toast.error('Indique una cantidad');
-    if (cantidad > disponibleEtiquetaKg) return toast.error(`La etiqueta tiene ${disponibleEtiquetaKg.toFixed(2)} kg disponibles`);
+    if (cantidad > stockProducto) return toast.error(`Solo quedan ${stockProducto.toFixed(2)} kg de ${producto} en el camión.`);
     setLoading(true);
     try {
       const res = await fetch('/api/logistica/caja/venta', {
         method: 'POST', headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify({
           guiaId, clienteId,
-          etiquetaId: etiquetaId || undefined,
           producto, cantidadKg: cantidad, unidad: 'kg', precioUnitario: precioVenta, descuento: descuento || undefined, cobro
         })
       });
@@ -197,13 +192,13 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
     setLoading(false);
   };
 
-  const devolver = async (etiquetaIdSel: string, ventaRutaId?: string) => {
+  const devolver = async (etiquetaIdSel?: string, ventaRutaId?: string) => {
     if (!guiaId) return;
     setLoading(true);
     try {
       const res = await fetch('/api/logistica/caja/devolucion', {
         method: 'POST', headers: sessionHeaders(currentUser.id, true),
-        body: JSON.stringify({ guiaId, etiquetaId: etiquetaIdSel, ventaRutaId: ventaRutaId || undefined, responsable: currentUser.name })
+        body: JSON.stringify({ guiaId, etiquetaId: etiquetaIdSel || undefined, ventaRutaId: ventaRutaId || undefined, responsable: currentUser.name })
       });
       if (res.ok) {
         const d = await res.json();
@@ -436,7 +431,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
           {/* Columna izquierda: cliente + producto */}
           <div className="route-pos-main min-w-0 space-y-4">
             <div className="grid grid-cols-3 gap-2" aria-label="Pasos de la venta">
-              {[['1', 'Cliente'], ['2', 'Producto y kg'], ['3', 'Cobro y documento']].map(([numero, etiqueta], index) => <button key={numero} type="button" onClick={() => { if (index === 0 || (index === 1 && clienteId) || (index === 2 && clienteId && producto && etiquetaId)) setPasoVenta(index + 1); }} aria-current={pasoVenta === index + 1 ? 'step' : undefined} className="rounded-xl px-2 py-3 text-center text-xs font-bold" style={{ background: pasoVenta === index + 1 ? 'var(--brand-primary)' : 'var(--bg-muted)', color: pasoVenta === index + 1 ? 'var(--text-on-action)' : 'var(--text-secondary)' }}><span className="mr-1">{numero}</span>{etiqueta}</button>)}
+              {[['1', 'Cliente'], ['2', 'Producto y kg'], ['3', 'Cobro y documento']].map(([numero, etiqueta], index) => <button key={numero} type="button" onClick={() => { if (index === 0 || (index === 1 && clienteId) || (index === 2 && clienteId && producto)) setPasoVenta(index + 1); }} aria-current={pasoVenta === index + 1 ? 'step' : undefined} className="rounded-xl px-2 py-3 text-center text-xs font-bold" style={{ background: pasoVenta === index + 1 ? 'var(--brand-primary)' : 'var(--bg-muted)', color: pasoVenta === index + 1 ? 'var(--text-on-action)' : 'var(--text-secondary)' }}><span className="mr-1">{numero}</span>{etiqueta}</button>)}
             </div>
             {/* Clientes */}
             {pasoVenta === 1 && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
@@ -475,7 +470,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 {productosDisponibles.map((i: any) => (
                   <button
                     key={i.id}
-                    onClick={() => { setProducto(i.producto); setEtiquetaId(''); }}
+                    onClick={() => setProducto(i.producto)}
                     aria-pressed={producto === i.producto}
                     className={cn('min-h-16 rounded-xl px-4 py-3 text-left text-base font-bold border transition-all', producto === i.producto && 'ring-2')}
                     style={producto === i.producto
@@ -497,26 +492,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 </div>
               )}
 
-              {/* Identifica la carga física de la que salen estos kilos */}
-              {etiquetasDisponibles.length > 0 && (
-                <div className="mb-4">
-                  <p className="text-sm font-bold mb-2" style={{ color: 'var(--text-secondary)' }}>1 · Seleccione la carga física (obligatorio)</p>
-                  <div className="flex flex-wrap gap-2">
-                    {etiquetasDisponibles.map((e: any) => (
-                      <button
-                        key={e.etiquetaId}
-                        onClick={() => { setEtiquetaId(e.etiquetaId); setProducto(e.producto); }}
-                        className={cn('min-h-11 px-3 py-2 rounded-xl text-xs font-bold border transition-all', etiquetaId === e.etiquetaId && 'ring-2')}
-                        style={etiquetaId === e.etiquetaId
-                          ? { background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)', borderColor: 'var(--brand-primary)' }
-                          : { background: 'var(--bg-muted)', color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }}
-                      >
-                        #{e.codigoUnico} — {e.producto} · {Number(e.saldoKg ?? e.pesoNeto ?? 0).toFixed(2)} kg disponibles
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {producto && <p className="mb-4 rounded-xl px-3 py-2 text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}>Disponible en el camión: <strong>{stockProducto.toFixed(2)} kg</strong>. El sistema escogerá automáticamente los lotes que vencen primero.</p>}
 
               <div className="route-pos-sale-fields">
                 {clienteId && producto && (cargandoPrecio || !precioAutorizado) && (
@@ -530,7 +506,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                   <div className="flex min-h-14 items-center gap-2">
                     <button type="button" onClick={() => setCantidad(v => Math.max(0.1, Math.round((v - 1) * 100) / 100))} aria-label="Quitar un kilo" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}><Minus className="h-5 w-5" /></button>
                   <input
-                    id="cantidad-venta" type="number" min={0.01} max={etiquetaSeleccionada ? disponibleEtiquetaKg : undefined} step="0.01" inputMode="decimal" value={cantidad}
+                    id="cantidad-venta" type="number" min={0.01} max={stockProducto || undefined} step="0.01" inputMode="decimal" value={cantidad}
                     onChange={(e) => setCantidad(Number(e.target.value) || 0)}
                     className="h-12 min-w-0 flex-1 rounded-xl px-3 py-2 text-center text-2xl font-extrabold focus:outline-none"
                     style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}
@@ -634,9 +610,9 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
               {pasoVenta > 1 && <button type="button" onClick={() => setPasoVenta(v => Math.max(1, v - 1))} className="min-h-12 flex-1 rounded-xl border px-4 text-sm font-bold" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }}>Volver</button>}
               {pasoVenta < 3 && <button type="button" onClick={() => {
                 if (pasoVenta === 1 && !clienteId) return toast.error('Seleccione el cliente de la ruta.');
-                if (pasoVenta === 2 && (!producto || !etiquetaId)) return toast.error('Seleccione el producto y el lote que va a entregar.');
+                if (pasoVenta === 2 && (!producto || cantidad <= 0 || cantidad > stockProducto)) return toast.error('Seleccione el producto e indique kilos dentro del saldo disponible.');
                 setPasoVenta(v => v + 1);
-              }} disabled={pasoVenta === 2 && (!clienteId || !producto || !etiquetaId || !precioAutorizado)} className="min-h-12 flex-1 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Continuar</button>}
+              }} disabled={pasoVenta === 2 && (!clienteId || !producto || cantidad <= 0 || cantidad > stockProducto || !precioAutorizado)} className="min-h-12 flex-1 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Continuar</button>}
             </div>
           </div>
 

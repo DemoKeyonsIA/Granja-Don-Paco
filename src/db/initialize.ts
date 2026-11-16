@@ -476,10 +476,11 @@ export async function initializeDatabase(client: any, dbInstance: any) {
     cantidad_inventario REAL NOT NULL, unidad_inventario TEXT NOT NULL,
     precio_kg REAL NOT NULL, subtotal REAL NOT NULL, descuento REAL NOT NULL DEFAULT 0,
     total REAL NOT NULL, cobro TEXT NOT NULL DEFAULT 'Efectivo', estado TEXT NOT NULL DEFAULT 'Emitida',
-    factura_id TEXT, resolucion_precio_json TEXT, anulado_en TEXT, anulado_por TEXT
+    factura_id TEXT, resolucion_precio_json TEXT, etiquetas_asignadas_json TEXT, anulado_en TEXT, anulado_por TEXT
   )`);
   const ventasKgCols = (await client.execute("PRAGMA table_info(ventas_ruta_kg)")).rows.map((r: any) => r.name);
   if (!ventasKgCols.includes('etiqueta_id')) await client.execute('ALTER TABLE ventas_ruta_kg ADD COLUMN etiqueta_id TEXT');
+  if (!ventasKgCols.includes('etiquetas_asignadas_json')) await client.execute('ALTER TABLE ventas_ruta_kg ADD COLUMN etiquetas_asignadas_json TEXT');
 
   // Seed default product catalog if empty
   const existingProducts = await client.execute('SELECT COUNT(*) as count FROM productos_catalogo');

@@ -44,7 +44,7 @@ export function registrarRutasCajaCustodia(
       const clientesPorId = porId(clientesData), usuariosPorId = porId(usuariosData);
       const ventas = [
         ...legacy.map((v: any) => ({ ...v, cantidad: Number(v.cantidadKg ?? v.cartones ?? 0), unidad: v.unidad || 'kg', precioUnitario: Number(v.precioUnitario || 0) })),
-        ...enKg.map((v: any) => ({ ...v, cantidad: Number(v.cantidadKg || 0), unidad: 'kg', precioUnitario: Number(v.precioKg || 0) })),
+        ...enKg.map((v: any) => { let asignacionesEtiquetas: any[] = []; try { asignacionesEtiquetas = JSON.parse(v.etiquetasAsignadasJson || '[]'); } catch { /* historical ticket */ } return { ...v, asignacionesEtiquetas, cantidad: Number(v.cantidadKg || 0), unidad: 'kg', precioUnitario: Number(v.precioKg || 0) }; }),
       ].map((v: any) => {
         const guia = guiasPorId.get(v.guiaId);
         const camion = camionesPorId.get(v.camionId || guia?.camionId);
@@ -71,6 +71,7 @@ export function registrarRutasCajaCustodia(
           total: Number(v.total || 0),
           cobro: v.cobro || '—',
           estado: v.estado || 'Emitida',
+          lotesAsignados: v.asignacionesEtiquetas || [],
         };
       }).sort((a: any, b: any) => String(b.fechaHora || '').localeCompare(String(a.fechaHora || '')));
       return res.json(ventas);
@@ -81,7 +82,7 @@ export function registrarRutasCajaCustodia(
 
   app.post("/api/logistica/caja/venta", requirePermission(['ventas', 'facturacion'], 'create'), async (req, res) => {
     try {
-      const { guiaId, clienteId, etiquetaId, producto, precioUnitario, descuento, cobro } = req.body;
+      const { guiaId, clienteId, producto, precioUnitario, descuento, cobro } = req.body;
       const cantidadKg = Number(req.body?.cantidadKg ?? req.body?.cantidad);
       const usuarioId = String(req.usuario?.id || '');
 
@@ -97,14 +98,6 @@ export function registrarRutasCajaCustodia(
       if (guia.finDiaFecha) return res.status(409).json({ error: 'El día ya fue cerrado por esta guía. Las ventas están bloqueadas hasta resolver el cuadre en central.' });
       const camion = guia.camionId ? await db.query.camiones.findFirst({ where: eq(camiones.id, guia.camionId) }) : null;
       if (!camion) return res.status(400).json({ error: "La guía no tiene camión asignado" });
-      if (!etiquetaId) return res.status(400).json({ error: 'Seleccione la etiqueta/lote físico del que se entregarán los kilos.' });
-      const etiquetaSeleccionada = await db.query.etiquetas.findFirst({ where: eq(etiquetas.id, etiquetaId) });
-      if (!etiquetaSeleccionada || etiquetaSeleccionada.guiaDespachoId !== guia.id || etiquetaSeleccionada.estado !== 'Cargada') {
-        return res.status(409).json({ error: 'La etiqueta seleccionada no pertenece a esta guía o ya no está disponible.' });
-      }
-      const saldoEtiquetaKg = Number(etiquetaSeleccionada.saldoKg ?? etiquetaSeleccionada.pesoNeto ?? 0);
-      if (saldoEtiquetaKg < cantidadKg) return res.status(409).json({ error: `La etiqueta solo tiene ${saldoEtiquetaKg.toFixed(2)} kg disponibles.` });
-      if (etiquetaSeleccionada.producto !== producto) return res.status(409).json({ error: 'El producto de la etiqueta no coincide con el producto de la venta.' });
       const roles = [req.usuario?.role, ...(req.usuario?.roles || [])].filter(Boolean);
       if (!roles.includes('Admin') && (camion.camioneroId || camion.vendedor_id) !== usuarioId) return res.status(403).json({ error: 'Solo puede vender desde la guía de su camión asignado.' });
 
@@ -156,7 +149,7 @@ export function registrarRutasCajaCustodia(
       let facturaConsecutivo = '';
       let fiscalConsecutivo = '';
       let fiscalClave = '';
-      const etiquetasEntregadas: { etiquetaId: string }[] = [];
+      const etiquetasConsumidas: { etiquetaId: string; kg: number; codigoUnico: string; lote: string | null; fechaVencimiento: string | null }[] = [];
       await db.transaction(async (tx) => {
         // 1. Stock del camión de la guía
         const camionStock = await tx.query.inventario.findFirst({
@@ -169,6 +162,48 @@ export function registrarRutasCajaCustodia(
           throw new ApiError(400, `Stock insuficiente en ${camion.nombre} para ${producto} (disponible: ${camionStock?.cantidad ?? 0})`);
         }
         if (camionStock.unidad !== productoVenta.unidad) throw new ApiError(409, `La unidad del inventario (${camionStock.unidad}) no coincide con la unidad del catálogo (${productoVenta.unidad}). Corrija los datos antes de vender.`);
+
+        // Distribuir los kilos automáticamente por FEFO: vence primero, se usa primero.
+        const lotesDisponibles = (await tx.query.etiquetas.findMany())
+          .filter((e: any) => e.guiaDespachoId === guia.id && e.estado === 'Cargada' && e.producto === producto && Number(e.saldoKg ?? e.pesoNeto ?? 0) > 0)
+          .sort((a: any, b: any) => {
+            const fecha = (e: any) => {
+              const tiempo = e.fechaVencimiento ? Date.parse(String(e.fechaVencimiento)) : NaN;
+              return Number.isFinite(tiempo) ? tiempo : Number.POSITIVE_INFINITY;
+            };
+            const v = fecha(a) - fecha(b);
+            if (v) return v;
+            return String(a.fechaEmpaque || a.fechaRecepcion || a.codigoUnico).localeCompare(String(b.fechaEmpaque || b.fechaRecepcion || b.codigoUnico));
+          });
+        const kgEtiquetados = lotesDisponibles.reduce((sum: number, e: any) => sum + Number(e.saldoKg ?? e.pesoNeto ?? 0), 0);
+        if (kgEtiquetados + 0.001 < cantidadKg) {
+          throw new ApiError(409, `Los lotes cargados de ${producto} solo registran ${kgEtiquetados.toFixed(2)} kg disponibles. Revise la carga antes de vender.`);
+        }
+        let porAsignarKg = round2(cantidadKg);
+        const asignacionesEtiquetas: typeof etiquetasConsumidas = [];
+        for (const lote of lotesDisponibles) {
+          if (porAsignarKg <= 0.001) break;
+          const saldo = Number(lote.saldoKg ?? lote.pesoNeto ?? 0);
+          const usado = round2(Math.min(saldo, porAsignarKg));
+          const restante = round2(saldo - usado);
+          if (usado <= 0) continue;
+          await tx.update(etiquetas).set({
+            saldoKg: restante <= 0.001 ? 0 : restante,
+            estado: restante <= 0.001 ? 'Entregada' : 'Cargada',
+            ubicacionActual: camion.nombre,
+          }).where(eq(etiquetas.id, lote.id));
+          const asignacion = {
+            etiquetaId: lote.id,
+            kg: usado,
+            codigoUnico: lote.codigoUnico,
+            lote: lote.lote || null,
+            fechaVencimiento: lote.fechaVencimiento || null,
+          };
+          asignacionesEtiquetas.push(asignacion);
+          etiquetasConsumidas.push(asignacion);
+          porAsignarKg = round2(porAsignarKg - usado);
+        }
+        if (porAsignarKg > 0.001) throw new ApiError(409, 'No se pudo distribuir toda la cantidad entre los lotes disponibles. Actualice e intente de nuevo.');
 
         // 2. Tiquete consecutivo por camión (transacción antidups)
         let nextNum = 1;
@@ -250,7 +285,7 @@ export function registrarRutasCajaCustodia(
           vendedorId: vendedorEfectivo,
           fechaHora: new Date().toISOString(),
           clienteId: clienteId || null,
-          etiquetaId,
+          etiquetaId: asignacionesEtiquetas.length === 1 ? asignacionesEtiquetas[0].etiquetaId : null,
           producto,
           cantidadKg,
           cantidadInventario: cantidadOrigen,
@@ -263,6 +298,7 @@ export function registrarRutasCajaCustodia(
           estado: 'Emitida',
           facturaId,
           resolucionPrecioJson: JSON.stringify(resolucionPrecio),
+          etiquetasAsignadasJson: JSON.stringify(asignacionesEtiquetas),
         });
 
         // 4. Descontar inventario del camión
@@ -283,18 +319,6 @@ export function registrarRutasCajaCustodia(
           referencia_id: ventaId
         });
 
-        // El saldo medido en kg es independiente de la cantidad histórica de
-        // empaques; la etiqueta se entrega al cliente cuando llega a cero.
-        const etiquetaActual = await tx.query.etiquetas.findFirst({ where: eq(etiquetas.id, etiquetaId) });
-        const restanteEtiquetaKg = Number(etiquetaActual?.saldoKg ?? etiquetaActual?.pesoNeto ?? 0) - cantidadKg;
-        if (!etiquetaActual || restanteEtiquetaKg < -0.001) throw new ApiError(409, 'El saldo en kg de la etiqueta cambió; actualice la venta e intente de nuevo.');
-        if (restanteEtiquetaKg <= 0.001) {
-          await tx.update(etiquetas).set({ saldoKg: 0, estado: 'Entregada', ubicacionActual: camion.nombre }).where(eq(etiquetas.id, etiquetaActual.id));
-          etiquetasEntregadas.push({ etiquetaId: etiquetaActual.id });
-        } else {
-          await tx.update(etiquetas).set({ saldoKg: restanteEtiquetaKg, ubicacionActual: camion.nombre }).where(eq(etiquetas.id, etiquetaActual.id));
-        }
-
         // 7. Crédito: sumar saldo y validar límite
         if (cobroFinal === 'Credito' && clienteId) {
           const cliente = await tx.query.clientes.findFirst({ where: eq(clientes.id, clienteId) });
@@ -310,8 +334,8 @@ export function registrarRutasCajaCustodia(
       });
 
       // Trazas + auditoría (fuera de la transacción para evitar SQLITE_BUSY)
-      for (const e of etiquetasEntregadas) {
-        await recordEvent(e.etiquetaId, 'Entregada', camion.nombre, guia.id, usuarioId);
+      for (const e of etiquetasConsumidas) {
+        await recordEvent(e.etiquetaId, 'Venta FEFO', camion.nombre, guia.id, usuarioId, `${e.kg.toFixed(2)} kg · tiquete ${tiquete}`);
       }
       await logAudit(usuarioId, 'Crear', 'VentaRuta', ventaId, null, { tiquete, producto, cantidadKg, cantidadInventario: cantidadOrigen, total, cobro: cobroFinal });
 
@@ -348,7 +372,8 @@ export function registrarRutasCajaCustodia(
         resolucionPrecio,
         precioMinimo,
         precioMaximo,
-        etiquetaId: etiquetaId || null,
+        etiquetaId: etiquetasConsumidas.length === 1 ? etiquetasConsumidas[0].etiquetaId : null,
+        lotesAsignados: etiquetasConsumidas,
         total
       });
     } catch (error: any) {
@@ -358,12 +383,13 @@ export function registrarRutasCajaCustodia(
 
   app.post("/api/logistica/caja/devolucion", requirePermission('ventas', 'create'), async (req, res) => {
     try {
-      const { guiaId, etiquetaId, ventaRutaId, responsable, peso } = req.body;
+      const { guiaId, ventaRutaId, responsable, peso } = req.body;
+      let etiquetaId = req.body?.etiquetaId ? String(req.body.etiquetaId) : '';
       const cantidadSolicitada = req.body?.cantidadKg ?? req.body?.cartones ?? req.body?.cantidad;
       const usuarioId = String(req.usuario?.id || '');
 
-      if (!guiaId || !etiquetaId) {
-        return res.status(400).json({ error: "Se requiere guiaId y etiquetaId para la devolución" });
+      if (!guiaId || (!etiquetaId && !ventaRutaId)) {
+        return res.status(400).json({ error: "Se requiere guiaId y un tiquete o etiqueta para la devolución" });
       }
       const guia = await db.query.guias_despacho.findFirst({ where: eq(guias_despacho.id, guiaId) });
       if (!guia) return res.status(404).json({ error: "Guía no encontrada" });
@@ -373,8 +399,28 @@ export function registrarRutasCajaCustodia(
       const camion = guia.camionId ? await db.query.camiones.findFirst({ where: eq(camiones.id, guia.camionId) }) : null;
       const roles = [req.usuario?.role, ...(req.usuario?.roles || [])].filter(Boolean);
       if (!roles.includes('Admin') && (!camion || (camion.camioneroId || camion.vendedor_id) !== usuarioId)) return res.status(403).json({ error: 'Solo puede registrar retornos de la guía de su camión asignado.' });
-      const etiqueta = await db.query.etiquetas.findFirst({ where: eq(etiquetas.id, etiquetaId) });
-      if (!etiqueta) return res.status(404).json({ error: "Etiqueta no encontrada" });
+      let etiqueta = etiquetaId ? await db.query.etiquetas.findFirst({ where: eq(etiquetas.id, etiquetaId) }) : null;
+      let venta: any = null;
+      if (ventaRutaId) {
+        venta = await db.query.ventas_ruta.findFirst({ where: eq(ventas_ruta.id, ventaRutaId) });
+        if (!venta) {
+          const nueva = await db.query.ventas_ruta_kg.findFirst({ where: eq(ventas_ruta_kg.id, ventaRutaId) });
+          if (nueva) {
+            let asignaciones: any[] = [];
+            try { asignaciones = JSON.parse(nueva.etiquetasAsignadasJson || '[]'); } catch { asignaciones = []; }
+            venta = { ...nueva, cantidadKg: Number(nueva.cantidadKg), precioUnitario: Number(nueva.precioKg), cartones: Number(nueva.cantidadKg), unidad: 'kg', tablaKg: true, asignacionesEtiquetas: asignaciones };
+          }
+        }
+        if (!venta) return res.status(404).json({ error: "Tiquete no encontrado" });
+        if (venta.guiaId !== guia.id) return res.status(400).json({ error: "El tiquete no pertenece a esta guía" });
+        if (venta.estado !== 'Emitida') return res.status(400).json({ error: `El tiquete ya está ${venta.estado.toLowerCase()}` });
+        if (venta.asignacionesEtiquetas?.length) {
+          const firstAllocation = venta.asignacionesEtiquetas.find((a: any) => a.etiquetaId === etiquetaId) || venta.asignacionesEtiquetas[0];
+          etiquetaId = etiquetaId || firstAllocation.etiquetaId;
+        }
+      }
+      if (!etiqueta && etiquetaId) etiqueta = await db.query.etiquetas.findFirst({ where: eq(etiquetas.id, etiquetaId) });
+      if (!etiqueta) return res.status(404).json({ error: "Etiqueta de origen no encontrada" });
       const guiaEnKg = guia.totalKg != null;
       const catalogoRetorno = await db.query.productosCatalogo.findMany();
       const productoRetorno = productoCatalogoPara(etiqueta.producto, catalogoRetorno);
@@ -383,10 +429,11 @@ export function registrarRutasCajaCustodia(
       if (req.body?.cantidadKg != null && productoRetorno?.unidad !== 'kg') return res.status(409).json({ error: 'El inventario de este producto todavía no está confirmado en kg. Bodega debe pesar el retorno antes de aceptarlo.' });
 
       // Defensa contra doble POST: la etiqueta solo se devuelve si aún no regresó
-      if (etiqueta.estado === 'Retornada' || etiqueta.estado === 'EnBodega') {
+      const multiLoteKg = Boolean(venta?.tablaKg && venta.asignacionesEtiquetas?.length > 1);
+      if (!multiLoteKg && (etiqueta.estado === 'Retornada' || etiqueta.estado === 'EnBodega')) {
         return res.status(400).json({ error: `La etiqueta ${etiqueta.codigoUnico} ya está ${etiqueta.estado.toLowerCase()} — no se puede devolver dos veces` });
       }
-      if (etiqueta.guiaDespachoId && etiqueta.guiaDespachoId !== guia.id) {
+      if (!multiLoteKg && etiqueta.guiaDespachoId && etiqueta.guiaDespachoId !== guia.id) {
         return res.status(400).json({ error: `La etiqueta pertenece a otra guía de despacho` });
       }
 
@@ -394,18 +441,8 @@ export function registrarRutasCajaCustodia(
       // - Venta completa → la etiqueta quedó Entregada con su cantidad íntegra.
       // - Venta parcial   → la etiqueta quedó Cargada con el restante (cantidad ya reducida),
       //   así que se devuelven los cartones VENDIDOS y se restaura la cantidad original.
-      let venta: any = null;
-      if (ventaRutaId) {
-        venta = await db.query.ventas_ruta.findFirst({ where: eq(ventas_ruta.id, ventaRutaId) });
-        if (!venta) {
-          const nueva = await db.query.ventas_ruta_kg.findFirst({ where: eq(ventas_ruta_kg.id, ventaRutaId) });
-          if (nueva) venta = { ...nueva, cantidadKg: Number(nueva.cantidadKg), precioUnitario: Number(nueva.precioKg), cartones: Number(nueva.cantidadKg), unidad: 'kg', tablaKg: true };
-        }
-        if (!venta) return res.status(404).json({ error: "Tiquete no encontrado" });
-        if (venta.guiaId !== guia.id) return res.status(400).json({ error: "El tiquete no pertenece a esta guía" });
-        if (venta.estado !== 'Emitida') return res.status(400).json({ error: `El tiquete ya está ${venta.estado.toLowerCase()}` });
-        if (venta.etiquetaId && venta.etiquetaId !== etiqueta.id) return res.status(400).json({ error: "El tiquete no corresponde a esta etiqueta" });
-      }
+      if (venta?.etiquetaId && venta.etiquetaId !== etiqueta.id) return res.status(400).json({ error: "El tiquete no corresponde a esta etiqueta" });
+      if (multiLoteKg && !venta.asignacionesEtiquetas.some((a: any) => a.etiquetaId === etiqueta.id)) return res.status(400).json({ error: 'La etiqueta no forma parte del tiquete.' });
 
       const retornosPrevios = venta ? await db.query.retornos_camion.findMany({ where: eq(retornos_camion.ventaRutaId, venta.id) }) : [];
       const cantidadYaDevuelta = retornosPrevios.reduce((s: number, r: any) => s + Number(r.cartones || 0), 0);
@@ -430,6 +467,61 @@ export function registrarRutasCajaCustodia(
       // Si no hay tiquete y la etiqueta nunca salió del camión (Cargada sin vender),
       // el stock del camión ya la incluye: no hay nada que sumar.
       const esSinTiqueteSinVenta = !venta && etiqueta.estado === 'Cargada';
+
+      // A multi-lot kg ticket returns to its original labels automatically.
+      // The existing manual-label return path remains for legacy tickets and unsold stock.
+      if (venta?.tablaKg && venta.asignacionesEtiquetas?.length > 1) {
+        const yaDevueltoPorEtiqueta = new Map<string, number>();
+        const retornosEnCurso = retornosPrevios.reduce((sum: number, retorno: any) => sum + Number(retorno.cartones || 0), 0);
+        if (retornosEnCurso > 0) return res.status(409).json({ error: 'Este tiquete ya tiene una devolución pendiente de aceptación por Bodega. Espere su revisión antes de registrar otra.' });
+        for (const retorno of retornosPrevios) {
+          if (retorno.ventaRutaId !== venta.id) continue;
+          let filas: any[] = [];
+          try { filas = retorno.etiquetasJson ? JSON.parse(retorno.etiquetasJson) : []; } catch { filas = []; }
+          for (const fila of filas) yaDevueltoPorEtiqueta.set(fila.etiquetaId, (yaDevueltoPorEtiqueta.get(fila.etiquetaId) || 0) + Number(fila.cartones || 0));
+        }
+        let porDevolver = cartonesRetorno;
+        const distribucion = venta.asignacionesEtiquetas.map((a: any) => {
+          const original = Number(a.kg || 0);
+          const restante = Math.max(0, original - (yaDevueltoPorEtiqueta.get(a.etiquetaId) || 0));
+          const kg = round2(Math.min(restante, porDevolver));
+          porDevolver = round2(porDevolver - kg);
+          return { ...a, kg };
+        }).filter((a: any) => a.kg > 0);
+        if (porDevolver > 0.001) return res.status(409).json({ error: 'La devolución supera el saldo de los lotes originales del tiquete.' });
+        const retornoId = crypto.randomUUID();
+        await db.transaction(async (tx) => {
+          const totalDevuelto = cantidadYaDevuelta + cartonesRetorno;
+          if (totalDevuelto >= Number(venta.cartones)) await tx.update(ventas_ruta_kg).set({ estado: 'Anulada', anuladoEn: new Date().toISOString(), anuladoPor: usuarioId }).where(eq(ventas_ruta_kg.id, venta.id));
+          const montoDevuelto = Number(venta.total || 0) * cartonesRetorno / Math.max(1, Number(venta.cartones));
+          if (venta.cobro === 'Credito' && venta.clienteId) {
+            const cliente = await tx.query.clientes.findFirst({ where: eq(clientes.id, venta.clienteId) });
+            if (cliente) await tx.update(clientes).set({ saldo_pendiente: Math.max(0, Number(cliente.saldo_pendiente || 0) - montoDevuelto) }).where(eq(clientes.id, venta.clienteId));
+          }
+          for (const asignacion of distribucion) {
+            const origen = await tx.query.etiquetas.findFirst({ where: eq(etiquetas.id, asignacion.etiquetaId) });
+            if (!origen) throw new ApiError(409, `No se encontró el lote ${asignacion.codigoUnico}.`);
+            const asignadoTiquete = Number(venta.asignacionesEtiquetas.find((a: any) => a.etiquetaId === asignacion.etiquetaId)?.kg || 0);
+            const saldoActual = Math.min(Number(origen.saldoKg ?? origen.pesoNeto ?? 0), Math.max(0, asignadoTiquete - (yaDevueltoPorEtiqueta.get(asignacion.etiquetaId) || 0)));
+            const nuevoSaldo = round2(saldoActual + asignacion.kg);
+            await tx.update(etiquetas).set({ saldoKg: nuevoSaldo, estado: 'Cargada', ubicacionActual: camion?.nombre || 'Bodega Central' }).where(eq(etiquetas.id, origen.id));
+          }
+          const camionStock = camion ? await tx.query.inventario.findFirst({ where: and(eq(inventario.producto, venta.producto), eq(inventario.ubicacion, camion.nombre), eq(inventario.unidad, 'kg')) }) : null;
+          if (!camionStock) throw new ApiError(409, 'No se encontró el saldo en kg del camión para registrar el retorno.');
+          await tx.update(inventario).set({ cantidad: Number(camionStock.cantidad) + cartonesRetorno, ultima_actualizacion: new Date().toISOString() }).where(eq(inventario.id, camionStock.id));
+          await tx.insert(retornos_camion).values({
+            id: retornoId, guiaId: guia.id, etiquetaId: distribucion[0]?.etiquetaId || null, ventaRutaId: venta.id,
+            fecha: new Date().toISOString(), responsable: responsable || usuarioId, producto: venta.producto,
+            cartones: cartonesRetorno, unidad: 'kg', etiquetasJson: JSON.stringify(distribucion.map((a: any) => ({ etiquetaId: a.etiquetaId, codigoUnico: a.codigoUnico, producto: venta.producto, cartones: a.kg }))),
+            peso: peso != null ? Number(peso) : null, estado: 'PendienteBodega', cantidadAceptada: 0,
+            tipo: totalDevuelto >= Number(venta.cartones) ? 'completo' : 'parcial',
+          });
+          await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: venta.producto, cantidad: cartonesRetorno, unidad: 'kg', tipo: 'Retorno Camión', origen: 'Cliente', destino: camion?.nombre || 'Bodega Central', fecha: new Date().toISOString(), referencia_id: guia.id });
+        });
+        for (const asignacion of distribucion) await recordEvent(asignacion.etiquetaId, 'Retornada', camion?.nombre || 'Bodega Central', guia.id, usuarioId, `Regresan ${asignacion.kg.toFixed(2)} kg del tiquete ${venta.tiqueteConsecutivo}; pendiente de aceptación de Bodega`);
+        await logAudit(usuarioId, 'Crear', 'RetornoCamion', guia.id, null, { ventaRutaId: venta.id, etiquetas: distribucion, cantidadKg: cartonesRetorno, tiqueteAnulado: cantidadYaDevuelta + cartonesRetorno >= Number(venta.cartones) ? venta.tiqueteConsecutivo : null });
+        return res.status(201).json({ success: true, message: 'Devolución registrada; pendiente de aceptación física en Bodega', retornoId, tiqueteAnulado: cantidadYaDevuelta + cartonesRetorno >= Number(venta.cartones) ? venta.tiqueteConsecutivo : null, etiquetas: distribucion, cartones: cartonesRetorno, cantidadKg: cartonesRetorno, unidad: 'kg', estado: 'PendienteBodega' });
+      }
 
       let ventaResumen: { tiquete?: string; cobro?: string; total?: number } = {};
       const retornoId = crypto.randomUUID();

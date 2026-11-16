@@ -53,7 +53,7 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
       let ventasRutaData: any[] = [];
       let retornosRutaData: any[] = [];
       try { ventasRutaData = await db.query.ventas_ruta.findMany({ where: eq(schema.ventas_ruta.guiaId, guia.id) }); } catch { ventasRutaData = []; }
-      try { ventasRutaData = [...ventasRutaData, ...(await db.query.ventas_ruta_kg.findMany({ where: eq(schema.ventas_ruta_kg.guiaId, guia.id) })).map((v: any) => ({ ...v, cantidadKg: Number(v.cantidadKg), cartones: Number(v.cantidadKg), precioUnitario: Number(v.precioKg), unidad: 'kg' }))]; } catch { /* tablas demo antiguas */ }
+      try { ventasRutaData = [...ventasRutaData, ...(await db.query.ventas_ruta_kg.findMany({ where: eq(schema.ventas_ruta_kg.guiaId, guia.id) })).map((v: any) => { let asignacionesEtiquetas: any[] = []; try { asignacionesEtiquetas = JSON.parse(v.etiquetasAsignadasJson || '[]'); } catch { /* ventas previas sin asignación FEFO */ } return { ...v, cantidadKg: Number(v.cantidadKg), cartones: Number(v.cantidadKg), precioUnitario: Number(v.precioKg), unidad: 'kg', asignacionesEtiquetas }; })]; } catch { /* tablas demo antiguas */ }
       try { retornosRutaData = await db.query.retornos_camion.findMany({ where: eq(schema.retornos_camion.guiaId, guia.id) }); } catch { retornosRutaData = []; }
       const gastosRuta = await db.query.gastos.findMany().catch(() => [] as any[]);
       const gastosEfectivoGuia = round2(gastosRuta
@@ -109,6 +109,7 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
         cobro: v.cobro,
         fechaHora: v.fechaHora,
         etiquetaId: v.etiquetaId || null,
+        lotesAsignados: v.asignacionesEtiquetas || [],
         estado: v.estado,
       }));
 

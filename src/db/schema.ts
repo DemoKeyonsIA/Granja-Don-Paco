@@ -168,6 +168,7 @@ export const ventas_ruta_kg = pgTable('ventas_ruta_kg', {
   estado: text('estado').notNull().default('Emitida'),
   facturaId: text('factura_id'),
   resolucionPrecioJson: text('resolucion_precio_json'),
+  etiquetasAsignadasJson: text('etiquetas_asignadas_json'),
   anuladoEn: text('anulado_en'),
   anuladoPor: text('anulado_por'),
 });
