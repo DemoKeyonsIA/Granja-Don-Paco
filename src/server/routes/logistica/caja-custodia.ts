@@ -5,6 +5,7 @@ import { productoCatalogoPara } from '../../../lib/kilos';
 import { factorKilos } from '../../../lib/kilos';
 import { resumenDineroVentasRuta } from '../../../lib/finanzasRuta';
 import { clienteDisponibleParaUsuario } from '../../clientes-scope';
+import { siguienteConsecutivo } from '../../services/consecutivos';
 
 /** Caja de ruta, custodia, aceptación de retornos, cuadre y tablero logístico. */
 export function registrarRutasCajaCustodia(
@@ -25,7 +26,7 @@ export function registrarRutasCajaCustodia(
   },
 ) {
   const { ApiError, httpError, recordEvent, recordEventTx, registrarPesoPunto, getPrecioParaProducto, requirePermission, logAudit, round2, estadoLogicoGuia } = helpers;
-  const { facturas, inventario, cierres_caja_ruta, movimientosInventario, clientes, etiquetas, desperdicios, aprobaciones, traza_etiqueta, camiones, rutas, guias_despacho, guias_despacho_detalle, consecutivos, ventas_ruta, ventas_ruta_kg, retornos_camion } = schema;
+  const { facturas, detallesFactura, facturas_electronicas, pagos, inventario, cierres_caja_ruta, movimientosInventario, clientes, etiquetas, desperdicios, aprobaciones, traza_etiqueta, camiones, rutas, guias_despacho, guias_despacho_detalle, consecutivos, ventas_ruta, ventas_ruta_kg, retornos_camion } = schema;
 
   app.get('/api/logistica/ventas-ruta/historico', requirePermission('tablero_operativo', 'view'), async (_req: any, res: any) => {
     try {
@@ -85,15 +86,14 @@ export function registrarRutasCajaCustodia(
       const usuarioId = String(req.usuario?.id || '');
 
       if (!guiaId) return res.status(400).json({ error: "Se requiere guiaId (caja en ruta)" });
+      if (!clienteId) return res.status(400).json({ error: 'Seleccione el cliente para crear la factura de esta venta.' });
       if (!producto || !Number.isFinite(cantidadKg) || cantidadKg <= 0) {
         return res.status(400).json({ error: "Se requiere producto y cantidad en kg mayor a cero" });
       }
 
       const guia = await db.query.guias_despacho.findFirst({ where: eq(guias_despacho.id, guiaId) });
       if (!guia) return res.status(404).json({ error: "Guía no encontrada" });
-      if (guia.estado === 'Cerrada' || guia.estado === 'Anulada') {
-        return res.status(409).json({ error: `La guía está ${guia.estado.toLowerCase()} — no se pueden registrar ventas` });
-      }
+      if (guia.estado !== 'EnRuta') return res.status(409).json({ error: 'El vendedor debe confirmar primero la carga asignada e iniciar la ruta antes de vender.' });
       if (guia.finDiaFecha) return res.status(409).json({ error: 'El día ya fue cerrado por esta guía. Las ventas están bloqueadas hasta resolver el cuadre en central.' });
       const camion = guia.camionId ? await db.query.camiones.findFirst({ where: eq(camiones.id, guia.camionId) }) : null;
       if (!camion) return res.status(400).json({ error: "La guía no tiene camión asignado" });
@@ -152,6 +152,10 @@ export function registrarRutasCajaCustodia(
 
       let tiquete = '';
       let ventaId = '';
+      let facturaId = '';
+      let facturaConsecutivo = '';
+      let fiscalConsecutivo = '';
+      let fiscalClave = '';
       const etiquetasEntregadas: { etiquetaId: string }[] = [];
       await db.transaction(async (tx) => {
         // 1. Stock del camión de la guía
@@ -197,6 +201,45 @@ export function registrarRutasCajaCustodia(
         await tx.update(consecutivos).set({ ultimo: nextNum }).where(eq(consecutivos.id, seqId));
         tiquete = `TQ-${String(nextNum).padStart(4, '0')}`;
 
+        // Venta y factura se registran atómicamente. La factura comparte los
+        // importes autorizados del ticket y no vuelve a descontar inventario.
+        facturaId = crypto.randomUUID();
+        const facturaSeq = await siguienteConsecutivo(tx, 'FACTURA', 'GLOBAL', 'FAC', 4);
+        facturaConsecutivo = facturaSeq.s;
+        const fechaFactura = new Date().toISOString();
+        const esCredito = cobroFinal === 'Credito';
+        await tx.insert(facturas).values({
+          id: facturaId, consecutivo: facturaConsecutivo, fecha: fechaFactura,
+          clienteId: String(clienteId), vendedorId: vendedorEfectivo,
+          subtotal, descuento: descuentoNum, total,
+          condicion_pago: esCredito ? 'Credito' : 'Contado', metodo_pago: cobroFinal,
+          estado: esCredito ? 'Pendiente' : 'Pagada', guiaId: guia.id, camionId: camion.id,
+        });
+        await tx.insert(detallesFactura).values({
+          id: crypto.randomUUID(), facturaId, producto, cantidad: cantidadKg,
+          precio_unitario: precio, subtotal,
+          resolucionPrecioJson: JSON.stringify(resolucionPrecio),
+        });
+        if (!esCredito) {
+          await tx.insert(pagos).values({
+            id: crypto.randomUUID(), facturaId, fecha: fechaFactura, monto: total,
+            metodo: cobroFinal, usuarioId: vendedorEfectivo, nota: `Cobro registrado en ruta ${guia.consecutivo || guia.id}`,
+          });
+        }
+        const emisorCedula = '3-101-XXXXXX';
+        const fiscalSeq = await siguienteConsecutivo(tx, 'DOCUMENTO_FISCAL', 'Factura', 'FE', 10);
+        fiscalConsecutivo = fiscalSeq.s;
+        fiscalClave = `${emisorCedula.replace(/-/g, '')}${fechaFactura.slice(0, 10).replace(/-/g, '')}${fiscalConsecutivo.replace(/-/g, '')}`;
+        const payloadFiscal = JSON.stringify({ facturaId, tipoDocumento: 'Factura', emisorNombre: 'Granja Don Paco', emisorCedula, emisorCorreo: null, receptorNombre: clientePrecio?.nombre || null, receptorCedula: clientePrecio?.documento_id || null, receptorCorreo: clientePrecio?.email || null, condicionPago: esCredito ? 'Credito' : 'Contado', medioPago: cobroFinal, ambiente: 'Pruebas', proveedor: 'Simulado' });
+        await tx.insert(facturas_electronicas).values({
+          id: crypto.randomUUID(), facturaId, tipoDocumento: 'Factura', consecutivo: fiscalConsecutivo,
+          clave: fiscalClave, fechaEmision: fechaFactura, emisorNombre: 'Granja Don Paco', emisorCedula,
+          receptorNombre: clientePrecio?.nombre || null, receptorCedula: clientePrecio?.documento_id || null,
+          receptorCorreo: clientePrecio?.email || null, subtotal, descuento: descuentoNum, impuestos: 0, total,
+          condicionPago: esCredito ? 'Credito' : 'Contado', medioPago: cobroFinal, estado: 'Borrador',
+          ambiente: 'Pruebas', proveedor: 'Simulado', idempotencyKey: `documento:${facturaId}:Factura`, idempotencyPayload: payloadFiscal,
+        });
+
         // 3. Registrar venta en ruta
         ventaId = crypto.randomUUID();
         await tx.insert(ventas_ruta_kg).values({
@@ -218,7 +261,7 @@ export function registrarRutasCajaCustodia(
           total,
           cobro: cobroFinal,
           estado: 'Emitida',
-          facturaId: null,
+          facturaId,
           resolucionPrecioJson: JSON.stringify(resolucionPrecio),
         });
 
@@ -291,6 +334,9 @@ export function registrarRutasCajaCustodia(
         guiaConsecutivo: guia.consecutivo || '',
         vendedorNombre: String(req.usuario?.name || ''),
         producto,
+        facturaId,
+        facturaConsecutivo,
+        documentoFiscalConsecutivo: fiscalConsecutivo,
         cantidadKg,
         unidad: 'kg',
         precioUnitario: precio,

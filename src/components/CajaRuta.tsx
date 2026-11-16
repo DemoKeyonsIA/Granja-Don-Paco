@@ -4,7 +4,6 @@ import { User } from '../types';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { sessionHeaders } from '../lib/session';
-import AccionFijaMovil from './AccionFijaMovil';
 import RegistroGasto from './RegistroGasto';
 
 interface CajaRutaProps {
@@ -51,6 +50,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   const [cuadre, setCuadre] = useState<any>(null);
   const [efectivoContado, setEfectivoContado] = useState('');
   const [registrarGastoAbierto, setRegistrarGastoAbierto] = useState(false);
+  const [pasoVenta, setPasoVenta] = useState(1);
 
   const fetchBase = useCallback(async () => {
     try {
@@ -172,11 +172,28 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
         const data = await res.json();
         setTiquete(data);
         setVentas(prev => [...prev, { ...data, estado: 'Emitida' }].sort((a: any, b: any) => String(a.tiqueteConsecutivo).localeCompare(String(b.tiqueteConsecutivo))));
-        toast.success(`Tiquete de ruta ${data.tiqueteConsecutivo} emitido`);
+        toast.success(`Venta registrada · factura ${data.facturaConsecutivo || 'creada'} en Documentos`);
         resetPos();
+        setPasoVenta(1);
         await loadGuia(guiaId);
       } else { const d = await res.json(); toast.error(`Error: ${d.error}`); }
     } catch (e: any) { toast.error(`Error: ${e.message}`); }
+    setLoading(false);
+  };
+
+  const confirmarInicioRuta = async () => {
+    if (!guiaId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/logistica/guias/${guiaId}/marcar-en-ruta`, {
+        method: 'POST', headers: sessionHeaders(currentUser.id, true),
+        body: JSON.stringify({ confirmarRecepcion: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo confirmar la carga.');
+      await loadGuia(guiaId);
+      toast.success('Carga recibida. La ruta quedó iniciada.');
+    } catch (error: any) { toast.error(error.message); }
     setLoading(false);
   };
 
@@ -254,7 +271,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   const guiaListado = guias.find((g: any) => g.id === guia?.id);
   const nombreRutaAsignada = guiaListado?.rutaNombre || camionSeleccionado?.ruta_defecto || guia?.rutaNombre || 'Ruta asignada';
   const estadoRutaLabel = guia?.estado === 'EnRuta' ? 'En ruta' : guia?.estado === 'Cargada' ? 'Lista para iniciar' : guia?.estadoLogico || guia?.estado;
-  const ventaDeshabilitada = loading || cajaCerrada || cargandoPrecio || !clienteId || !producto || !politicaPrecio?.precio || Boolean(politicaPrecio?.error) || precioVenta < precioMinimo || precioVenta > precioMaximo || cantidad <= 0 || cantidad > stockProducto || descuento < 0 || descuento > descuentoPermitido;
+  const ventaDeshabilitada = loading || guia?.estado !== 'EnRuta' || cajaCerrada || cargandoPrecio || !clienteId || !producto || !politicaPrecio?.precio || Boolean(politicaPrecio?.error) || precioVenta < precioMinimo || precioVenta > precioMaximo || cantidad <= 0 || cantidad > stockProducto || descuento < 0 || descuento > descuentoPermitido;
   const previsualizarTiquete = (muestraGeneral = false) => {
     if (!muestraGeneral && (!clienteId || !producto || !Number.isFinite(cantidad) || cantidad <= 0)) return toast.error('Seleccione cliente, producto y kilos para ver la muestra.');
     const cantidadMuestra = muestraGeneral ? 10 : cantidad;
@@ -358,9 +375,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
         <>
         <div role="status" aria-live="polite" className="rounded-2xl p-4 flex items-start justify-between gap-4 no-print" style={{ background: 'var(--bg-card)', border: '1px solid var(--status-success)' }}>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{tiquete.demo ? 'Muestra · no registra una venta' : 'Tiquete de ruta listo para imprimir'}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{tiquete.demo ? 'Muestra · no registra una venta' : 'Venta registrada · factura en Documentos'}</p>
             <p className="text-2xl font-extrabold" style={{ color: 'var(--brand-primary)' }}>{tiquete.demo ? 'VISTA PREVIA' : tiquete.tiqueteConsecutivo}</p>
             <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{tiquete.producto} × {Number(tiquete.cantidadKg ?? tiquete.cartones).toFixed(2)} kg — {fmtCRC(tiquete.total)}</p>
+            {!tiquete.demo && <p className="mt-1 text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Factura {tiquete.facturaConsecutivo} · documento fiscal {tiquete.documentoFiscalConsecutivo} en borrador de pruebas</p>}
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{fmtHora(tiquete.fechaHora)} · {tiquete.cobro}</p>
           </div>
           <div className="flex gap-2">
@@ -399,12 +417,29 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
             Ver muestra del tiquete · no registra venta
           </button>
         </div>
+      ) : guia.estado === 'Cargada' ? (
+        <section className="mx-auto w-full max-w-xl rounded-2xl p-5 sm:p-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+          <div className="mb-5 flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}><Truck className="h-6 w-6" /></span><div><p className="text-xl font-extrabold" style={{ color: 'var(--text-primary)' }}>Antes de salir</p><p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Confirme que recibió la carga asignada.</p></div></div>
+          <div className="mb-5 space-y-3 rounded-xl p-4" style={{ background: 'var(--bg-muted)' }}>
+            <div className="flex justify-between gap-3"><span style={{ color: 'var(--text-secondary)' }}>Ruta</span><strong className="text-right" style={{ color: 'var(--text-primary)' }}>{nombreRutaAsignada}</strong></div>
+            <div className="flex justify-between gap-3"><span style={{ color: 'var(--text-secondary)' }}>Camión</span><strong className="text-right" style={{ color: 'var(--text-primary)' }}>{guia.camionNombre}</strong></div>
+            {(guia.detalle || []).filter((e: any) => e.estadoEtiqueta === 'Cargada').map((e: any) => <div key={e.etiquetaId} className="flex justify-between gap-3 border-t pt-3" style={{ borderColor: 'var(--border-default)' }}><span style={{ color: 'var(--text-secondary)' }}>{e.producto}</span><strong style={{ color: 'var(--text-primary)' }}>{Number(e.saldoKg ?? e.pesoNeto ?? 0).toFixed(2)} kg</strong></div>)}
+            <p className="border-t pt-3 text-sm font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>Total esperado <span className="float-right">{inventarioKgCamion.toFixed(2)} kg</span></p>
+          </div>
+          <button type="button" onClick={() => void confirmarInicioRuta()} disabled={loading} className="min-h-14 w-full rounded-xl px-4 py-3 text-base font-extrabold disabled:opacity-60" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>{loading ? 'Confirmando…' : 'Confirmar carga recibida e iniciar ruta'}</button>
+          <p className="mt-3 text-center text-xs" style={{ color: 'var(--text-muted)' }}>Al confirmar, quedará registrada la hora y podrá iniciar ventas.</p>
+        </section>
+      ) : guia.estado !== 'EnRuta' ? (
+        <section className="rounded-2xl p-5" style={{ background: 'var(--status-warning-soft)', color: 'var(--text-primary)' }}><strong>La ruta aún no está lista para iniciar.</strong><p className="mt-1 text-sm">Pida al administrador de despacho que complete y asigne la guía.</p></section>
       ) : (
       <div className="route-pos-layout">
           {/* Columna izquierda: cliente + producto */}
           <div className="route-pos-main min-w-0 space-y-4">
+            <div className="grid grid-cols-3 gap-2" aria-label="Pasos de la venta">
+              {[['1', 'Cliente'], ['2', 'Producto y kg'], ['3', 'Cobro y documento']].map(([numero, etiqueta], index) => <button key={numero} type="button" onClick={() => { if (index === 0 || (index === 1 && clienteId) || (index === 2 && clienteId && producto && etiquetaId)) setPasoVenta(index + 1); }} aria-current={pasoVenta === index + 1 ? 'step' : undefined} className="rounded-xl px-2 py-3 text-center text-xs font-bold" style={{ background: pasoVenta === index + 1 ? 'var(--brand-primary)' : 'var(--bg-muted)', color: pasoVenta === index + 1 ? 'var(--text-on-action)' : 'var(--text-secondary)' }}><span className="mr-1">{numero}</span>{etiqueta}</button>)}
+            </div>
             {/* Clientes */}
-            <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+            {pasoVenta === 1 && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-base font-extrabold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                 <span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>1</span>
                 <UserIcon className="w-4 h-4" /> Elija el cliente
@@ -428,10 +463,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
               {clientesRuta.length === 0 && (
                 <p className="rounded-xl p-3 text-sm" style={{ background: 'var(--status-warning-soft)', color: 'var(--text-primary)' }}>Esta ruta no tiene clientes asignados. Pida al administrador que los agregue antes de iniciar la venta.</p>
               )}
-            </div>
+            </div>}
 
             {/* Producto + cantidad */}
-            <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+            {pasoVenta === 2 && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-base font-extrabold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                 <span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>2</span>
                 <PackageOpen className="w-4 h-4" /> Elija qué va a vender
@@ -538,10 +573,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                   <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{fmtCRC(total)}</p>
                 </div>
               </div>
-            </div>
+            </div>}
 
             {/* Cobro + accion */}
-            <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+            {pasoVenta === 3 && <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-base font-extrabold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}><span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>4</span>¿Cómo paga?</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button onClick={() => setCobro('Efectivo')}
@@ -569,10 +604,11 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                   <CreditCard className="w-5 h-5" /> Crédito
                 </button>
               </div>
+              <div className="rounded-xl p-3" style={{ background: 'var(--brand-primary-soft)' }}><p className="text-sm font-bold" style={{ color: 'var(--brand-primary-dark)' }}>Se emitirá la factura con esta venta</p><p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>El documento fiscal queda en borrador de pruebas. En Documentos se completa el envío y se consulta la respuesta.</p></div>
               <button onClick={vender} disabled={ventaDeshabilitada}
                 className="min-h-14 w-full flex items-center justify-center gap-2 rounded-xl px-4 py-4 text-lg font-extrabold disabled:opacity-50"
                 style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
-                <CheckCircle2 className="w-5 h-5" /> {precioAutorizado ? `Emitir tiquete · ${fmtCRC(total)}` : 'Precio no configurado'}
+                <CheckCircle2 className="w-5 h-5" /> {precioAutorizado ? `Registrar venta y factura · ${fmtCRC(total)}` : 'Precio no configurado'}
               </button>
               <button type="button" onClick={() => previsualizarTiquete()} disabled={!clienteId || !producto || cantidad <= 0}
                 className="min-h-11 w-full rounded-xl border px-4 py-2 text-sm font-bold disabled:opacity-50"
@@ -593,11 +629,19 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                   <AlertTriangle className="w-4 h-4" /> Reportar daño
                 </button>
               </div>
+            </div>}
+            <div className="flex gap-2">
+              {pasoVenta > 1 && <button type="button" onClick={() => setPasoVenta(v => Math.max(1, v - 1))} className="min-h-12 flex-1 rounded-xl border px-4 text-sm font-bold" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }}>Volver</button>}
+              {pasoVenta < 3 && <button type="button" onClick={() => {
+                if (pasoVenta === 1 && !clienteId) return toast.error('Seleccione el cliente de la ruta.');
+                if (pasoVenta === 2 && (!producto || !etiquetaId)) return toast.error('Seleccione el producto y el lote que va a entregar.');
+                setPasoVenta(v => v + 1);
+              }} disabled={pasoVenta === 2 && (!clienteId || !producto || !etiquetaId || !precioAutorizado)} className="min-h-12 flex-1 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Continuar</button>}
             </div>
           </div>
 
           {/* Columna derecha: tiquetes del día + terminar día */}
-          <div className="route-pos-sidebar min-w-0 space-y-4">
+          {pasoVenta === 3 && <div className="route-pos-sidebar min-w-0 space-y-4">
             <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>Tiquetes de ruta del día</p>
               {emitidas.length === 0 ? (
@@ -682,24 +726,8 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 </dl>
               </div>
             )}
-          </div>
+          </div>}
         </div>
-      )}
-
-      {guia && !cajaCerrada && clienteId && producto && (
-        <AccionFijaMovil etiquetaAccesible="Registrar venta" className="route-pos-mobile-action">
-          <div className="mx-auto flex max-w-3xl items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                {clienteSeleccionado?.nombre || 'Elija cliente'} · {producto || 'Elija producto'}
-              </p>
-              <p className="text-xl font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{fmtCRC(total)}</p>
-            </div>
-              <button onClick={vender} disabled={ventaDeshabilitada} className="min-h-12 shrink-0 rounded-xl px-4 text-base font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
-              Emitir tiquete
-            </button>
-          </div>
-        </AccionFijaMovil>
       )}
 
       {/* Modal devolución */}
