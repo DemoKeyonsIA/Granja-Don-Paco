@@ -850,6 +850,7 @@ svg[style*="color: var(--brand-primary)"] { color: var(--text-link) !important; 
 
 /* La caja de ruta responde al ancho real de su panel (también con sidebar). */
 .route-pos-root { min-width: 0; container: route-pos / inline-size; }
+.route-pos-root .route-pos-mobile-action { left: 50%; right: auto; width: min(calc(100vw - 2rem), 28rem); transform: translateX(-50%); }
 .route-pos-header-layout { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .route-pos-assignment { min-width: 0; }
 .route-pos-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -881,6 +882,7 @@ svg[style*="color: var(--brand-primary)"] { color: var(--text-link) !important; 
   .route-pos-price-warning, .route-pos-total { grid-column: 1 / -1; }
 }
 @container route-pos (max-width: 760px) {
+  .route-pos-root { padding-bottom: 11rem !important; }
   .route-pos-root .route-pos-mobile-action { display: block; }
 }
 

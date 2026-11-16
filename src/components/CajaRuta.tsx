@@ -281,7 +281,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   };
 
   return (
-    <div className="route-pos-root space-y-4 pb-28 lg:pb-4">
+    <div className="route-pos-root space-y-4 pb-4">
       {/* Cabecera: guía activa */}
       <div className="min-w-0 rounded-2xl p-4 sm:p-5 space-y-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
         <div className="flex items-start justify-between gap-3">
