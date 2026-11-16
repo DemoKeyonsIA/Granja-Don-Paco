@@ -110,6 +110,9 @@ describe('POST /api/pagos — pago parcial y saldo', () => {
     expect(res.body.saldo).toBe(750);
     // El bug: antes cualquier monto la ponía en 'Pagada'.
     expect(await estadoDe('f-1000')).toBe('Pendiente');
+    const listado = await como(request(app).get('/api/facturas'));
+    expectApi(listado, 200, 'facturas con saldo actualizado');
+    expect(listado.body.find((f: any) => f.id === 'f-1000')).toMatchObject({ pagado: 250, saldoPendiente: 750, estado: 'Pendiente' });
   });
 
   it('el pago queda registrado en el historial', async () => {
@@ -173,5 +176,36 @@ describe('saldo del cliente', () => {
     // 250 + 250 + 500) y f-anulada nunca se tocó.
     const cliente = await testDb.query.clientes.findFirst();
     expect(cliente!.saldo_pendiente).toBe(0);
+  });
+});
+
+describe('POST /api/pagos — idempotencia', () => {
+  it('reintentar con la misma llave devuelve el pago original sin descontar dos veces', async () => {
+    await testDb.insert(schema.facturas).values({
+      id: 'f-idempotente', consecutivo: 'FAC-IDEMP', fecha: '2026-09-12', clienteId: 'cli-1',
+      vendedorId: ADMIN, subtotal: 300, descuento: 0, total: 300,
+      condicion_pago: 'Credito', estado: 'Pendiente',
+    });
+    const primero = await como(request(app).post('/api/pagos')).set('Idempotency-Key', 'cobro-f-idempotente-1').send({
+      facturaId: 'f-idempotente', monto: 100, metodoPago: 'SINPE',
+    });
+    const repetido = await como(request(app).post('/api/pagos')).set('Idempotency-Key', 'cobro-f-idempotente-1').send({
+      facturaId: 'f-idempotente', monto: 100, metodoPago: 'SINPE',
+    });
+    expectApi(primero, 200, 'primer cobro');
+    expectApi(repetido, 200, 'reintento seguro');
+    expect(repetido.body.repetido).toBe(true);
+    expect(repetido.body.pago.id).toBe(primero.body.pago.id);
+    expect(repetido.body.saldo).toBe(200);
+    const hist = await como(request(app).get('/api/facturas/f-idempotente/pagos'));
+    expect(hist.body.pagos).toHaveLength(1);
+    expect(hist.body.pagado).toBe(100);
+  });
+
+  it('rechaza reutilizar una llave para un pago diferente', async () => {
+    const res = await como(request(app).post('/api/pagos')).set('Idempotency-Key', 'cobro-f-idempotente-1').send({
+      facturaId: 'f-idempotente', monto: 50, metodoPago: 'Efectivo',
+    });
+    expectApi(res, 409, 'llave reutilizada con otra carga');
   });
 });

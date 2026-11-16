@@ -19,6 +19,7 @@ import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ResumenDelDia from '../../src/components/operaciones/ResumenDelDia';
 import BodegaAdmin from '../../src/components/operaciones/BodegaAdmin';
+import { ETIQUETA_TIPO_DIFERENCIA } from '../../src/lib/opcionesRecepcion';
 import type { User } from '../../src/types';
 
 const USUARIO: User = {
@@ -260,5 +261,45 @@ describe('BodegaAdmin dirigido por el shell', () => {
     await userEvent.setup().click(boton);
     // No cambia sola: avisa al shell, que es quien sabe qué fila marcar.
     expect(onVista).toHaveBeenCalledWith('control');
+  });
+
+  it('la tarjeta de diferencia usa el rótulo canónico y nunca acusa', async () => {
+    // El rótulo de esta tarjeta estaba hardcodeado y escrito en tres copias
+    // distintas (tablero, BodegaAdmin y un mockup), así que cambiarlo en una no
+    // cambiaba las otras. El test abre los dos caminos que dibuja BodegaAdmin y
+    // falla si cualquiera vuelve al texto viejo.
+    mockFetch({
+      '/api/bodega/stock': STOCK_BODEGA,
+      '/api/logistica/tablero': { guias: [] },
+      '/api/operaciones/recepciones': [{
+        id: 'rec-1',
+        fechaRecepcion: '2026-10-01T12:00:00.000Z',
+        cantidadEsperada: 100,
+        cantidadRecibida: 60,
+        diferencia: 40,
+        motivoDiferencia: null,
+        responsableRecepcion: 'Encargado Test',
+        tipoDiferencia: 'alerta',
+        esPosibleRobo: true,
+      }],
+      '/api/etiquetas': [],
+    });
+    const { container } = render(
+      <BodegaAdmin
+        currentUser={USUARIO}
+        inventario={INVENTARIO}
+        movimientos={MOVIMIENTOS}
+        onRefresh={() => {}}
+        vista="control"
+        onVista={vi.fn()}
+      />,
+    );
+
+    const titulo = await screen.findByText(ETIQUETA_TIPO_DIFERENCIA.alerta);
+    expect(titulo).toBeTruthy();
+    // El hecho sigue visible: el detalle trae el conteo.
+    expect(container.textContent).toContain('40');
+    // Ningún texto de la tarjeta puede acusar.
+    expect(container.textContent).not.toMatch(/robo|robado|steal/i);
   });
 });

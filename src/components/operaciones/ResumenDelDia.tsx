@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Egg, Truck, Package, AlertTriangle, Activity } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import type { User } from '../../types';
+import SaludDelNegocio, { operativoDe, type SaludNegocio } from '../SaludDelNegocio';
+import { sessionHeaders } from '../../lib/session';
 
 /**
  * El primer grupo del hub de Operaciones: cómo está la operación hoy.
@@ -21,34 +23,9 @@ import type { User } from '../../types';
  * `enTransito` no existía en ningún payload.
  */
 
-/** Lo que se lee del endpoint. Todo número o nada. */
-type Operativo = {
-  cartonesProducidos: number;
-  stockBodegaCentral: number;
-  rutasActivas: number;
-  desperdiciosHoy: number;
-  avesVivas: number;
-};
-
-const OPERATIVO_NUMERICO = [
-  'cartonesProducidos', 'stockBodegaCentral', 'rutasActivas', 'desperdiciosHoy', 'totalAvesVivas',
-] as const;
-
-const operativoDe = (d: Record<string, unknown>): Operativo | null => {
-  if (OPERATIVO_NUMERICO.some(k => typeof d[k] !== 'number' || !Number.isFinite(d[k] as number))) {
-    return null;
-  }
-  return {
-    cartonesProducidos: d.cartonesProducidos as number,
-    stockBodegaCentral: d.stockBodegaCentral as number,
-    rutasActivas: d.rutasActivas as number,
-    desperdiciosHoy: d.desperdiciosHoy as number,
-    avesVivas: d.totalAvesVivas as number,
-  };
-};
-
-export default function ResumenDelDia({ currentUser: _currentUser }: { currentUser: User }) {
-  const [operativo, setOperativo] = useState<Operativo | null>(null);
+export default function ResumenDelDia({ currentUser, onNavigate }: { currentUser: User; onNavigate?: (id: string) => void }) {
+  const [operativo, setOperativo] = useState<SaludNegocio | null>(null);
+  const [guias, setGuias] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,15 +33,22 @@ export default function ResumenDelDia({ currentUser: _currentUser }: { currentUs
     setCargando(true);
     setError(null);
     try {
-      const res = await fetch('/api/dashboard/enterprise');
+      const [res, guiasRes] = await Promise.all([
+        fetch('/api/dashboard/enterprise', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/logistica/guias', { headers: sessionHeaders(currentUser.id) }).catch(() => null),
+      ]);
       if (!res.ok) throw new Error(`El resumen no respondió (${res.status})`);
       setOperativo(operativoDe(await res.json()));
+      if (guiasRes?.ok) {
+        const data = await guiasRes.json();
+        setGuias(Array.isArray(data) ? data : []);
+      } else setGuias([]);
     } catch (e: any) {
       setError(e?.message || 'No se pudo cargar el resumen del día.');
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [currentUser.id]);
 
   useEffect(() => { void cargar(); }, [cargar]);
 
@@ -99,38 +83,47 @@ export default function ResumenDelDia({ currentUser: _currentUser }: { currentUs
     );
   }
 
-  const o = operativo;
-  const tarjetas = [
-    { label: 'Producción hoy', value: o.cartonesProducidos, unidad: 'cartones', icon: Egg, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
-    { label: 'En bodega central', value: o.stockBodegaCentral, unidad: 'cartones', icon: Package, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200' },
-    { label: 'Aves vivas', value: o.avesVivas, unidad: 'aves', icon: Activity, color: 'text-teal-600', bg: 'bg-teal-50', border: 'border-teal-200' },
-    { label: 'Rutas activas', value: o.rutasActivas, unidad: 'rutas', icon: Truck, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' },
-    { label: 'Desperdicios (7 días)', value: o.desperdiciosHoy, unidad: 'registros', icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' },
-  ];
-
   return (
     <div className="space-y-4 animate-in fade-in" data-testid="operaciones-resumen">
-      <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-        La operación de hoy, en una pantalla. Los números que mueven plata están en
-        {' '}<strong>Finanzas</strong>; los que mueven cartón, en los grupos de al lado.
-      </p>
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
-        {tarjetas.map(t => (
-          <div key={t.label} className={`${t.bg} ${t.border} border rounded-xl p-4 flex items-center gap-3`}>
-            <div className={`${t.color} p-2 rounded-lg bg-white/60`}><t.icon className="w-5 h-5" /></div>
-            <div className="min-w-0">
-              <p className={`text-2xl font-black ${t.color}`}>{Number(t.value).toLocaleString('es-CR')}</p>
-              <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">{t.label}</p>
-              <p className="text-[11px] text-neutral-400">{t.unidad}</p>
-            </div>
-          </div>
-        ))}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div><h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Operación de hoy</h2>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Producción, bodega y estado de las guías en una vista.</p></div>
+        <button onClick={() => void cargar()} className="rounded-lg border px-3 py-2 text-sm font-semibold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>Actualizar</button>
       </div>
-      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-        Los cinco números salen de <code>/api/dashboard/enterprise</code>, el mismo que alimenta
-        {' '}<strong>Finanzas › Resumen</strong> con la Salud del Negocio. Si falta alguno, el bloque se
-        oculta en vez de pintar cero.
-      </p>
+      <SaludDelNegocio salud={operativo} variante="operaciones" />
+      <div className="grid grid-cols-1 xl:grid-cols-[1.7fr_1fr] gap-4">
+        <section className="overflow-hidden rounded-2xl border" style={{ borderColor: 'var(--border-default)', background: 'var(--bg-card)' }}>
+          <header className="flex items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: 'var(--border-default)' }}>
+            <div><h3 className="font-bold" style={{ color: 'var(--text-primary)' }}>Guías de despacho</h3><p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Carga, venta documentada y estado de cada ruta.</p></div>
+            <button onClick={() => onNavigate?.('despacho-guias')} className="text-sm font-semibold" style={{ color: 'var(--text-link)' }}>Abrir guías</button>
+          </header>
+          {guias.length === 0 ? <div className="p-6 text-sm" style={{ color: 'var(--text-muted)' }}>No hay guías para mostrar.</div> : (
+            <div className="divide-y" style={{ borderColor: 'var(--border-default)' }}>
+              {guias.slice(0, 6).map((g: any) => {
+                const estado = g.estadoLogico || g.estado || 'Sin estado';
+                const activa = !String(estado).toLowerCase().includes('cerrada');
+                const tienePesoKg = g.totalKg != null;
+                const cargado = Number(tienePesoKg ? g.totalKg : g.totalCartones ?? 0);
+                const vendido = Number(g.totalVendidoKg ?? g.totalVendido ?? 0);
+                return <button key={g.id} onClick={() => onNavigate?.('despacho-guias')} className="flex w-full flex-wrap items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-[var(--bg-muted)]">
+                  <div className="min-w-[180px]"><div className="font-semibold" style={{ color: 'var(--text-primary)' }}>{g.consecutivo || 'Guía de despacho'} · {g.camionNombre || 'Camión sin asignar'}</div><div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{g.rutaNombre || g.ruta || (g.camionNombre ? `Ruta de ${g.camionNombre}` : 'Ruta sin asignar')} · {g.fecha ? new Date(g.fecha).toLocaleDateString('es-CR') : 'fecha pendiente'}</div></div>
+                  <div className="flex flex-wrap items-center gap-4 text-sm"><span><b>{cargado.toLocaleString('es-CR')} {tienePesoKg ? 'kg' : 'ct'}</b><small className="block" style={{ color: 'var(--text-muted)' }}>{tienePesoKg ? 'cargados' : 'carga histórica'}</small></span><span><b>{vendido.toLocaleString('es-CR')}{tienePesoKg ? ' kg' : ''}</b><small className="block" style={{ color: 'var(--text-muted)' }}>{tienePesoKg ? 'vendidos' : 'venta en unidad histórica'}</small></span><span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: activa ? 'var(--status-info-soft)' : 'var(--status-neutral-soft)', color: 'var(--text-primary)' }}>{estado}</span></div>
+                </button>;
+              })}
+            </div>
+          )}
+        </section>
+        <section className="rounded-2xl border p-5" style={{ borderColor: 'var(--border-default)', background: 'var(--bg-card)' }}>
+          <h3 className="font-bold" style={{ color: 'var(--text-primary)' }}>Qué revisar</h3>
+          <p className="text-xs mt-1 mb-4" style={{ color: 'var(--text-muted)' }}>Elementos operativos derivados de guías y alertas disponibles.</p>
+          <div className="space-y-3">
+            {guias.filter((g: any) => /CerradaConDiferencia|diferencia/i.test(String(g.estadoLogico || g.estado || ''))).slice(0, 3).map((g: any) => <div key={g.id} className="rounded-xl border p-3" style={{ borderColor: 'var(--status-warning)', background: 'var(--status-warning-soft)' }}><b className="text-sm">Diferencia por revisar</b><p className="text-xs mt-1">{g.consecutivo || 'Guía'} · {g.camionNombre || 'camión'} requiere seguimiento.</p></div>)}
+            {guias.filter((g: any) => !/cerrada/i.test(String(g.estadoLogico || g.estado || ''))).length > 0 ? <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border-default)', background: 'var(--bg-muted)' }}><b className="text-sm">{guias.filter((g: any) => !/cerrada/i.test(String(g.estadoLogico || g.estado || ''))).length} guía(s) en proceso</b><p className="text-xs mt-1">Al terminar la ruta, registra venta, retorno aceptado y merma para cuadrar custodia.</p></div> : null}
+            {guias.filter((g: any) => /CerradaConDiferencia|diferencia/i.test(String(g.estadoLogico || g.estado || ''))).length === 0 && guias.filter((g: any) => !/cerrada/i.test(String(g.estadoLogico || g.estado || ''))).length === 0 && <div className="rounded-xl p-3 text-sm" style={{ background: 'var(--status-success-soft)', color: 'var(--text-primary)' }}>No hay guías activas ni diferencias reportadas.</div>}
+            <button onClick={() => onNavigate?.('bodega-entradas')} className="w-full rounded-lg border px-3 py-2 text-sm font-semibold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-link)' }}>Revisar entradas de bodega</button>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

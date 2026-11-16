@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1060" viewBox="0 0 1440 1060">
+  <defs>
+    <style>
+      .bg{fill:#f4f5f7}.card{fill:#fff;stroke:#d9dde5;stroke-width:1.3}.ink{fill:#131a34}.muted{fill:#5b6479}.blue{fill:#4c6598}.soft{fill:#e8eef8}.line{stroke:#d9dde5;stroke-width:1}.small{font:14px Arial,sans-serif}.body{font:16px Arial,sans-serif}.title{font:700 24px Arial,sans-serif}.h3{font:700 18px Arial,sans-serif}.bold{font-weight:700}.caps{font:700 11px Arial,sans-serif;letter-spacing:1px}.white{fill:#fff}
+    </style>
+  </defs>
+  <rect class="bg" width="1440" height="1060"/>
+  <text x="52" y="40" class="small muted">Operaciones y Bodegas　›　Despacho y Ruta</text>
+  <text x="52" y="82" class="title ink">Despacho y Ruta</text>
+  <text x="52" y="109" class="body muted">Prepara las salidas, sigue las rutas y revisa las entregas desde tres espacios claros.</text>
+  <rect x="52" y="132" width="1336" height="58" rx="14" class="card"/>
+  <rect x="62" y="140" width="250" height="42" rx="10" class="blue"/>
+  <text x="88" y="167" class="body bold white">1　Preparar</text>
+  <text x="400" y="167" class="body bold muted">2　En ruta</text>
+  <text x="724" y="167" class="body bold muted">3　Entregas y ventas</text>
+  <rect x="1167" y="143" width="198" height="36" rx="9" class="blue"/>
+  <text x="1194" y="166" class="small bold white">＋ Nueva guía</text>
+
+  <text x="52" y="229" class="h3 ink">Preparar la salida</text>
+  <text x="52" y="253" class="small muted">Guías de despacho y configuración de flota en el mismo paso de trabajo.</text>
+  <rect x="52" y="274" width="865" height="300" rx="16" class="card"/>
+  <text x="78" y="311" class="h3 ink">Salidas y guías</text>
+  <text x="78" y="336" class="small muted">Revisa lo próximo y abre una guía para completar carga o despacho.</text>
+  <rect x="78" y="356" width="813" height="42" rx="8" fill="#eef1f6"/>
+  <text x="95" y="382" class="caps muted">GUÍA / RUTA</text><text x="460" y="382" class="caps muted">CAMIÓN</text><text x="650" y="382" class="caps muted">ESTADO</text><text x="805" y="382" class="caps muted">ACCIÓN</text>
+  <line x1="78" y1="408" x2="891" y2="408" class="line"/>
+  <text x="95" y="438" class="body bold ink">GD-2026-0118　Ruta San Ramón</text><text x="460" y="438" class="small ink">Camión Ruta 1</text>
+  <rect x="646" y="420" width="106" height="27" rx="13" fill="#f8edc8"/><text x="662" y="438" class="small bold ink">Por cargar</text><text x="805" y="438" class="small bold blue">Abrir →</text>
+  <line x1="78" y1="461" x2="891" y2="461" class="line"/>
+  <text x="95" y="491" class="body bold ink">GD-2026-0119　Ruta Naranjo</text><text x="460" y="491" class="small ink">Camión Ruta 2</text>
+  <rect x="646" y="473" width="106" height="27" rx="13" fill="#dcefe5"/><text x="662" y="491" class="small bold ink">Lista</text><text x="805" y="491" class="small bold blue">Abrir →</text>
+  <line x1="78" y1="514" x2="891" y2="514" class="line"/>
+  <text x="78" y="550" class="small bold blue">Ver todas las guías　→</text>
+
+  <rect x="941" y="274" width="447" height="300" rx="16" class="card"/>
+  <text x="969" y="311" class="h3 ink">Flota y rutas</text>
+  <text x="969" y="337" class="small muted">Asigna camiones y mantiene las rutas listas.</text>
+  <rect x="969" y="359" width="391" height="66" rx="11" fill="#f4f5f7"/>
+  <circle cx="1002" cy="392" r="17" class="soft"/><text x="996" y="398" class="small bold blue">2</text><text x="1032" y="388" class="body bold ink">Camiones activos</text><text x="1032" y="408" class="small muted">Disponibles para asignar</text>
+  <rect x="969" y="438" width="391" height="66" rx="11" fill="#f4f5f7"/>
+  <circle cx="1002" cy="471" r="17" class="soft"/><text x="996" y="477" class="small bold blue">4</text><text x="1032" y="467" class="body bold ink">Rutas configuradas</text><text x="1032" y="487" class="small muted">Nombres y zonas asignadas</text>
+  <rect x="969" y="520" width="391" height="36" rx="9" class="soft"/><text x="988" y="544" class="small bold blue">Administrar flota y rutas　→</text>
+
+  <rect x="52" y="600" width="1336" height="104" rx="16" fill="#e8eef8"/>
+  <text x="78" y="636" class="h3 ink">Las otras dos vistas</text>
+  <text x="78" y="664" class="body ink"><tspan class="bold">En ruta:</tspan> mapa/estado de guías activas, alertas de retraso y acceso rápido al detalle.</text>
+  <text x="752" y="664" class="body ink"><tspan class="bold">Entregas y ventas:</tspan> caja de ruta, ventas registradas, facturas y cierre del vendedor.</text>
+
+  <text x="52" y="756" class="title ink">Precios pasa a Administración</text>
+  <text x="52" y="782" class="small muted">Admin　›　Precios y negociación · Solo Admin puede editar los límites autorizados.</text>
+  <rect x="52" y="804" width="1336" height="218" rx="16" class="card"/>
+  <rect x="52" y="804" width="250" height="218" rx="16" fill="#eef1f6"/>
+  <text x="80" y="842" class="small bold muted">PRODUCTOS</text>
+  <rect x="67" y="857" width="220" height="42" rx="9" class="blue"/><text x="88" y="884" class="small bold white">Huevos y derivados</text>
+  <text x="88" y="925" class="small ink">Aves y subproductos</text><text x="88" y="963" class="small ink">Listas vigentes</text>
+  <text x="333" y="842" class="h3 ink">Huevos - Grande</text><text x="333" y="868" class="small muted">Precio negociable por kilogramo (₡/kg)</text>
+  <rect x="333" y="888" width="270" height="72" rx="11" fill="#f4f5f7" stroke="#d9dde5"/><text x="351" y="914" class="caps muted">PRECIO DE LISTA</text><text x="351" y="944" class="h3 ink">₡ 2 400</text>
+  <rect x="621" y="888" width="270" height="72" rx="11" fill="#f4f5f7" stroke="#d9dde5"/><text x="639" y="914" class="caps muted">PISO AUTORIZADO</text><text x="639" y="944" class="h3 ink">₡ 2 200</text>
+  <rect x="909" y="888" width="270" height="72" rx="11" fill="#f4f5f7" stroke="#d9dde5"/><text x="927" y="914" class="caps muted">TECHO AUTORIZADO</text><text x="927" y="944" class="h3 ink">₡ 2 500</text>
+  <rect x="1197" y="905" width="162" height="42" rx="9" class="blue"/><text x="1220" y="932" class="small bold white">Editar rango</text>
+  <text x="333" y="991" class="small muted">El vendedor puede negociar dentro del piso y techo; fuera del rango requiere autorización.</text>
+</svg>

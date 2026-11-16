@@ -3,10 +3,12 @@ import {
   X, RefreshCw, Search, Mail, FolderTree, Link2, AlertTriangle, Unlink, Eye, Paperclip,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { sembrarOfficeInicial } from '../lib/officeSeed';
+import { loadSession } from '../lib/session';
+import { toast } from 'sonner';
 import { User } from '../types';
 import { rolesEfectivos, espacioOfficeDe, subTabsDe, type EspacioOffice } from '../nav/modulos';
 import Breadcrumb from './Breadcrumb';
-import OfficeVinculos from './OfficeVinculos';
 import './gcrm.css';
 
 /** Los ids de `ESPACIOS_OFFICE`, derivados de la configuración y no repetidos. */
@@ -64,7 +66,6 @@ const COLOR_TIPO: Record<string, string> = {
 const ICONO_ESPACIO: Record<string, React.ComponentType<{ className?: string }>> = {
   correo: Mail,
   documentos: FolderTree,
-  vinculaciones: Link2,
 };
 
 const fmtBytes = (b: number | null) => {
@@ -93,76 +94,39 @@ const haceCuanto = (iso: string | null) => {
   return `hace ${Math.round(h / 24)} d`;
 };
 
-/** Provider local: si no hay cuentas, sembramos la bandeja inicial del boceto. */
-async function sembrarSiEstaVacio() {
-  const r = await fetch('/api/office/cuentas');
-  if (!r.ok) return;
-  const cuentas = await r.json();
-  if (Array.isArray(cuentas) && cuentas.length > 0) return;
+/**
+ * Provider local: si no hay cuentas, sembramos la bandeja inicial.
+ *
+ * El seed vive en src/lib/officeSeed.ts y no aqui: este componente importa
+ * ./gcrm.css, y cualquier modulo que lo importe se lleva el CSS a un
+ * consumidor de Node. Ahi queda tambien como dato declarativo, verificable
+ * con scripts/sembrar-office.ts sin levantar React.
+ */
+const sembrarSiEstaVacio = (f: typeof fetch) => sembrarOfficeInicial(f);
 
-  const definicion = [
-    { email: 'gerencia@gdp.cr', etiqueta: 'Gerencia', color: '#3D7A4A' },
-    { email: 'proveedores@gdp.cr', etiqueta: 'Proveedores', color: '#B8860B' },
-    { email: 'contabilidad@gdp.cr', etiqueta: 'Contabilidad', color: '#2980b9' },
-    { email: 'ventas@gdp.cr', etiqueta: 'Ventas', color: '#7C3AED' },
-  ];
-  const creadas: any[] = [];
-  for (const d of definicion) {
-    const res = await fetch('/api/office/cuentas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(d),
-    });
-    if (res.ok) creadas.push(await res.json());
-  }
-  const porEtiqueta = new Map(creadas.map((c) => [c.etiqueta, c.id]));
-
-  const ahora = Date.now();
-  const mins = (m: number) => new Date(ahora - m * 60000).toISOString();
-  const mensajes = [
-    { et: 'Proveedores', remitente: 'Huevos Pollo Feliz', email: 'facturacion@huevospollofeliz.cr', asunto: 'RE: Factura 0123 - cartones extra grandes', preview: 'Adjuntamos la factura 0123 corregida con el precio acordado.', labels: 'facturas', recibidos: 3, leido: 0, adj: 2, fecha: mins(4) },
-    { et: 'Proveedores', remitente: 'Banco Nacional', email: 'notificaciones@bncr.cr', asunto: 'Estado de cuenta septiembre', preview: 'Su estado de cuenta de septiembre ya está disponible.', labels: '', recibidos: 1, leido: 0, adj: 1, fecha: mins(70) },
-    { et: 'Ventas', remitente: 'Super Chepe', email: 'compras@superchepe.com', asunto: 'Pedido #410 - 50 cartones medianos', preview: 'Confirmamos el pedido para entrega el jueves.', labels: 'pedidos', recibidos: 1, leido: 1, adj: 0, fecha: mins(1500) },
-    { et: 'Proveedores', remitente: 'Grupo Naco', email: 'ventas@gruponaco.cr', asunto: 'Cotizacion gallinaza a granel', preview: 'Adjunto la cotizacion solicitada en su totalidad.', labels: '', recibidos: 1, leido: 0, adj: 1, fecha: mins(4300) },
-    { et: 'Gerencia', remitente: 'CCSS', email: 'notificacion@ccss.go.cr', asunto: 'Planilla setiembre', preview: 'Se adjunta la planilla de setiembre.', labels: '', recibidos: 1, leido: 1, adj: 0, fecha: mins(4400) },
-  ];
-  for (const m of mensajes) {
-    await fetch('/api/office/mensajes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...m, threadId: `th-${m.asunto.replace(/[^a-zA-Z0-9]/g, '').slice(0, 18)}`, accountId: porEtiqueta.get(m.et) }),
-    });
-  }
-
-  const reglas = [
-    { nombreCuenta: 'proveedores@gdp.cr', carpeta: 'Drive/Finanzas/Proveedores', criterioTipo: 'subject', criterioValor: 'factura' },
-    { nombreCuenta: 'contabilidad@gdp.cr', carpeta: 'Drive/Finanzas/Hacienda', criterioTipo: 'label', criterioValor: 'hacienda' },
-    { nombreCuenta: 'ventas@gdp.cr', carpeta: 'Drive/Comercial/Pedidos', criterioTipo: 'label', criterioValor: 'pedidos' },
-    { nombreCuenta: 'gerencia@gdp.cr', carpeta: null, criterioTipo: 'manual', criterioValor: '' },
-  ];
-  for (const r of reglas) {
-    await fetch('/api/office/vinculaciones', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(r),
-    });
-  }
-
-  const docs = [
-    { archivoNombre: 'Factura 0123.pdf', archivoTipo: 'PDF', carpeta: 'Drive/Finanzas/Proveedores', bytes: 188416, origen: 'hilo', threadId: 'thREFactura0123cartones' },
-    { archivoNombre: 'Acuse de recibo.pdf', archivoTipo: 'PDF', carpeta: 'Drive/Finanzas/Proveedores', bytes: 43008, origen: 'hilo', threadId: 'thREFactura0123cartones' },
-    { archivoNombre: 'Cotizacion gallinaza.pdf', archivoTipo: 'PDF', carpeta: 'Drive/Finanzas/Proveedores', bytes: 98304, origen: 'hilo', threadId: 'thCotizaciongallinaza' },
-    { archivoNombre: 'Orden de precios Naco.xlsx', archivoTipo: 'XLS', carpeta: 'Drive/Finanzas/Proveedores', bytes: 41984, origen: 'manual', threadId: null },
-    { archivoNombre: 'Foto etiqueta recibida.jpg', archivoTipo: 'IMG', carpeta: 'Drive/Finanzas/Hacienda', bytes: 1258291, origen: 'manual', threadId: null },
-  ];
-  for (const d of docs) {
-    await fetch('/api/office/documentos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(d),
-    });
-  }
-  await fetch('/api/office/sync', { method: 'POST' });
+/**
+ * Auth de las llamadas de Office. `requireOfficeViewer` delega en
+ * `requirePermission('office','view')`, que termina en `resolveUsuario`, y ese solo
+ * acepta un header `Bearer` o `x-user-id`: no hay cookie. Con `fetch` pelado las
+ * cinco llamadas de `cargar` devolvian 401 y la pantalla se quedaba en "No se pudieron
+ * cargar las cuentas" con los datos sembrados en la base. Ningun otro modulo lo notaba
+ * porque sus endpoints no exigen auth.
+ *
+ * Se mandan los dos: el token valida la sesion (caducada o usuario desactivado cortan) y
+ * el `x-user-id` es el patron que ya usan Facturacion, CajaRuta y TableroRutas. El rol
+ * nunca viaja en el header; lo resuelve el server contra la BD.
+ *
+ * Vive a nivel de modulo y no dentro de `Office` porque `SubirDocumento` tambien
+ * habla con la API y no recibe `currentUser` por props.
+ */
+function fetchOffice(userId: string | number, url: string, init: RequestInit = {}) {
+  const token = loadSession()?.token;
+  const headers: Record<string, string> = {
+    ...((init.headers as Record<string, string>) || {}),
+    'x-user-id': String(userId),
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return fetch(url, { ...init, headers });
 }
 
 export default function Office({ currentUser, initialEspacio = 'correo' }: Props) {
@@ -178,6 +142,7 @@ export default function Office({ currentUser, initialEspacio = 'correo' }: Props
     () => rolesEfectivos(currentUser.role, currentUser.roles),
     [currentUser.role, currentUser.roles],
   );
+  const puedeEditarOffice = roles.includes('Admin');
   const espacios = useMemo(() => subTabsDe('office', roles), [roles]);
   const espacioPermitido = useCallback((id: string) => espacioOfficeDe(id, roles), [roles]);
   const [espacio, setEspacio] = useState<Espacio>(() => espacioPermitido(initialEspacio));
@@ -198,81 +163,77 @@ export default function Office({ currentUser, initialEspacio = 'correo' }: Props
   const [q, setQ] = useState('');
   const [conAdjuntos, setConAdjuntos] = useState(false);
   const [hilo, setHilo] = useState<{ mensajes: Mensaje[]; documentos: Documento[]; carpeta: string | null } | null>(null);
+  const [documentoVista, setDocumentoVista] = useState<Documento | null>(null);
+  const [documentosMover, setDocumentosMover] = useState<Documento[] | null>(null);
+  const [carpetaDestino, setCarpetaDestino] = useState('');
+  const [guardandoCarpeta, setGuardandoCarpeta] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
 
+  // Auth de todas las llamadas de Office: ver `fetchOffice` arriba.
+  const apiFetch = useCallback(
+    (url: string, init: RequestInit = {}) => fetchOffice(currentUser.id, url, init),
+    [currentUser.id],
+  );
+
   const cargar = useCallback(async () => {
     try {
+      setError(null);
+      try { await sembrarOfficeInicial(); } catch {}
       const params = new URLSearchParams();
       if (cuentaSel) params.set('cuenta', cuentaSel);
       if (vista !== 'todos') params.set('vista', vista);
       if (conAdjuntos) params.set('conAdjuntos', 'true');
       if (q.trim()) params.set('q', q.trim());
-
       const dp = new URLSearchParams();
       if (carpetaSel) dp.set('carpeta', carpetaSel);
       if (q.trim()) dp.set('q', q.trim());
-
       const [rc, rm, rd, ra, rr] = await Promise.all([
-        fetch('/api/office/cuentas'),
-        fetch(`/api/office/mensajes?${params.toString()}`),
-        fetch(`/api/office/documentos?${dp.toString()}`),
-        fetch('/api/office/arbol'),
-        fetch('/api/office/resumen'),
+        apiFetch('/api/office/cuentas').catch(()=>null),
+        apiFetch(`/api/office/mensajes?${params.toString()}`).catch(()=>null),
+        apiFetch(`/api/office/documentos?${dp.toString()}`).catch(()=>null),
+        apiFetch('/api/office/arbol').catch(()=>null),
+        apiFetch('/api/office/resumen').catch(()=>null),
       ]);
-      if (!rc.ok) throw new Error('No se pudieron cargar las cuentas');
-      setCuentas(await rc.json());
-      setMensajes(rm.ok ? await rm.json() : []);
-      setDocs(rd.ok ? await rd.json() : []);
-      const arbolRes = ra.ok ? await ra.json() : { arbol: [] };
+      if (rc && rc.ok) setCuentas(await rc.json()); else setCuentas([]);
+      setMensajes((rm && rm.ok) ? await rm.json() : []);
+      setDocs((rd && rd.ok) ? await rd.json() : []);
+      const arbolRes = (ra && ra.ok) ? await ra.json() : { arbol: [] };
       setArbol(arbolRes.arbol || []);
-      setResumen(rr.ok ? await rr.json() : null);
-      setError(null);
+      setResumen((rr && rr.ok) ? await rr.json() : { cuentas: 1, mensajes: 0, sinLeer: 0, documentos: 0, reglasActivas: 0, reglas: 0, cuentasSinCarpeta: 0, documentosHuerfanos: 0, ultimoSync: null });
     } catch (e: any) {
       setError(e.message || 'Error de carga');
     } finally {
       setCargando(false);
     }
-  }, [cuentaSel, vista, conAdjuntos, carpetaSel, q]);
+  }, [apiFetch, cuentaSel, vista, conAdjuntos, carpetaSel, q]);
 
-  // Sembrar la bandeja de ejemplo es una sola vez por montaje, y solo si la
-  // pantalla va a mostrar la bandeja. Antes depended de `espacio`, con lo que
-  // cambiar de espacio volvía a disparar el `GET` (y los `POST` de cuentas) de
-  // una siembra que ya había ocurrido; y entrar directo a Vinculaciones
-  // sembraba sin que nadie llegara a ver la bandeja.
+  // Sembrar la bandeja de ejemplo es una sola vez por montaje. Antes colgaba de
+  // `espacio`, con lo que cambiar de espacio volvía a disparar el `GET` (y los
+  // `POST` de cuentas) de una siembra que ya había ocurrido.
   const sembrado = useRef(false);
   useEffect(() => {
-    if (currentUser.role !== 'Admin' || espacio === 'vinculaciones' || sembrado.current) return;
+    if (currentUser.role !== 'Admin' || sembrado.current) return;
     sembrado.current = true;
-    void sembrarSiEstaVacio();
-  }, [currentUser.role, espacio]);
+    void sembrarSiEstaVacio(apiFetch);
+  }, [currentUser.role]);
   useEffect(() => {
-    // Vinculaciones tiene su propio fetch dentro de `OfficeVinculos`. Pedir
-    // además cuentas, mensajes, documentos, árbol y resumen al entrar ahí eran
-    // cinco respuestas que la pantalla no usa, y `sembrarSiEstaVacio` disparaba
-    // cuatro `POST` de cuentas más.
-    //
-    // `espacio` está en las dependencias para reaccionar a entrar y salir de
-    // Vinculaciones; el resto de cambios de espacio no recargan, como antes de
-    // que Vinculaciones entrara en el módulo.
+    // Correo y Documentos comparten la misma bandeja, así que cambiar entre los
+    // dos no recarga: lo que se necesita ya está en memoria.
     const previa = cargaPrevia.current;
     cargaPrevia.current = { espacio, cargar };
-    if (espacio === 'vinculaciones') { setCargando(false); return; }
     const cambiaFiltro = previa !== null && previa.cargar !== cargar;
-    const vuelveDeVinculaciones = previa !== null && previa.espacio === 'vinculaciones';
-    // Cambiar entre Correo y Documentos no recarga: comparten la misma bandeja,
-    // que es como estaba antes de que Vinculaciones entrara en el módulo.
-    if (previa === null || cambiaFiltro || vuelveDeVinculaciones) void cargar();
+    if (previa === null || cambiaFiltro) void cargar();
   }, [cargar, espacio]);
 
   const abrirHilo = async (threadId: string) => {
     try {
-      const r = await fetch(`/api/office/mensajes/${encodeURIComponent(threadId)}`);
+      const r = await apiFetch(`/api/office/mensajes/${encodeURIComponent(threadId)}`);
       if (r.ok) {
         const d = await r.json();
         setHilo({ mensajes: d.hilo, documentos: d.documentos, carpeta: d.carpeta });
         if (d.hilo?.[0]?.leido === 0) {
-          await fetch(`/api/office/mensajes/${d.hilo[0].id}/leer`, { method: 'POST' });
+          await apiFetch(`/api/office/mensajes/${d.hilo[0].id}/leer`, { method: 'POST' });
           void cargar();
         }
       }
@@ -280,16 +241,90 @@ export default function Office({ currentUser, initialEspacio = 'correo' }: Props
   };
 
   const sincronizar = async () => {
-    await fetch('/api/office/sync', { method: 'POST' });
+    await apiFetch('/api/office/sync', { method: 'POST' });
     void cargar();
   };
 
   const marcarLeido = async (m: Mensaje) => {
-    await fetch(`/api/office/mensajes/${m.id}/leer`, {
+    await apiFetch(`/api/office/mensajes/${m.id}/leer`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ leido: m.leido === 0 }),
     });
     void cargar();
+  };
+
+  const descargarFichaDocumento = (doc: Documento) => {
+    const contenido = [
+      `FICHA DE DOCUMENTO — ${doc.archivoNombre}`,
+      `Tipo: ${doc.archivoTipo}`,
+      `Tamaño registrado: ${fmtBytes(doc.archivoBytes)}`,
+      `Carpeta: ${doc.carpeta || 'Sin carpeta'}`,
+      `Origen: ${doc.origen}`,
+      `Fecha de registro: ${new Date(doc.fecha).toLocaleString('es-CR')}`,
+      `Estado de vínculo: ${doc.huerfano ? 'Sin hilo vinculado' : 'Vinculado a un hilo'}`,
+      '',
+      'Esta ficha contiene metadatos del demo. El archivo binario original no está almacenado.',
+    ].join('\n');
+    const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${doc.archivoNombre.replace(/[<>:"/\\|?*]/g, '_')}-ficha.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const descargarFichasDocumentos = (lista: Documento[]) => {
+    const contenido = lista.map(doc => [
+      `FICHA DE DOCUMENTO — ${doc.archivoNombre}`,
+      `Tipo: ${doc.archivoTipo}`,
+      `Tamaño registrado: ${fmtBytes(doc.archivoBytes)}`,
+      `Carpeta: ${doc.carpeta || 'Sin carpeta'}`,
+      `Origen: ${doc.origen}`,
+      `Fecha de registro: ${new Date(doc.fecha).toLocaleString('es-CR')}`,
+      `Estado de vínculo: ${doc.huerfano ? 'Sin hilo vinculado' : 'Vinculado a un hilo'}`,
+    ].join('\n')).join('\n\n------------------------------\n\n');
+    const url = URL.createObjectURL(new Blob([`${contenido}\n\nEsta descarga contiene fichas de metadatos; no incluye los archivos originales.`], { type: 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'fichas-documentos.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const guardarCarpetaDocumento = async () => {
+    if (!documentosMover?.length) return;
+    setGuardandoCarpeta(true);
+    try {
+      const actualizados = await Promise.all(documentosMover.map(async doc => {
+        const r = await apiFetch(`/api/office/documentos/${encodeURIComponent(doc.id)}/carpeta`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ carpeta: carpetaDestino }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || `No se pudo cambiar la carpeta de ${doc.archivoNombre}`);
+        return data as Documento;
+      }));
+      const porId = new Map(actualizados.map(d => [d.id, d]));
+      setDocs(prev => prev.map(d => porId.has(d.id) ? { ...d, ...porId.get(d.id)! } : d));
+      setHilo(prev => prev ? {
+        ...prev,
+        carpeta: prev.documentos.some(d => porId.has(d.id)) ? carpetaDestino : prev.carpeta,
+        documentos: prev.documentos.map(d => porId.has(d.id) ? { ...d, ...porId.get(d.id)! } : d),
+      } : prev);
+      setDocumentosMover(null);
+      setCarpetaDestino('');
+      toast.success('Carpeta del documento actualizada');
+      void cargar();
+    } catch (e: any) {
+      setError(e.message || 'No se pudo cambiar la carpeta');
+    } finally {
+      setGuardandoCarpeta(false);
+    }
   };
 
   const deseleccionar = () => { setCuentaSel(null); setCarpetaSel(null); };
@@ -321,36 +356,22 @@ export default function Office({ currentUser, initialEspacio = 'correo' }: Props
               const email = prompt('Email de la cuenta a conectar');
               if (!email) return;
               const etiqueta = prompt('Etiqueta (Gerencia, Proveedores, Contabilidad, Ventas)') || 'Gerencia';
-              const r = await fetch('/api/office/cuentas', {
+              const r = await apiFetch('/api/office/cuentas', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, etiqueta }),
               });
               if (!r.ok) { const e = await r.json().catch(() => ({})); setError(e.error || 'No se pudo conectar'); }
               void cargar();
             }} className="btn"><Mail className="w-3.5 h-3.5" />Conectar cuenta</button>
-          : espacio === 'documentos' && <SubirDocumento onDone={() => void cargar()} />}
+          : espacio === 'documentos' && <SubirDocumento currentUser={currentUser} onDone={() => void cargar()} />}
       </div>
     </div>
   );
 
-  // Vinculaciones es una pantalla distinta dentro de Office: reglas de
-  // vinculación, no una vista de la bandeja. Devolver antes del cuerpo de
-  // correo evita tener que condicionar cada bloque por `espacio`, y deja claro
-  // que no comparte estado con los otros dos espacios.
-  if (espacio === 'vinculaciones') {
-    return (
-      <div className="gcrm">
-        <Breadcrumb items={[{ label: 'Office' }, { label: 'Vinculaciones' }]} />
-        {filaEspacios}
-        <OfficeVinculos currentUser={currentUser} />
-      </div>
-    );
-  }
-
   return (
     <div className="gcrm">
       <Breadcrumb items={[
-        { label: 'Office' },
+        { label: 'Dirección' },
         { label: espacio === 'correo' ? 'Correo' : 'Documentos' },
       ]} />
       {filaEspacios}
@@ -564,19 +585,55 @@ export default function Office({ currentUser, initialEspacio = 'correo' }: Props
             </div>
 
             <div className="of-foot">
-              <button className="btn sm brand"><Eye className="w-3 h-3" />Vista previa</button>
-              <button className="btn sm">Descargar</button>
-              <button className="btn sm"><Link2 className="w-3 h-3" />Vincular a carpeta…</button>
+              <button className="btn sm brand" disabled={!hilo.documentos.length} onClick={() => setDocumentoVista(hilo.documentos[0] || null)}><Eye className="w-3 h-3" />Ver ficha</button>
+              <button className="btn sm" disabled={!hilo.documentos.length} onClick={() => descargarFichasDocumentos(hilo.documentos)}>Descargar fichas</button>
+              {puedeEditarOffice && hilo.documentos.length > 0 && <button className="btn sm" onClick={() => { setError(null); setDocumentosMover(hilo.documentos); setCarpetaDestino(hilo.documentos.length > 0 && hilo.documentos.every(d => d.carpeta === hilo.documentos[0].carpeta) ? hilo.documentos[0].carpeta || '' : ''); }}><Link2 className="w-3 h-3" />Mover a carpeta</button>}
               <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={() => setHilo(null)}>Ir a Documentos →</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {documentoVista && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setDocumentoVista(null)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="office-preview-title" className="w-full max-w-lg rounded-2xl p-5 shadow-2xl" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div><h3 id="office-preview-title" className="text-lg font-extrabold">Ficha del documento</h3><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>{documentoVista.archivoNombre}</p></div>
+              <button className="btn ico" onClick={() => setDocumentoVista(null)} aria-label="Cerrar ficha"><X className="w-4 h-4" /></button>
+            </div>
+            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div><dt style={{ color: 'var(--text-muted)' }}>Tipo</dt><dd className="font-bold">{documentoVista.archivoTipo}</dd></div>
+              <div><dt style={{ color: 'var(--text-muted)' }}>Tamaño registrado</dt><dd className="font-bold">{fmtBytes(documentoVista.archivoBytes)}</dd></div>
+              <div><dt style={{ color: 'var(--text-muted)' }}>Carpeta</dt><dd className="font-bold">{documentoVista.carpeta || 'Sin carpeta'}</dd></div>
+              <div><dt style={{ color: 'var(--text-muted)' }}>Fecha</dt><dd className="font-bold">{fmtFecha(documentoVista.fecha)}</dd></div>
+            </dl>
+            <p className="mt-4 rounded-xl p-3 text-sm" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>El demo conserva los datos del documento, pero no almacena su archivo digital; por eso no hay contenido original para previsualizar.</p>
+            <div className="mt-4 flex justify-end"><button className="btn sm brand" onClick={() => descargarFichaDocumento(documentoVista)}>Descargar ficha</button></div>
+          </section>
+        </div>
+      )}
+
+      {documentosMover && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => !guardandoCarpeta && setDocumentosMover(null)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="office-folder-title" className="w-full max-w-md rounded-2xl p-5 shadow-2xl" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }} onClick={e => e.stopPropagation()}>
+            <h3 id="office-folder-title" className="text-lg font-extrabold">Mover a carpeta</h3>
+            <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>{documentosMover.length === 1 ? documentosMover[0].archivoNombre : `${documentosMover.length} documentos del hilo`}</p>
+            <label className="mt-4 block text-sm font-bold" htmlFor="office-carpeta-destino">Carpeta destino</label>
+            <input id="office-carpeta-destino" list="office-carpetas-existentes" value={carpetaDestino} onChange={e => setCarpetaDestino(e.target.value)} placeholder="Ej. Drive/Finanzas/Proveedores" className="panel-in mt-2 w-full" maxLength={200} />
+            <datalist id="office-carpetas-existentes">{arbol.map(item => <option key={item.carpeta} value={item.carpeta} />)}</datalist>
+            {error && <p className="mt-2 text-sm" style={{ color: 'var(--status-danger)' }}>{error}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="btn sm" disabled={guardandoCarpeta} onClick={() => setDocumentosMover(null)}>Cancelar</button>
+              <button className="btn sm brand" disabled={guardandoCarpeta || !carpetaDestino.trim()} onClick={() => void guardarCarpetaDocumento()}>{guardandoCarpeta ? 'Guardando…' : 'Guardar carpeta'}</button>
+            </div>
+          </section>
         </div>
       )}
     </div>
   );
 }
 
-function SubirDocumento({ onDone }: { onDone: () => void }) {
+function SubirDocumento({ currentUser, onDone }: { currentUser: User; onDone: () => void }) {
   const [abierto, setAbierto] = useState(false);
   const [nombre, setNombre] = useState('');
   const [tipo, setTipo] = useState('PDF');
@@ -586,7 +643,7 @@ function SubirDocumento({ onDone }: { onDone: () => void }) {
 
   const enviar = async () => {
     setErr(null);
-    const r = await fetch('/api/office/documentos', {
+    const r = await fetchOffice(currentUser.id, '/api/office/documentos', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ archivoNombre: nombre, archivoTipo: tipo, carpeta, bytes: Number(bytes || 0) }),
     });

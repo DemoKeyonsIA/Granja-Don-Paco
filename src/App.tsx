@@ -1,48 +1,52 @@
 import React from "react";
-import { useState, useRef, useEffect, useMemo } from "react";
-import { Bot, ChevronRight, ChevronDown, DollarSign, LogOut, Plus, Send, Settings, User as UserIcon, X, Info, Sparkles, Menu, Search, Egg, Sun, Moon, Shield, FileText, Users, ClipboardList, CreditCard, Tag, Mail, Truck } from 'lucide-react';
+import { lazy, Suspense, useState, useRef, useEffect, useMemo } from "react";
+import { Bot, ChevronRight, ChevronDown, DollarSign, LogOut, Plus, Send, Settings, User as UserIcon, X, Info, Sparkles, Menu, Search, Egg, Sun, Moon, Shield, FileText, ClipboardList, Users, CreditCard, Tag, Mail, Truck } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { cn } from './lib/utils';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Spinner } from './components/Spinner';
 import Login from "./components/Login";
-import Clientes from "./components/Clientes";
-import Facturacion from "./components/Facturacion";
-import Logistica from "./components/Logistica";
-import CajaRuta from "./components/CajaRuta";
-import TableroRutas from "./components/TableroRutas";
-import Cobranza from "./components/Cobranza";
-import Granjas from "./components/Granjas";
-import OperacionesAdmin from "./components/operaciones";
-import ResumenDelDia from "./components/operaciones/ResumenDelDia";
-import DespachoAdmin from "./components/operaciones/DespachoAdmin";
-import DespachoMovil from "./components/DespachoMovil";
-import BodegaMovil from "./components/BodegaMovil";
-import CamioneroMovil from "./components/CamioneroMovil";
-import IncidentesMovil from "./components/IncidentesMovil";
-import FinanzasResumen from "./components/FinanzasResumen";
-import Etiquetas from "./components/Etiquetas";
-import Pesos from "./components/Pesos";
-import SaludAvicola from "./components/SaludAvicola";
-import Alimento from "./components/Alimento";
-import Mantenimiento from "./components/Mantenimiento";
-import Precios from "./components/Precios";
-import Admin from "./components/Admin";
-import Office from "./components/Office";
-import Reportes from "./components/Reportes";
+const Clientes = lazy(() => import("./components/Clientes"));
+const Facturacion = lazy(() => import("./components/Facturacion"));
+const CajaRuta = lazy(() => import("./components/CajaRuta"));
+const TableroRutas = lazy(() => import("./components/TableroRutas"));
+const HistorialVentasRuta = lazy(() => import("./components/HistorialVentasRuta"));
+const Despacho = lazy(() => import("./components/Despacho"));
+const FlotaRutas = lazy(() => import("./components/FlotaRutas"));
+const Cobranza = lazy(() => import("./components/Cobranza"));
+const Granjas = lazy(() => import("./components/Granjas"));
+const OperacionesAdmin = lazy(() => import("./components/operaciones"));
+const ResumenDelDia = lazy(() => import("./components/operaciones/ResumenDelDia"));
+const DespachoMovil = lazy(() => import("./components/DespachoMovil"));
+const BodegaMovil = lazy(() => import("./components/BodegaMovil"));
+const CamioneroMovil = lazy(() => import("./components/CamioneroMovil"));
+const IncidentesMovil = lazy(() => import("./components/IncidentesMovil"));
+const FinanzasResumen = lazy(() => import("./components/FinanzasResumen"));
+const Etiquetas = lazy(() => import("./components/Etiquetas"));
+const Pesos = lazy(() => import("./components/Pesos"));
+const SaludAvicola = lazy(() => import("./components/SaludAvicola"));
+const Alimento = lazy(() => import("./components/Alimento"));
+const Mantenimiento = lazy(() => import("./components/Mantenimiento"));
+const Admin = lazy(() => import("./components/Admin"));
+const Office = lazy(() => import("./components/Office"));
+const Reportes = lazy(() => import("./components/Reportes"));
 import RegistroGasto from "./components/RegistroGasto";
 import { User, Role } from './types';
 import { loadSession, clearSession } from './lib/session';
 import { iconoDe } from './nav/icons';
 import {
-  MODULOS, SUBTABS_LOGISTICA,
-  type ModuleId, type SubTabDef, type BandaLogistica,
+  MODULOS,
+  type ModuleId, type SubTabDef,
 } from './nav/modulos';
+
+function ModuleLoading() {
+  return <div role="status" data-testid="module-loading" className="mx-auto flex min-h-48 max-w-md items-center justify-center gap-3" style={{ color: 'var(--text-secondary)' }}><Spinner />Cargando módulo…</div>;
+}
 import {
   rolesEfectivos, modulosVisibles, labelDeModulo, moduloPorDefecto,
   espacioOfficeDe,
   subTabsDe, subTabPorDefecto, subTabsOperacionesMovil, subTabMovilEfectivo,
-  subTabsLogisticaDe, subTabsInternosDe, breadcrumbDe, esRolMovil, destinoGrupoOperaciones,
+  subTabsInternosDe, grupoQueContiene, breadcrumbDe, esRolMovil, destinoGrupoOperaciones, despachoCanonico,
   tipoReporteDe, idSubTabReporte,
 } from './nav/modulos';
 
@@ -82,7 +86,7 @@ export default function App() {
     <>
       {/* Uno solo para las dos ramas: dentro de cada `if` cabía perfecto, pero
           cualquier tercera rama que se añadiera después iba a duplicar los avisos. */}
-      <Toaster richColors position="top-center" />
+      <Toaster richColors theme={darkMode ? 'dark' : 'light'} position="top-center" />
       {!currentUser ? (
         <ErrorBoundary>
           <Login onLogin={setCurrentUser} />
@@ -103,7 +107,7 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
     Comercial: 'Comercial',
     Despachador: 'Encargado de Galerón',
     Bodeguero: 'Bodeguero',
-    Camionero: 'Camionero',
+    Camionero: 'Comercial',
   };
   const userRoles = useMemo(
     () => rolesEfectivos(currentUser.role, currentUser.roles),
@@ -133,18 +137,46 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
     setSubTab(subTabPorDefecto(activeTab as ModuleId, userRoles));
   }, [activeTab, userRoles]);
 
+  useEffect(() => {
+    if (activeTab !== 'operaciones') return;
+    if (subTab === 'despacho-precios' || subTab === 'ventas-precios') {
+      subTabManual.current = true;
+      setActiveTab('admin');
+      setSubTab('precios-negociacion');
+      return;
+    }
+    const canonico = despachoCanonico(subTab, userRoles);
+    if (canonico && canonico !== subTab) setSubTab(canonico);
+  }, [activeTab, subTab, userRoles]);
+
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEstelaOpen, setIsEstelaOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isNuevoOpen, setIsNuevoOpen] = useState(false);
+  const nuevoMenuRef = useRef<HTMLDivElement>(null);
   const [isRegistroGastoOpen, setIsRegistroGastoOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const ocultarEstelaEnMovil = currentUser.role === 'Comercial' || activeTab === 'operaciones' || activeTab === 'admin' || activeTab === 'clientes';
 
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<{role: 'user' | 'assistant', content: string}[]>([]);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!isNuevoOpen) return;
+    const cerrarAlHacerClickFuera = (event: PointerEvent) => {
+      if (event.target instanceof Node && !nuevoMenuRef.current?.contains(event.target)) setIsNuevoOpen(false);
+    };
+    const cerrarConEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setIsNuevoOpen(false); };
+    document.addEventListener('pointerdown', cerrarAlHacerClickFuera);
+    document.addEventListener('keydown', cerrarConEscape);
+    return () => {
+      document.removeEventListener('pointerdown', cerrarAlHacerClickFuera);
+      document.removeEventListener('keydown', cerrarConEscape);
+    };
+  }, [isNuevoOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,10 +229,8 @@ const nuevoItems = useMemo(() => {
     // dejó de ser un tab y pasó a ser una acción del menú.
     const items: { label: string; icon: any; tab: string; subTab?: string; accion?: 'gasto' }[] = [];
     if (currentUser.role === 'Despachador' || currentUser.role === 'Bodeguero') return items;
-    if (activeTab === 'logistica') {
-      items.push({ label: 'Guía de Despacho', icon: ClipboardList, tab: 'logistica', subTab: 'guias' });
-    } else if (activeTab === 'clientes') {
-      items.push({ label: 'Cliente', icon: Users, tab: 'clientes' });
+    if (activeTab === 'clientes') {
+      if (userRoles.includes('Admin')) items.push({ label: 'Cliente', icon: Users, tab: 'clientes' });
     } else if (activeTab === 'admin') {
       items.push({ label: 'Producto Catálogo', icon: Tag, tab: 'admin', subTab: 'productos' });
       items.push({ label: 'Camión', icon: Truck, tab: 'admin', subTab: 'infraestructura' });
@@ -214,30 +244,41 @@ const nuevoItems = useMemo(() => {
         items.push({ label: 'Gasto', icon: DollarSign, tab: 'finanzas', accion: 'gasto' });
       }
     } else if (activeTab === 'operaciones') {
-      // Las acciones se leen de la fila que el usuario ya ve, igual que las de
-      // Vinculaciones. Así Remisión y Venta (Caja) dejan de ser dos puertas fijas
-      // que se ofrecían a cualquiera —un Camionero con "Nuevo > Producción" lo
-      // llevaba a un id que no montaba nada— y pasan a existir donde está el
-      // trabajo: Admin y Comercial las ven, un Bodeguero no.
-      const grupos = new Set(subTabsDe('operaciones', userRoles).map(t => t.id));
-      if (grupos.has('despacho')) items.push({ label: 'Remisión', icon: FileText, tab: 'operaciones', subTab: 'despacho' });
-      if (grupos.has('ventas')) items.push({ label: 'Venta (Caja)', icon: CreditCard, tab: 'operaciones', subTab: 'ventas' });
-      // El alta de Granja sigue siendo de Admin, que es lo que declara
-      // SUBTABS_GRANJA. Antes vivía en el módulo Granja que ya no existe.
-      if (grupos.has('granja')) items.push({ label: 'Granja', icon: Egg, tab: 'operaciones', subTab: 'granja' });
-    } else if (activeTab === 'office') {
-      // "Nueva regla" sigue el espacio: pertenece a Vinculaciones, que es el
-      // único de los tres con `roles: ['Admin']`, así que se decide por rol y no
-      // solo por el `subTab` activo.
-      if (subTab === 'vinculaciones' && userRoles.includes('Admin')) {
-        items.push({ label: 'Nueva regla', icon: Settings, tab: 'office', subTab: 'vinculaciones' });
+      // Las acciones se leen de la fila que el usuario ya ve. Así Remisión y Venta
+      // (Caja) dejan de ser dos puertas fijas que se ofrecían a cualquiera —un
+      // Camionero con "Nuevo > Producción" lo llevaba a un id que no montaba
+      // nada— y pasan a existir donde está el trabajo: Admin y Comercial las ven,
+      // un Bodeguero no.
+      if (esRolMovil(userRoles)) {
+        const tabsMoviles = new Set(subTabsOperacionesMovil(userRoles).map(t => t.id));
+        if (tabsMoviles.has('venta-movil')) items.push({ label: 'Venta', icon: CreditCard, tab: 'operaciones', subTab: 'venta-movil' });
+        if (tabsMoviles.has('facturar-movil')) items.push({ label: 'Factura o nota', icon: FileText, tab: 'operaciones', subTab: 'facturar-movil' });
+        if (tabsMoviles.has('cargas-comercial') || tabsMoviles.has('confirmar')) items.push({ label: 'Cargas asignadas', icon: Truck, tab: 'operaciones', subTab: tabsMoviles.has('cargas-comercial') ? 'cargas-comercial' : 'confirmar' });
+        if (tabsMoviles.has('carga')) items.push({ label: 'Nueva carga', icon: Truck, tab: 'operaciones', subTab: 'carga' });
+        if (tabsMoviles.has('recibir')) items.push({ label: 'Recibir', icon: Truck, tab: 'operaciones', subTab: 'recibir' });
       } else {
+        const grupos = new Set(subTabsDe('operaciones', userRoles).map(t => t.id));
+        if (grupos.has('bodega')) items.push({ label: 'Remisión', icon: FileText, tab: 'operaciones', subTab: 'bodega-entradas' });
+        if (grupos.has('despacho')) {
+          items.push({ label: 'Guía de despacho', icon: ClipboardList, tab: 'operaciones', subTab: 'despacho-guias' });
+          items.push({ label: 'Venta (Caja)', icon: CreditCard, tab: 'operaciones', subTab: 'despacho-ventas' });
+        }
+        // El alta de Granja sigue siendo de Admin, que es lo que declara
+        // SUBTABS_GRANJA. Antes vivía en el módulo Granja que ya no existe.
+        if (grupos.has('granja')) items.push({ label: 'Granja', icon: Egg, tab: 'operaciones', subTab: 'granja' });
+      }
+    } else if (activeTab === 'office') {
+      // Office tiene dos espacios y los dos dan de alta: conectar una cuenta de
+      // correo y subir un documento. "Nueva regla" ya no vive acá, está en Admin.
+      if (userRoles.includes('Admin')) {
         items.push({ label: 'Conectar cuenta', icon: Mail, tab: 'office', subTab: 'correo' });
         items.push({ label: 'Subir documento', icon: FileText, tab: 'office', subTab: 'documentos' });
       }
     }
-    if (items.length === 0 && !finanzasEsSoloLectura) {
-      items.push({ label: 'Guía de Despacho', icon: ClipboardList, tab: 'logistica', subTab: 'guias' });
+    if (items.length === 0 && userRoles.includes('Admin') && !finanzasEsSoloLectura && !esRolMovil(userRoles)) {
+      // Quien está en un módulo sin acciones propias (Logística desapareció en
+      // la Fase 8 y todo el resto declara su "+ Nuevo") recibe el alta de
+      // Cliente, que es la única creación transversal que no depende del módulo.
       items.push({ label: 'Cliente', icon: Users, tab: 'clientes' });
     }
     return items;
@@ -253,12 +294,17 @@ const nuevoItems = useMemo(() => {
    * así que el texto buscado se queda a la vista y el usuario sigue donde estaba,
    * que es un sitio del que puede salir.
    */
-  const irAGrupoOperaciones = (grupo: string) => {
+  const irAGrupoOperaciones = (grupo: string, interno?: string) => {
     const destino = destinoGrupoOperaciones(grupo, userRoles);
     if (!destino) return;
     subTabManual.current = true;
     setActiveTab(destino.modulo);
-    setSubTab(destino.subTab);
+    // Sin `interno` se llega al cuerpo del grupo (Despacho GD- o CajaRuta); con
+    // él, directo al paso de la sub-fila (Flota y Rutas, Control Pesos…). El
+    // paso se monta solo si ese rol lo ve: un Comercial que busca "peso" no
+    // puede aterrizar en una pantalla de configuración que no tiene en su fila.
+    const paso = interno && subTabsInternosDe('operaciones', grupo, userRoles).some(t => t.id === interno);
+    setSubTab(paso ? interno : destino.subTab);
   };
 
   const handleSearch = (q: string) => {
@@ -267,23 +313,30 @@ const nuevoItems = useMemo(() => {
     const lower = q.toLowerCase();
     if (lower.includes('vinculo') || lower.includes('vínculo') || lower.includes('regla') || lower.includes('integracion') || lower.includes('integración')) {
       subTabManual.current = true;
-      // Vinculaciones es de Admin desde que es un espacio de Office. Para los
-      // demás roles la búsqueda cae en Documentos, que es donde sí se ven los
-      // adjuntos que una regla debería haber vinculado.
-      if (userRoles.includes('Admin')) { setActiveTab('office'); setSubTab('vinculaciones'); }
+      // Vinculaciones es un tab de Admin. Para los demás roles la búsqueda cae en
+      // Documentos, que es donde sí se ven los adjuntos que una regla debería
+      // haber vinculado.
+      if (userRoles.includes('Admin')) { setActiveTab('admin'); setSubTab('vinculaciones'); }
       else { setActiveTab('office'); setSubTab('documentos'); }
     } else if (lower.includes('correo') || lower.includes('email') || lower.includes('gmail') || lower.includes('bandeja')) {
       setActiveTab('office'); setSubTab('correo');
     } else if (lower.includes('drive') || lower.includes('documento') || lower.includes('carpeta') || lower.includes('adjunto')) {
       setActiveTab('office'); setSubTab('documentos');
     } else if (lower.includes('guia') || lower.includes('despacho') || lower.includes('camion')) {
-      setActiveTab('logistica'); setSubTab('guias');
+      // La guía de despacho es el cuerpo del grupo Despacho del hub (la GD-
+      // completa: Bodega→Camión→Clientes) y además su primer paso, "Guías de
+      // Despacho": la búsqueda aterriza ahí para que la sub-fila muestre los 4
+      // pasos del grupo en vez de llegar al cuerpo anónimo. "Camión" también
+      // lleva a la guía —que es donde se elige el camión de la ruta—; el maestro
+      // de camiones y rutas es el paso "Flota y Rutas" de la misma sub-fila.
+      irAGrupoOperaciones('despacho', 'despacho-guias');
     } else if (lower.includes('remision') || lower.includes('remisión')) {
-      // Las remisiones son el grupo Despacho del hub, no un tab de Logística. Las
-      // dos formas del texto cuentan porque la gente escribe la tilde: la búsqueda
-      // comparaba solo `remision`, así que "remisión" —como se escribe— no
-      // llevaba a ninguna parte.
-      irAGrupoOperaciones('despacho');
+      // Las remisiones GR- (Granja→Bodega) viven bajo el grupo Bodega, en el paso
+      // "Entradas y Alistamiento", no en la ruta del camión. Las dos formas del
+      // texto cuentan porque la gente escribe la tilde: la búsqueda comparaba
+      // solo `remision`, así que "remisión" —como se escribe— no llevaba a
+      // ninguna parte.
+      irAGrupoOperaciones('bodega', 'bodega-entradas');
     } else if (lower.includes('cliente')) {
       setActiveTab('clientes');
 } else if (lower.includes('flujo')) {
@@ -293,8 +346,8 @@ const nuevoItems = useMemo(() => {
       setActiveTab('finanzas'); setSubTab(idSubTabReporte('flujo-caja'));
     } else if (lower.includes('venta') || lower.includes('caja') || lower.includes('tiquete')) {
       // "Venta (Caja)" era una puerta suelta dentro de Logística; ahora es el grupo
-      // Ventas del hub, con el mismo criterio de rol que las demás búsquedas.
-      irAGrupoOperaciones('ventas');
+      // La venta de ruta queda en Despacho y ruta junto con la entrega.
+      irAGrupoOperaciones('despacho', 'despacho-ventas');
     } else if (lower.includes('factura') || lower.includes('cobro')) {
       // "Facturación" pasó a ser el tab Documentos de Finanzas. Se decide por
       // rol porque un Comercial sí lo ve y un Socio no: mandarlo a un tab
@@ -313,7 +366,7 @@ const nuevoItems = useMemo(() => {
       // La granja dejó de ser módulo y pasó a ser grupo del hub de Operaciones.
       irAGrupoOperaciones('granja');
     } else if (lower.includes('etiqueta') || lower.includes('qr')) {
-      setActiveTab('logistica'); setSubTab('etiquetas');
+      irAGrupoOperaciones('bodega', 'bodega-etiquetas');
     } else if (lower.includes('usuario') || lower.includes('rol') || lower.includes('admin')) {
       setActiveTab('admin'); setSubTab('usuarios');
     } else if (lower.includes('camion') && (lower.includes('admin') || lower.includes('config'))) {
@@ -324,9 +377,11 @@ const nuevoItems = useMemo(() => {
       subTabManual.current = true;
       setActiveTab('finanzas'); setSubTab(idSubTabReporte('financiero'));
     } else if (lower.includes('peso')) {
-      setActiveTab('logistica'); setSubTab('pesos');
+      irAGrupoOperaciones('bodega', 'bodega-pesos');
     } else if (lower.includes('precio')) {
-      setActiveTab('logistica'); setSubTab('precios');
+      if (!userRoles.includes('Admin')) { toast.error('Solo Administración puede consultar y editar los rangos de negociación.'); return; }
+      subTabManual.current = true;
+      setActiveTab('admin'); setSubTab('precios-negociacion');
     }
   };
 
@@ -348,10 +403,10 @@ const nuevoItems = useMemo(() => {
   ) => {
     if (tabs.length === 0) return null;
     const activo = tono === 'primario'
-      ? { color: 'var(--brand-primary)', borderColor: 'var(--brand-primary)' }
+        ? { color: 'var(--text-link)', borderColor: 'var(--brand-primary)' }
       : tono === 'secundario'
-        ? { color: 'var(--brand-secondary)', borderColor: 'var(--brand-secondary)' }
-        : { color: 'var(--text-secondary)', borderColor: 'var(--text-secondary)' };
+        ? { color: 'var(--text-link)', borderColor: 'var(--brand-primary)' }
+              : { color: 'var(--text-secondary)', borderColor: 'var(--text-secondary)' };
     const inactivo = { color: 'var(--text-muted)', borderColor: 'transparent' };
     return (
       <div
@@ -389,14 +444,15 @@ const nuevoItems = useMemo(() => {
             <X className="w-5 h-5" style={{ color: 'var(--text-secondary)' }} />
           </button>
         )}
-        <div className="flex items-center space-x-3 mb-2">
-          <div className="p-2.5 rounded-xl" style={{ background: 'var(--brand-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
-            <Egg className="w-7 h-7" style={{ color: 'var(--text-inverse)' }} />
-          </div>
-          <div>
-            <h1 className="text-xl font-extrabold tracking-tight leading-none" style={{ color: 'var(--text-inverse)' }}>Granja</h1>
-            <p className="text-sm font-bold tracking-wide" style={{ color: 'var(--brand-secondary-light)' }}>Don Paco</p>
-          </div>
+        <div className="flex justify-center mb-2">
+          <img
+            src="/granja-don-paco-logo.png"
+            alt="Granja Don Paco — Siempre frescos"
+            width={447}
+            height={447}
+            draggable={false}
+            className="h-[96px] w-[168px] max-w-full rounded-lg border border-neutral-200/70 bg-white object-cover object-center shadow-sm"
+          />
         </div>
       </div>
 
@@ -415,11 +471,11 @@ const nuevoItems = useMemo(() => {
               }}
               className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-150 text-[13px] font-semibold"
               style={{
-                background: isActive ? 'var(--bg-sidebar-active)' : 'transparent',
-                color: isActive ? 'var(--brand-primary-light)' : 'var(--text-secondary)',
+                background: isActive ? 'var(--brand-action)' : 'transparent',
+                color: isActive ? 'var(--text-nav-active)' : 'var(--text-secondary)',
               }}
             >
-              <Icon className="w-[18px] h-[18px]" style={{ color: isActive ? 'var(--brand-primary-light)' : 'var(--text-muted)' }} />
+              <Icon className="w-[18px] h-[18px]" style={{ color: isActive ? 'var(--text-nav-active)' : 'var(--text-muted)' }} />
               <span>{labelDeModulo(item.id, userRoles)}</span>
             </button>
           );
@@ -427,12 +483,12 @@ const nuevoItems = useMemo(() => {
       </div>
 
       <div className="px-3 pb-4 mt-auto shrink-0 space-y-2 border-t" style={{ borderColor: 'var(--border-default)' }}>
-        <div className="flex items-center space-x-3 px-3 py-3 rounded-xl mt-4" style={{ background: 'rgba(255,255,255,0.05)' }}>
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0" style={{ background: 'var(--brand-primary)', color: 'var(--text-inverse)' }}>
+        <div className="flex items-center space-x-3 px-3 py-3 rounded-xl mt-4" style={{ background: 'var(--bg-sidebar-hover)' }}>
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm shrink-0" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
             {currentUser.name.charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold truncate" style={{ color: 'var(--text-inverse)' }}>{currentUser.name}</p>
+            <p className="text-sm font-bold truncate" style={{ color: 'var(--text-on-sidebar)' }}>{currentUser.name}</p>
             <p className="text-xs font-medium truncate" style={{ color: 'var(--text-muted)' }}>{ROLE_LABELS[currentUser.role] || currentUser.role}</p>
           </div>
         </div>
@@ -449,7 +505,7 @@ const nuevoItems = useMemo(() => {
   );
 
   return (
-    <div className="h-screen flex overflow-hidden font-sans" style={{ color: 'var(--text-primary)', background: 'var(--bg-page)' }}>
+    <div className="h-screen h-[100dvh] flex overflow-hidden font-sans" style={{ color: 'var(--text-primary)', background: 'var(--bg-page)' }}>
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-64 z-10 shrink-0" style={{ background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border-default)' }}>
         {renderSidebarContent()}
@@ -459,7 +515,7 @@ const nuevoItems = useMemo(() => {
       {isMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="fixed inset-0 bg-black/50" onClick={() => setIsMenuOpen(false)} />
-          <aside className="relative w-72 max-w-[85vw] h-full flex flex-col" style={{ background: 'var(--bg-sidebar)' }}>
+          <aside aria-label="Navegación principal" className="relative w-72 max-w-[85vw] h-full flex flex-col" style={{ background: 'var(--bg-sidebar)' }}>
             {renderSidebarContent(true)}
           </aside>
         </div>
@@ -472,6 +528,8 @@ const nuevoItems = useMemo(() => {
         <div className="backdrop-blur-sm px-4 py-3 flex items-center justify-between shrink-0 z-20" style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border-default)' }}>
           <div className="flex items-center space-x-3">
             <button
+              aria-label="Abrir navegación"
+              aria-expanded={isMenuOpen}
               onClick={() => setIsMenuOpen(true)}
               className="p-2 -ml-2 rounded-lg lg:hidden transition-colors"
               style={{ color: 'var(--text-secondary)' }}
@@ -492,6 +550,7 @@ const nuevoItems = useMemo(() => {
           </div>
           <div className="flex items-center space-x-2">
             <button
+              aria-label={darkMode ? 'Activar modo claro' : 'Activar modo oscuro'}
               onClick={onToggleDark}
               className="p-2 rounded-lg transition-colors"
               style={{ color: 'var(--text-secondary)' }}
@@ -499,17 +558,15 @@ const nuevoItems = useMemo(() => {
             >
               {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
-            <div className="relative">
+            <div className="relative" ref={nuevoMenuRef}>
               {nuevoItems.length > 0 && (
                 <>
-                  <button onClick={() => setIsNuevoOpen(!isNuevoOpen)} className="flex items-center space-x-1 px-3 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[0.97]" style={{ background: 'var(--brand-primary)', color: 'var(--text-inverse)', boxShadow: '0 2px 10px color-mix(in srgb, var(--brand-primary) 35%, transparent)', border: '1px solid color-mix(in srgb, var(--brand-primary) 60%, transparent)' }}>
+                  <button aria-expanded={isNuevoOpen} onClick={() => setIsNuevoOpen(!isNuevoOpen)} className="flex items-center space-x-1 px-3 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[0.97]" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)', boxShadow: '0 2px 10px color-mix(in srgb, var(--brand-primary) 35%, transparent)', border: '1px solid color-mix(in srgb, var(--brand-primary) 60%, transparent)' }}>
                     <Plus className="w-4 h-4" />
                     <span className="hidden sm:inline">Nuevo</span>
                   </button>
                   {isNuevoOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setIsNuevoOpen(false)} />
-                      <div className="absolute right-0 top-full mt-2 w-56 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in py-1" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+                    <div className="absolute right-0 top-full mt-2 w-56 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in py-1" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
                         {nuevoItems.map((item) => {
                           const Icon = item.icon;
                           return (
@@ -524,14 +581,17 @@ const nuevoItems = useMemo(() => {
                               }
                               setIsNuevoOpen(false);
                             }}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium transition-colors hover:opacity-80" style={{ color: 'var(--text-primary)' }}>
+                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--brand-primary)]" style={{ color: 'var(--text-primary)' }}
+                              onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)'; }}
+                              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                              onFocus={e => { e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)'; }}
+                              onBlur={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}>
                               <Icon className="w-4 h-4" style={{ color: 'var(--brand-primary)' }} />
                               {item.label}
                             </button>
                           );
                         })}
-                      </div>
-                    </>
+                    </div>
                   )}
                 </>
               )}
@@ -541,7 +601,7 @@ const nuevoItems = useMemo(() => {
             <div className="relative">
               <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                 className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg transition-colors">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-inverse)' }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
                   {currentUser.name.charAt(0)}
                 </div>
                 <div className="hidden md:flex flex-col items-start">
@@ -557,7 +617,7 @@ const nuevoItems = useMemo(() => {
                   <div className="absolute right-0 top-full mt-2 w-64 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
                     <div className="p-4" style={{ borderBottom: '1px solid var(--border-muted)', background: 'var(--bg-muted)' }}>
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-inverse)' }}>
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
                           {currentUser.name.charAt(0)}
                         </div>
                         <div>
@@ -597,8 +657,8 @@ const nuevoItems = useMemo(() => {
         {['Admin', 'Socio', 'Comercial'].includes(currentUser.role) && (
           <>
             {isEstelaOpen && (
-              <div className="fixed bottom-24 right-4 z-50 w-[360px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[calc(100vh-7rem)] rounded-2xl shadow-2xl flex flex-col overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-                <div className="px-4 py-3 flex justify-between items-center shrink-0" style={{ background: 'var(--brand-primary)', color: 'var(--text-inverse)' }}>
+              <div className={`fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] lg:bottom-24 right-4 z-50 w-[360px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[calc(100dvh-7rem-env(safe-area-inset-bottom))] rounded-2xl shadow-2xl flex flex-col overflow-hidden ${ocultarEstelaEnMovil ? 'estela-oculta-en-movil' : ''}`} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+                <div className="px-4 py-3 flex justify-between items-center shrink-0" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
                   <div className="flex items-center space-x-2">
                     <Bot className="w-5 h-5" />
                     <span className="font-bold">Estela AI</span>
@@ -625,7 +685,7 @@ const nuevoItems = useMemo(() => {
                       <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className="max-w-[85%] p-3 rounded-2xl text-sm"
                           style={msg.role === 'user'
-                            ? { background: 'var(--brand-primary)', color: 'var(--text-inverse)', borderBottomRightRadius: '4px' }
+                            ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)', borderBottomRightRadius: '4px' }
                             : { background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-default)', borderBottomLeftRadius: '4px' }
                           }>
                           {msg.content}
@@ -676,13 +736,17 @@ const nuevoItems = useMemo(() => {
             {/* Floating Bubble */}
             <button
               onClick={() => setIsEstelaOpen(!isEstelaOpen)}
-              className="fixed bottom-4 right-4 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-xl transition-transform hover:scale-105"
-              style={{ background: 'var(--brand-primary)', color: 'var(--text-inverse)' }}
+              className={`fixed right-4 z-50 w-16 h-16 rounded-full items-center justify-center shadow-xl transition-transform hover:scale-105 ${isEstelaOpen ? 'hidden lg:flex bottom-4' : 'flex bottom-[calc(5rem+env(safe-area-inset-bottom))] lg:bottom-4'} ${ocultarEstelaEnMovil ? 'estela-oculta-en-movil' : ''}`}
+              style={{ background: '#5D78B8', color: '#FFFFFF' }}
               aria-label="Abrir Estela AI"
             >
-              {isEstelaOpen ? <X className="w-6 h-6" /> : <Bot className="w-6 h-6" />}
+              {isEstelaOpen ? <X className="w-6 h-6" /> : (
+                <svg className="estela-breath w-8 h-8" viewBox="0 0 48 48" aria-hidden="true" fill="currentColor">
+                  <path d="M24 3c2.7 11.8 5.2 18.3 21 21-15.8 2.7-18.3 9.2-21 21C21.3 33.2 18.8 26.7 3 24 18.8 21.3 21.3 14.8 24 3Z" />
+                </svg>
+              )}
               {!isEstelaOpen && (
-                <span className="absolute top-0 right-0 w-3.5 h-3.5 rounded-full border-2" style={{ background: '#34d399', borderColor: 'var(--bg-card)' }} />
+                <span className="absolute top-0 right-0 w-4 h-4 rounded-full border-2" style={{ background: '#F4F4F4', borderColor: '#10122A' }} />
               )}
             </button>
           </>
@@ -693,16 +757,17 @@ const nuevoItems = useMemo(() => {
             const crumbs = breadcrumbDe(activeTab as ModuleId, subTab, userRoles);
             if (!crumbs) return null;
             const [mLabel, sLabel] = crumbs;
-            if (!sLabel) return <div className="flex items-center gap-2 text-xs font-medium mb-4" style={{ color: 'var(--text-muted)' }}><span>{mLabel}</span></div>;
+            const volverAlModulo = () => setSubTab(subTabPorDefecto(activeTab as ModuleId, userRoles));
+            if (!sLabel) return <div className="flex items-center gap-2 text-xs font-medium mb-4" style={{ color: 'var(--text-muted)' }}><button type="button" onClick={volverAlModulo} className="rounded px-1 -mx-1 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style={{ color: 'var(--text-muted)' }}>{mLabel}</button></div>;
             return (
               <div className="flex items-center gap-2 text-xs font-medium mb-4" style={{ color: 'var(--text-muted)' }}>
-                <span>{mLabel}</span>
+                <button type="button" onClick={volverAlModulo} className="rounded px-1 -mx-1 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style={{ color: 'var(--text-muted)' }}>{mLabel}</button>
                 <ChevronRight className="w-3 h-3" />
                 <span style={{ color: 'var(--text-primary)' }}>{sLabel}</span>
               </div>
             );
           })()}
-          {activeTab === 'admin' && <Admin currentUser={currentUser} initialTab={subTab as any} />}
+          {activeTab === 'admin' && <Suspense fallback={<ModuleLoading />}><Admin currentUser={currentUser} initialTab={subTab as any} /></Suspense>}
 
           {activeTab === 'operaciones' && esRolMovil(userRoles) && (() => {
             const subTabs = subTabsOperacionesMovil(userRoles);
@@ -710,12 +775,15 @@ const nuevoItems = useMemo(() => {
             return (
               <div className="space-y-6">
                 {subTabs.length > 1 && renderFilaTabs(subTabs, 'primario')}
-                <div className="max-w-md mx-auto">
+                <Suspense fallback={<ModuleLoading />}><div className="max-w-md mx-auto">
                   {effectiveSub === 'carga' && <DespachoMovil currentUser={currentUser} />}
                   {effectiveSub === 'incidencias' && <IncidentesMovil currentUser={currentUser} />}
                   {effectiveSub === 'confirmar' && <CamioneroMovil currentUser={currentUser} />}
                   {effectiveSub === 'recibir' && <BodegaMovil currentUser={currentUser} />}
-                </div>
+                  {effectiveSub === 'venta-movil' && <CajaRuta currentUser={currentUser} />}
+                  {effectiveSub === 'facturar-movil' && <Facturacion currentUser={currentUser} />}
+                  {effectiveSub === 'cargas-comercial' && <CamioneroMovil currentUser={currentUser} />}
+                </div></Suspense>
               </div>
             );
           })()}
@@ -725,48 +793,46 @@ const nuevoItems = useMemo(() => {
                   fila sale de `SUBTABS_OPERACIONES_DESKTOP`, la misma fuente que
                   el default y el breadcrumb. Antes la dibujaba `BodegaAdmin` con
                   su propia lista, que por eso era dos y no cinco. */}
-              {renderFilaTabs(subTabsDe('operaciones', userRoles), 'primario')}
-              {/* Granja y Bodega tienen sub-fila: sus cuatro vistas de granja y
-                  sus dos de bodega. Igual que los tipos de reporte de Analítica,
-                  la fila se resuelve también cuando el sub-tab activo ya es un
-                  elemento de la sub-fila, para que no desaparezca al elegirlo. */}
-              {renderFilaTabs(subTabsInternosDe('operaciones', subTab), 'secundario')}
-              <div className="animate-in fade-in">
-                {subTab === 'resumen' && <ResumenDelDia currentUser={currentUser} />}
+              {renderFilaTabs(subTabsDe('operaciones', userRoles), 'primario', grupoQueContiene('operaciones', subTab))}
+              {/* Granja, Bodega y Despacho tienen sub-fila. Despacho reúne
+                  preparación, seguimiento y entregas; los ids antiguos se
+                  normalizan para conservar accesos y sesiones guardadas. */}
+              {['bodega', 'bodega-entradas', 'existencias', 'control', 'bodega-etiquetas', 'bodega-pesos'].includes(subTab)
+                ? renderFilaTabs(
+                    subTabsInternosDe('operaciones', 'bodega', userRoles),
+                    'secundario',
+                    subTab === 'bodega' ? 'existencias' : ['bodega-etiquetas', 'bodega-pesos'].includes(subTab) ? 'control' : subTab,
+                  )
+                : renderFilaTabs(subTabsInternosDe('operaciones', subTab, userRoles), 'secundario',
+                    despachoCanonico(subTab, userRoles) || (subTab === 'granja' ? 'granjas' : subTab))}
+              <Suspense fallback={<ModuleLoading />}><div className="animate-in fade-in">
+                {subTab === 'resumen' && <ResumenDelDia currentUser={currentUser} onNavigate={setSubTab} />}
                 {subTab === 'granja' && <Granjas currentUser={currentUser} />}
                 {subTab === 'granjas' && <Granjas currentUser={currentUser} />}
                 {subTab === 'salud' && <SaludAvicola currentUser={currentUser} />}
                 {subTab === 'alimento' && <Alimento currentUser={currentUser} />}
                 {subTab === 'mantenimiento' && <Mantenimiento currentUser={currentUser} />}
-                {(subTab === 'bodega' || subTab === 'existencias' || subTab === 'control') && (
-                  <OperacionesAdmin
-                    currentUser={currentUser}
-                    vista={subTab === 'control' ? 'control' : 'existencias'}
-                    onVista={v => setSubTab(v)}
-                  />
-                )}
-                {subTab === 'despacho' && <DespachoAdmin currentUser={currentUser} />}
-                {subTab === 'ventas' && <CajaRuta currentUser={currentUser} />}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'logistica' && (
-            <div className="space-y-6">
-              <div className="space-y-0">
-                {renderFilaTabs(subTabsLogisticaDe(userRoles).filter(t => t.banda === 'nucleo'), 'primario')}
-                {renderFilaTabs(subTabsLogisticaDe(userRoles).filter(t => t.banda === 'admin'), 'secundario')}
-                {renderFilaTabs(subTabsLogisticaDe(userRoles).filter(t => t.banda === 'config'), 'terciario')}
-              </div>
-
-              <div className="animate-in fade-in">
-                {subTab === 'logistica' && <Logistica currentUser={currentUser} />}
-                {subTab === 'guias' && <Logistica currentUser={currentUser} initialTab="guias" />}
-                {subTab === 'tablero' && <TableroRutas currentUser={currentUser} />}
-                {subTab === 'etiquetas' && <Etiquetas currentUser={currentUser} />}
-                {subTab === 'pesos' && <Pesos currentUser={currentUser} />}
-                {subTab === 'precios' && <Precios currentUser={currentUser} />}
-              </div>
+                {['bodega', 'bodega-entradas', 'existencias', 'control', 'bodega-etiquetas', 'bodega-pesos'].includes(subTab) && (() => {
+                  const vistaBodega = subTab === 'bodega-entradas' ? 'entradas'
+                    : subTab === 'control' || ['bodega-etiquetas', 'bodega-pesos'].includes(subTab) ? 'control' : 'existencias';
+                  return <div className="space-y-5" data-testid="bodega-unificada" data-vista-bodega={vistaBodega}>
+                    <OperacionesAdmin currentUser={currentUser} vista={vistaBodega} onVista={v => setSubTab(v)} />
+                  </div>;
+                })()}
+                {(subTab === 'despacho-preparar' || subTab === 'despacho' || subTab === 'despacho-guias' || subTab === 'despacho-camiones') && <div className="space-y-5">
+                  <Despacho currentUser={currentUser} />
+                  <details className="group rounded-2xl border border-[var(--border-default)] bg-[var(--bg-card)] shadow-sm">
+                    <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 hover:bg-[var(--bg-card-hover)] [&::-webkit-details-marker]:hidden">
+                      <span><strong className="block text-sm text-[var(--text-primary)]">Administrar flota y rutas</strong><span className="text-xs text-[var(--text-secondary)]">Camiones, responsables y zonas de entrega</span></span>
+                      <ChevronDown className="h-5 w-5 text-[var(--text-secondary)] transition-transform group-open:rotate-180" />
+                    </summary>
+                    <div className="border-t border-[var(--border-default)] p-4"><FlotaRutas currentUser={currentUser} /></div>
+                  </details>
+                </div>}
+                {subTab === 'despacho-en-ruta' && userRoles.includes('Admin') && <TableroRutas currentUser={currentUser} />}
+                {subTab === 'despacho-historico-ventas' && userRoles.includes('Admin') && <HistorialVentasRuta currentUser={currentUser} />}
+                {subTab === 'despacho-entregas' && userRoles.includes('Comercial') && <CajaRuta currentUser={currentUser} />}
+              </div></Suspense>
             </div>
           )}
 
@@ -787,27 +853,27 @@ const nuevoItems = useMemo(() => {
                   aquí, en el shell, para que el tipo activo sea el mismo estado
                   que el tab activo y el breadcrumb lo pueda leer. */}
               {renderFilaTabs(subTabsInternosDe('finanzas', subTab), 'secundario')}
-              <div className="animate-in fade-in">
+              <Suspense fallback={<ModuleLoading />}><div className="animate-in fade-in">
                 {subTab === 'resumen' && <FinanzasResumen currentUser={currentUser} />}
                 {subTab === 'documentos' && <Facturacion currentUser={currentUser} />}
                 {subTab === 'cobranza' && <Cobranza currentUser={currentUser} />}
                 {tipoReporteDe(subTab) && (
                   <Reportes currentUser={currentUser} tipo={tipoReporteDe(subTab)!} />
                 )}
-              </div>
+              </div></Suspense>
             </div>
           )}
 
-          {activeTab === 'office' && (
+          {activeTab === 'office' && <Suspense fallback={<ModuleLoading />}>
             <Office
               currentUser={currentUser}
               initialEspacio={espacioOfficeDe(subTab, userRoles)}
             />
-          )}
+          </Suspense>}
 
-          {activeTab === 'clientes' && (
+          {activeTab === 'clientes' && <Suspense fallback={<ModuleLoading />}>
             <Clientes currentUser={currentUser} />
-          )}
+          </Suspense>}
         </main>
       </div>
 
@@ -825,6 +891,8 @@ const nuevoItems = useMemo(() => {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id as any)}
+                aria-current={isActive ? 'page' : undefined}
+                aria-label={labelDeModulo(item.id, userRoles)}
                 className="flex flex-col items-center justify-center py-2 px-3 rounded-lg transition-all min-w-[60px]"
                 style={isActive ? { color: 'var(--brand-primary)' } : { color: 'var(--text-muted)' }}
               >

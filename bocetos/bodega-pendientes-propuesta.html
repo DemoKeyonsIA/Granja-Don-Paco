@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Boceto · Pendientes de bodega</title>
+  <style>
+    :root{font-family:Inter,"Segoe UI",Arial,sans-serif;color:#17192f;background:#f5f5f7;font-synthesis:none}*{box-sizing:border-box}body{margin:0;padding:40px 5vw}.wrap{max-width:1320px;margin:auto}.crumb{font-size:14px;color:#67718a;margin-bottom:24px}.head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:24px}.head h1{font-size:30px;margin:0 0 7px}.head p{margin:0;color:#667085;font-size:16px}.count{border-radius:999px;background:#e2eaf7;color:#405c91;padding:8px 14px;font-weight:700;white-space:nowrap}.notice{background:#eaf0fa;border:1px solid #d8e2f2;border-radius:14px;padding:15px 18px;margin-bottom:22px;display:flex;gap:12px;align-items:center}.notice b{font-size:15px}.notice span{color:#5e6880;font-size:14px}.panel{background:white;border:1px solid #e0e2e7;border-radius:18px;box-shadow:0 2px 5px #10182812;overflow:hidden}.toolbar{padding:18px 20px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:1px solid #e5e7eb}.filters{display:flex;gap:8px;flex-wrap:wrap}.filter{background:white;border:1px solid #dfe3ea;color:#59647a;border-radius:999px;padding:9px 14px;font-size:14px;font-weight:650;cursor:pointer}.filter.active{background:#4d6698;border-color:#4d6698;color:white}.search{border:1px solid #dfe3ea;border-radius:11px;padding:10px 14px;min-width:290px;font-size:14px;color:#17192f}.listhead,.row{display:grid;grid-template-columns:minmax(310px,1.5fr) minmax(240px,1fr) minmax(155px,.7fr) 180px;gap:18px;align-items:center}.listhead{padding:12px 22px;background:#f8f9fb;color:#697386;text-transform:uppercase;letter-spacing:.04em;font-size:11px;font-weight:750}.row{padding:17px 22px;border-top:1px solid #eceef2;min-height:96px}.row:hover{background:#fbfcfe}.case{display:flex;align-items:flex-start;gap:12px;min-width:0}.mark{width:9px;height:44px;border-radius:8px;background:#d5a443;flex:none}.mark.orange{background:#dc8455}.mark.violet{background:#8b81b6}.title{font-weight:750;font-size:15px;margin:0 0 5px}.sub{font-size:13px;color:#657087;margin:0;line-height:1.45}.tag{display:inline-block;background:#f4f5f7;color:#545f73;border-radius:999px;font-size:11px;padding:4px 8px;margin-left:6px;font-weight:700}.tag.warn{background:#fff2d6;color:#74540e}.tag.blue{background:#e8eef8;color:#435e93}.detail{font-size:13px;color:#344054;line-height:1.5}.detail b{color:#17192f}.date{font-size:13px;color:#647087}.action{border:0;border-radius:10px;background:#4d6698;color:white;padding:11px 14px;font-size:13px;font-weight:750;cursor:pointer;white-space:nowrap}.action.secondary{color:#405c91;background:#e9eff8}.extra{display:none;grid-column:1/-1;background:#f8f9fb;border-radius:12px;padding:14px 16px;margin:0 0 0 21px;color:#475467;font-size:13px;line-height:1.6}.row.open{grid-template-rows:auto auto}.row.open .extra{display:block}.empty{padding:48px;text-align:center;color:#667085}.foot{font-size:12px;color:#7b8496;margin:14px 4px}.demo{display:inline-flex;border-radius:999px;background:#f2effa;color:#655a91;font-size:11px;font-weight:700;padding:4px 8px;margin-left:8px}@media(max-width:800px){body{padding:22px 14px}.head h1{font-size:24px}.listhead{display:none}.row{grid-template-columns:1fr auto;gap:9px;padding:16px}.case,.detail,.date{grid-column:1}.action{grid-column:2;grid-row:1/4;align-self:center}.extra{grid-column:1/-1;margin:4px 0 0}.search{min-width:0;width:100%}.toolbar{padding:14px}.count{font-size:13px}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="crumb">Operaciones y Bodegas　›　Bodega　›　Control　›　Pendientes</div>
+    <header class="head"><div><h1>Pendientes de bodega</h1><p>Resuelve primero lo que requiere atención. Abre un caso para revisar los datos completos.</p></div><span class="count">4 casos abiertos</span></header>
+    <div class="notice"><b>Para hoy</b><span>2 devoluciones por recibir · 1 reconteo pendiente · 1 producto retenido</span></div>
+    <section class="panel" aria-label="Lista de pendientes">
+      <div class="toolbar">
+        <div class="filters" role="group" aria-label="Filtrar pendientes">
+          <button class="filter active" data-filter="all">Todos <span>4</span></button>
+          <button class="filter" data-filter="return">Devoluciones <span>2</span></button>
+          <button class="filter" data-filter="count">Conteos <span>1</span></button>
+          <button class="filter" data-filter="held">Retenidos <span>1</span></button>
+        </div>
+        <input class="search" id="q" placeholder="Buscar guía, camión o producto…" aria-label="Buscar pendientes" />
+      </div>
+      <div class="listhead"><span>Caso</span><span>Qué revisar</span><span>Reportado</span><span></span></div>
+      <div id="rows">
+        <article class="row" data-kind="return" data-text="devolucion guia GD-DEMO-012 camion ruta 10 huevos grande retorno cliente">
+          <div class="case"><i class="mark"></i><div><p class="title">Devolución de ruta <span class="tag warn">Por recibir</span></p><p class="sub">GD-DEMO-012 · Camión Ruta 10</p></div></div>
+          <div class="detail"><b>Huevos - Grande</b> · 3.5 kg<br><span class="sub">Confirma cuánto producto volvió físicamente</span></div>
+          <div class="date">Hoy · 10:42 a. m.<br><span class="sub">Reportó Carlos</span></div>
+          <button class="action" onclick="toggle(this)">Revisar devolución</button>
+          <div class="extra">Al abrir el caso: confirmar kg recibidos, revisar condición del producto y aceptar o rechazar el retorno. El inventario solo cambia al confirmar la recepción.</div>
+        </article>
+        <article class="row" data-kind="return" data-text="devolucion guia GD-DEMO-010 camion ruta 9 huevos mediano sobrante">
+          <div class="case"><i class="mark"></i><div><p class="title">Sobrante de ruta <span class="tag warn">Por recibir</span></p><p class="sub">GD-DEMO-010 · Camión Ruta 9</p></div></div>
+          <div class="detail"><b>Huevos - Mediano</b> · 2.0 kg<br><span class="sub">Confirma cantidad y estado del producto</span></div>
+          <div class="date">Hoy · 9:18 a. m.<br><span class="sub">Reportó José</span></div>
+          <button class="action" onclick="toggle(this)">Revisar devolución</button>
+          <div class="extra">La cantidad aceptada vuelve a existencias. Si el producto no se puede recibir, registra el motivo del rechazo.</div>
+        </article>
+        <article class="row" data-kind="count" data-text="reconteo guia GD-DEMO-008 huevos grande diferencia conteo">
+          <div class="case"><i class="mark orange"></i><div><p class="title">Reconteo independiente <span class="tag blue">Requiere otra persona</span></p><p class="sub">Guía GD-DEMO-008 · Huevos - Grande</p></div></div>
+          <div class="detail"><b>Validar diferencia</b><br><span class="sub">Sistema 42.0 kg · primer conteo 39.5 kg</span></div>
+          <div class="date">Ayer · 3:26 p. m.<br><span class="sub">Recontó María</span></div>
+          <button class="action secondary" onclick="toggle(this)">Continuar conteo</button>
+          <div class="extra">El segundo conteo debe registrarlo otra persona. El inventario no cambia hasta que se resuelva la revisión.</div>
+        </article>
+        <article class="row" data-kind="held" data-text="cuarentena huevos pequeño 6 kg investigacion retenido">
+          <div class="case"><i class="mark violet"></i><div><p class="title">Producto retenido <span class="tag">En revisión</span></p><p class="sub">Huevos - Pequeño · Guía GD-DEMO-006</p></div></div>
+          <div class="detail"><b>6 kg en cuarentena</b><br><span class="sub">No disponible para venta</span></div>
+          <div class="date">Ayer · 1:05 p. m.<br><span class="sub">Administración</span></div>
+          <button class="action secondary" onclick="toggle(this)">Ver caso</button>
+          <div class="extra">Revisa la causa y confirma las etiquetas de reemplazo, si hubo reempaque. Solo Administración puede liberar el producto.</div>
+        </article>
+      </div>
+    </section>
+    <p class="foot">Boceto de interacción · botones despliegan una descripción de lo que contendría la revisión. No ejecutan acciones reales.</p>
+  </main>
+  <script>
+    function toggle(button){const row=button.closest('.row');const open=row.classList.toggle('open');button.setAttribute('aria-expanded',String(open));}
+    document.querySelectorAll('.filter').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('.filter').forEach(b=>b.classList.remove('active'));button.classList.add('active');document.querySelectorAll('.row').forEach(row=>row.hidden=button.dataset.filter!=='all'&&row.dataset.kind!==button.dataset.filter)}));
+    document.getElementById('q').addEventListener('input',event=>{const query=event.target.value.trim().toLocaleLowerCase();document.querySelectorAll('.row').forEach(row=>row.hidden=Boolean(query)&&!row.dataset.text.includes(query))});
+  </script>
+</body>
+</html>

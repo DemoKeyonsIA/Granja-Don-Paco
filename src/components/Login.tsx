@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Egg, LogIn, AlertCircle } from 'lucide-react';
+import { LogIn, AlertCircle } from 'lucide-react';
 import { Spinner } from './Spinner';
 import { saveSession } from '../lib/session';
 import { toast } from 'sonner';
@@ -56,17 +56,24 @@ export default function Login({ onLogin }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center p-4" style={{ background: 'linear-gradient(160deg, var(--brand-surface) 0%, var(--brand-surface-dark) 50%, color-mix(in srgb, var(--brand-primary) 8%, var(--brand-surface)) 100%)' }}>
-      <div className="max-w-md w-full bg-white dark:bg-neutral-800 rounded-3xl shadow-2xl border border-stone-200/60 dark:border-neutral-700/60 overflow-hidden">
-        <div className="pt-10 pb-8 px-6 text-center text-white relative overflow-hidden" style={{ background: 'linear-gradient(135deg, var(--brand-primary-dark), var(--brand-primary), var(--brand-primary-light))' }}>
-          <div className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-10 -translate-y-1/2 translate-x-1/3" style={{ background: 'var(--brand-secondary)' }} />
-          <div className="absolute bottom-0 left-0 w-24 h-24 rounded-full opacity-10 translate-y-1/2 -translate-x-1/4" style={{ background: 'var(--brand-secondary-light)' }} />
+    <div className="min-h-screen flex flex-col justify-center items-center p-4" style={{ background: 'var(--bg-page)' }}>
+      <div className="max-w-md w-full rounded-3xl shadow-2xl border overflow-hidden" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', boxShadow: 'var(--shadow-lg)' }}>
+        <div className="pt-10 pb-8 px-6 text-center relative overflow-hidden" style={{ background: 'var(--bg-sidebar)', color: 'var(--text-on-sidebar)' }}>
+          <div className="absolute top-0 right-0 w-32 h-32 rounded-full opacity-15 -translate-y-1/2 translate-x-1/3" style={{ background: 'var(--brand-primary)' }} />
+          <div className="absolute bottom-0 left-0 w-24 h-24 rounded-full opacity-15 translate-y-1/2 -translate-x-1/4" style={{ background: 'var(--brand-primary)' }} />
           <div className="relative">
-            <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner" style={{ background: 'rgba(255,255,255,0.15)' }}>
-               <Egg className="w-10 h-10 text-white" />
+            <div className="mx-auto mb-4 flex h-24 w-44 max-w-full items-center justify-center overflow-hidden rounded-xl border border-white/30 bg-white shadow-sm">
+              <img
+                src="/granja-don-paco-logo.png"
+                alt="Granja Don Paco · Siempre frescos"
+                width={447}
+                height={447}
+                draggable={false}
+                className="h-full w-full object-cover object-center"
+              />
             </div>
-            <h1 className="text-2xl font-black tracking-wide">Granja Don Paco</h1>
-            <p className="text-sm font-medium mt-1" style={{ color: 'rgba(255,255,255,0.7)' }}>Sistema Integrado de Gestión</p>
+            <h1 className="text-2xl font-bold tracking-tight">Granja Don Paco</h1>
+            <p className="text-sm font-medium mt-2 opacity-80" style={{ color: 'var(--text-on-sidebar)' }}>Origen cuidado · calidad cercana</p>
           </div>
         </div>
         
@@ -120,7 +127,7 @@ export default function Login({ onLogin }: LoginProps) {
                 type="button"
                 onClick={() => toast.info('Contacta al administrador para restablecer tu contraseña. En demo usa la clave 1234.')}
                 className="text-xs font-bold transition-colors"
-                style={{ color: 'var(--brand-primary-dark)' }}
+                style={{ color: 'var(--text-link)' }}
               >
                 ¿Olvidaste tu contraseña?
               </button>
@@ -129,8 +136,8 @@ export default function Login({ onLogin }: LoginProps) {
             <button 
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-60"
-              style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-primary-light))' }}
+              className="w-full flex items-center justify-center font-bold py-3.5 px-4 rounded-xl shadow-md transition-all hover:shadow-lg active:scale-[0.98] disabled:opacity-60"
+              style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}
             >
               {loading ? <Spinner className="mr-2" /> : <LogIn className="w-5 h-5 mr-2" />}
               {loading ? 'Verificando...' : 'Ingresar al Sistema'}
@@ -139,17 +146,33 @@ export default function Login({ onLogin }: LoginProps) {
           
           <div className="mt-8 pt-6 border-t border-stone-100 dark:border-neutral-700">
             <p className="text-xs text-stone-400 dark:text-stone-500 font-semibold uppercase tracking-wider text-center mb-3">Accesos Rápidos (Demo)</p>
-            <div className="grid grid-cols-3 gap-2">
-              <button onClick={() => autofill('admin@granja.com')} className="text-xs font-semibold py-2.5 rounded-xl transition-colors border" style={{ background: 'color-mix(in srgb, var(--brand-primary) 8%, transparent)', color: 'var(--brand-primary-dark)', borderColor: 'color-mix(in srgb, var(--brand-primary) 20%, transparent)' }}>Admin</button>
-              <button onClick={() => autofill('socio@granja.com')} className="text-xs font-semibold py-2.5 rounded-xl transition-colors border" style={{ background: 'color-mix(in srgb, var(--brand-secondary) 10%, transparent)', color: 'var(--brand-secondary-dark)', borderColor: 'color-mix(in srgb, var(--brand-secondary) 25%, transparent)' }}>Socio</button>
-              <button onClick={() => autofill('vendedor@granja.com')} className="text-xs font-semibold py-2.5 rounded-xl transition-colors border" style={{ background: 'color-mix(in srgb, var(--brand-accent) 8%, transparent)', color: 'var(--brand-accent)', borderColor: 'color-mix(in srgb, var(--brand-accent) 20%, transparent)' }}>Comercial</button>
-              <button onClick={() => autofill('bodega@granja.com')} className="text-xs font-semibold py-2.5 bg-stone-100 dark:bg-neutral-700 text-stone-600 dark:text-stone-300 rounded-xl hover:bg-stone-200 dark:hover:bg-neutral-600 transition-colors border border-stone-200 dark:border-neutral-600">Bodeguero</button>
-              <button onClick={() => autofill('despacho@granja.com')} className="text-xs font-semibold py-2.5 bg-stone-100 dark:bg-neutral-700 text-stone-600 dark:text-stone-300 rounded-xl hover:bg-stone-200 dark:hover:bg-neutral-600 transition-colors border border-stone-200 dark:border-neutral-600">Enc. Galerón</button>
-              <button onClick={() => autofill('camionero@granja.com')} className="text-xs font-semibold py-2.5 bg-stone-100 dark:bg-neutral-700 text-stone-600 dark:text-stone-300 rounded-xl hover:bg-stone-200 dark:hover:bg-neutral-600 transition-colors border border-stone-200 dark:border-neutral-600">Camionero</button>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <DemoRoleButton label="Administrador" onClick={() => autofill('admin@granja.com')} />
+              <DemoRoleButton label="Comercial · ventas y reparto" onClick={() => autofill('vendedor@granja.com')} />
+              <DemoRoleButton label="Socio" onClick={() => autofill('socio@granja.com')} />
+              <DemoRoleButton label="Bodeguero" onClick={() => autofill('bodega@granja.com')} />
+              <DemoRoleButton label="Encargado de granja" onClick={() => autofill('despacho@granja.com')} />
             </div>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function DemoRoleButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-xs font-semibold py-2.5 px-2 rounded-xl transition-colors border hover:brightness-95"
+      style={{
+        background: 'var(--bg-muted)',
+        color: 'var(--text-secondary)',
+        borderColor: 'var(--border-default)',
+      }}
+    >
+      {label}
+    </button>
   );
 }

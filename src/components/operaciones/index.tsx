@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User } from '../../types';
 import BodegaAdmin, { type VistaBodega } from './BodegaAdmin';
 import { BloqueCarga } from '../Spinner';
+import { sessionHeaders } from '../../lib/session';
 
 interface Props {
   currentUser: User;
@@ -26,8 +27,8 @@ export default function OperacionesAdmin({ currentUser, vista, onVista }: Props)
     setIsLoading(true);
     try {
       const [resInv, resMov] = await Promise.all([
-        fetch('/api/inventario'),
-        fetch('/api/inventario/movimientos'),
+        fetch('/api/inventario', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/inventario/movimientos', { headers: sessionHeaders(currentUser.id) }),
       ]);
       if (resInv.ok) setInventario(await resInv.json());
       if (resMov.ok) setMovimientos(await resMov.json());
@@ -36,7 +37,7 @@ export default function OperacionesAdmin({ currentUser, vista, onVista }: Props)
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentUser.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

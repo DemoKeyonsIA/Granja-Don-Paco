@@ -20,9 +20,9 @@
  *   4. Contar los toasts por tipo, para poder afirmar "un aviso" y no "algún
  *      aviso" — que es lo que distingue un toast bien puesto de uno duplicado.
  */
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import type { ComponentType } from 'react';
-import { render, screen, cleanup, within, act } from '@testing-library/react';
+import { render, screen, cleanup, within, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import fixturesJson from '../../fixtures/vistas.json';
 import type { Role, User } from '../../../src/types';
@@ -291,6 +291,7 @@ export async function asentar() {
   await act(async () => {
     await new Promise(r => setTimeout(r, 0));
   });
+  await waitFor(() => expect(screen.queryByTestId('module-loading')).toBeNull());
 }
 
 export function limpiar() {

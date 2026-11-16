@@ -4,7 +4,7 @@
  * Este archivo responde una sola pregunta: ¿está toda la API de pie? Antes
  * vivía como 74 casos escritos a mano, lo que hacía imposible saber si faltaba
  * alguno. Ahora el inventario vive en tablas y un guard (bloque "Cobertura")
- * parsea `server.ts` para fallar en el momento en que se registre una ruta que
+ * parsea los routers de `src/server/routes` para fallar en el momento en que se registre una ruta que
  * las tablas no conocen. Agregar un endpoint obliga a decidir su contrato.
  *
  * Contrato por clase de ruta, medido contra la app real:
@@ -25,6 +25,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { requestAs } from './helpers/request-as';
 import { drizzle } from 'drizzle-orm/libsql';
 import * as schema from '../src/db/schema';
 import type { Express } from 'express';
@@ -67,18 +68,30 @@ afterAll(() => {
 
 /** Lecturas que responden 200 con una lista. */
 const LECTURAS_LISTA: string[] = [
-  '/api/inventario', '/api/inventario/movimientos', '/api/facturas', '/api/gastos',
+  '/api/inventario', '/api/inventario/movimientos', '/api/facturas',
   '/api/granjas', '/api/galerones', '/api/lotes', '/api/mantenimientos', '/api/produccion/historial',
   '/api/camiones', '/api/rutas', '/api/etiquetas', '/api/pesos', '/api/vacunaciones',
   '/api/alimento', '/api/alimento/consumo', '/api/activos', '/api/ordenes-mantenimiento',
   '/api/desperdicios', '/api/precios/listas', '/api/precios/historial', '/api/auditoria',
-  '/api/aprobaciones', '/api/reportes/ventas-por-ruta', '/api/reportes/produccion',
+  '/api/reportes/ventas-por-ruta', '/api/reportes/produccion',
   '/api/reportes/inventario', '/api/reportes/desperdicios', '/api/users', '/api/clientes',
   '/api/productos-catalogo', '/api/tipos-carton', '/api/incidentes',
   '/api/operaciones/traslados', '/api/operaciones/cargas', '/api/operaciones/recepciones',
   '/api/operaciones/remisiones', '/api/logistica/camiones', '/api/logistica/guias',
-  '/api/logistica/guias-activas', '/api/facturacion/documentos',
+  '/api/logistica/guias-activas', '/api/logistica/retornos/pendientes', '/api/facturacion/documentos',
 ];
+
+// La API ahora requiere sesión en estas lecturas; el smoke mantiene separados
+// estos contratos de los casos que verifican explícitamente un 401 anónimo.
+const LECTURAS_PROTEGIDAS = new Set([
+  ...LECTURAS_LISTA,
+  '/api/logistica/auditoria', '/api/clientes/cartera', '/api/clientes/analisis',
+  '/api/logistica/tablero', '/api/facturacion/rutas-dia', '/api/bodega/stock',
+  '/api/pesos/trazabilidad', '/api/pesos/conciliacion', '/api/vacunaciones/alertas',
+  '/api/alimento/alertas', '/api/ordenes-mantenimiento/alertas', '/api/desperdicios/resumen',
+  '/api/desperdicios/patrones', '/api/dashboard/enterprise', '/api/dashboard/produccion-detalle',
+  '/api/finanzas/resumen', '/api/reportes/flujo-caja', '/api/reportes/financiero',
+]);
 
 /**
  * Lecturas que responden 200 con un objeto. `claves` son las que la UI consume
@@ -101,7 +114,6 @@ const LECTURAS_OBJETO: Array<{ ruta: string; claves: string[] }> = [
   { ruta: '/api/desperdicios/patrones', claves: ['rango', 'totales', 'porRuta', 'porVendedor'] },
   { ruta: '/api/dashboard/enterprise', claves: ['ingresosHoy', 'gastosHoy', 'utilidadNeta'] },
   { ruta: '/api/dashboard/produccion-detalle', claves: ['porGranja', 'resumen'] },
-  { ruta: '/api/aprobaciones/pendientes', claves: ['count', 'items'] },
   { ruta: '/api/finanzas/resumen', claves: ['periodo', 'ingresosFacturados', 'gastos', 'utilidad'] },
   { ruta: '/api/reportes/flujo-caja', claves: ['periodo', 'ingresosFacturados', 'gastos', 'utilidad'] },
   { ruta: '/api/reportes/financiero', claves: ['totalVentas', 'totalGastos', 'utilidadNeta', 'margen'] },
@@ -109,41 +121,52 @@ const LECTURAS_OBJETO: Array<{ ruta: string; claves: string[] }> = [
 
 /** Lecturas que sin el parámetro obligatorio deben pedirlo (400), no improvisar. */
 const LECTURAS_EXIGEN_PARAMETRO: string[] = [
-  '/api/logistica/cuadre-central', '/api/precios/lookup', '/api/roles/permisos',
+  '/api/roles/permisos',
 ];
 
 /** Lecturas detrás de sesión: sin cookie responden 401 y no 200 con datos de otro. */
 const LECTURAS_EXIGEN_SESION: string[] = [
-  '/api/auth/me',
+  '/api/gastos',
+  '/api/finanzas/depositos',
+  '/api/logistica/cuadre-central',
+  '/api/logistica/bodega/reconteos-pendientes', '/api/logistica/bodega/cuarentena',
+  '/api/aprobaciones', '/api/aprobaciones/pendientes',
+  '/api/auth/me', '/api/precios/lookup',
   '/api/office/resumen', '/api/office/cuentas', '/api/office/mensajes',
   '/api/office/arbol', '/api/office/documentos', '/api/office/vinculaciones',
 ];
 
 /** Escrituras que validan el cuerpo y responden 400. */
 const ESCRITURAS_VALIDAN: string[] = [
-  '/api/produccion/recoleccion', '/api/gastos', '/api/granjas/wizard', '/api/granjas',
+  '/api/produccion/recoleccion', '/api/granjas/wizard', '/api/granjas',
   '/api/galerones',
-  '/api/lotes', '/api/mantenimientos', '/api/operaciones/traslado', '/api/camiones',
+  '/api/lotes', '/api/mantenimientos', '/api/operaciones/traslado',
   '/api/operaciones/recepcion', '/api/operaciones/remision', '/api/operaciones/recepcion-remision',
   '/api/operaciones/alistamiento', '/api/clientes', '/api/rutas', '/api/logistica/camiones',
-  '/api/logistica/guias', '/api/logistica/cargar-camion', '/api/logistica/cierre-ruta',
+  '/api/logistica/guias',
   '/api/logistica/caja/venta', '/api/logistica/caja/devolucion', '/api/logistica/caja/fin-dia',
-  '/api/logistica/cuadre-central', '/api/etiquetas/generar', '/api/etiquetas/generar-lote',
+  '/api/etiquetas/generar', '/api/etiquetas/generar-lote',
   '/api/etiquetas/escanear', '/api/bodega/ingresar-etiquetas', '/api/bodega/ingreso-manual',
   '/api/pesos/registrar', '/api/vacunaciones', '/api/alimento', '/api/alimento/consumo',
-  '/api/activos', '/api/ordenes-mantenimiento', '/api/desperdicios', '/api/precios/listas',
-  '/api/precios/detalle', '/api/precios/cambiar', '/api/auditoria', '/api/aprobaciones',
+  '/api/activos', '/api/ordenes-mantenimiento', '/api/desperdicios',
+  '/api/auditoria',
   '/api/precios/lookup-multiple', '/api/users', '/api/productos-catalogo', '/api/tipos-carton',
-  '/api/precio-excepciones', '/api/incidentes', '/api/auth/login',
+  '/api/incidentes', '/api/auth/login',
 ];
+
+const ESCRITURAS_VALIDAN_PROTEGIDAS = new Set(ESCRITURAS_VALIDAN.filter((ruta) => ruta !== '/api/auth/login'));
 
 /** Escrituras detrás de sesión. */
 const ESCRITURAS_EXIGEN_SESION: string[] = [
+  '/api/logistica/bodega/reconteos/:aprobacionId', '/api/logistica/bodega/cuarentena/:id/etiquetas-reemplazo', '/api/logistica/bodega/cuarentena/:id/liberar',
+  '/api/logistica/bodega/retorno/aceptar', '/api/logistica/bodega/retorno/aceptar-sobrante', '/api/logistica/merma', '/api/gastos', '/api/logistica/cuadre-central', '/api/aprobaciones', '/api/finanzas/depositos',
   '/api/ventas', '/api/pagos',
+  '/api/precios/listas', '/api/precios/detalle', '/api/precios/cambiar', '/api/precio-excepciones',
   '/api/facturacion/crear-documento', '/api/facturacion/generar-xml', '/api/facturacion/enviar',
   '/api/facturacion/consultar-estado', '/api/facturacion/nota-credito', '/api/facturacion/consolidar-ruta',
   '/api/office/cuentas', '/api/office/sync', '/api/office/mensajes', '/api/office/documentos',
   '/api/office/vinculaciones', '/api/office/vinculaciones/probar',
+  '/api/operaciones/inventario/granja/conciliar-kg',
 ];
 
 /**
@@ -165,7 +188,7 @@ const CON_PARAMETRO: Array<{ metodo: string; patron: string; esperado: number; n
   { metodo: 'PUT', patron: '/api/granjas/:id', esperado: 404 },
   { metodo: 'PUT', patron: '/api/galerones/:id', esperado: 404 },
   { metodo: 'PUT', patron: '/api/lotes/:id', esperado: 404 },
-  { metodo: 'PUT', patron: '/api/camiones/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/logistica/camiones/:id', esperado: 404 },
   { metodo: 'PUT', patron: '/api/clientes/:id', esperado: 404 },
   { metodo: 'PUT', patron: '/api/rutas/:id', esperado: 404 },
   { metodo: 'PUT', patron: '/api/vacunaciones/:id', esperado: 404 },
@@ -173,23 +196,26 @@ const CON_PARAMETRO: Array<{ metodo: string; patron: string; esperado: number; n
   { metodo: 'PUT', patron: '/api/users/:id', esperado: 404 },
   { metodo: 'PUT', patron: '/api/productos-catalogo/:id', esperado: 404 },
   { metodo: 'PUT', patron: '/api/tipos-carton/:id', esperado: 404 },
-  { metodo: 'PUT', patron: '/api/aprobaciones/:id', esperado: 400, nota: 'rechaza el cuerpo vacío antes de buscar el id' },
+  { metodo: 'PUT', patron: '/api/activos/:id', esperado: 404 },
+  { metodo: 'PUT', patron: '/api/aprobaciones/:id', esperado: 401, nota: 'requiere sesión con permiso para aprobar' },
 
   { metodo: 'PATCH', patron: '/api/incidentes/:id', esperado: 404 },
+  { metodo: 'PATCH', patron: '/api/precios/listas/:id/vigencia', esperado: 404 },
 
   { metodo: 'DELETE', patron: '/api/galerones/:id', esperado: 404 },
   { metodo: 'DELETE', patron: '/api/lotes/:id', esperado: 404 },
-  { metodo: 'DELETE', patron: '/api/camiones/:id', esperado: 404 },
-  { metodo: 'DELETE', patron: '/api/clientes/:id', esperado: 200, nota: 'borrado idempotente' },
+  { metodo: 'DELETE', patron: '/api/logistica/camiones/:id', esperado: 404 },
+  { metodo: 'DELETE', patron: '/api/clientes/:id', esperado: 404, nota: 'cliente inexistente' },
   { metodo: 'DELETE', patron: '/api/users/:id', esperado: 404 },
   { metodo: 'DELETE', patron: '/api/productos-catalogo/:id', esperado: 404 },
   { metodo: 'DELETE', patron: '/api/tipos-carton/:id', esperado: 404 },
-  { metodo: 'DELETE', patron: '/api/precio-excepciones/:id', esperado: 404 },
+  { metodo: 'DELETE', patron: '/api/precio-excepciones/:id', esperado: 404, nota: 'Admin autorizado; baja lógica de excepción inexistente' },
 
-  { metodo: 'POST', patron: '/api/operaciones/carga/:cargaId/confirmar', esperado: 400 },
+  { metodo: 'POST', patron: '/api/operaciones/carga/:cargaId/confirmar', esperado: 404 },
   { metodo: 'POST', patron: '/api/operaciones/carga/:cargaId/rechazar', esperado: 400 },
+  { metodo: 'POST', patron: '/api/operaciones/traslados/:id/corregir-peso-kg', esperado: 400 },
   { metodo: 'POST', patron: '/api/logistica/guias/:id/marcar-en-ruta', esperado: 404 },
-  { metodo: 'POST', patron: '/api/logistica/guias/:id/cerrar', esperado: 404 },
+  { metodo: 'POST', patron: '/api/etiquetas/:id/peso-neto', esperado: 404 },
   { metodo: 'POST', patron: '/api/office/mensajes/:id/leer', esperado: 401 },
   { metodo: 'POST', patron: '/api/office/documentos/:id/vincular', esperado: 401 },
   { metodo: 'DELETE', patron: '/api/office/cuentas/:id', esperado: 401 },
@@ -242,16 +268,28 @@ const esperando = (esperado: number) => (res: { status: number }) =>
 // ---------------------------------------------------------------------------
 
 describe('SMOKE maestro — inventario de endpoints', () => {
-  describe('Cobertura: toda ruta registrada en server.ts está en una tabla', () => {
+  describe('Cobertura: toda ruta registrada en los routers está en una tabla', () => {
     it('ninguna ruta registrada quedó fuera del inventario', () => {
-      const fuente = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8');
+      const routesRoot = path.resolve(process.cwd(), 'src/server/routes');
+      const archivos: string[] = [];
+      const recorrer = (dir: string) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) recorrer(full);
+          else if (entry.isFile() && /\.tsx?$/.test(entry.name)) archivos.push(full);
+        }
+      };
+      recorrer(routesRoot);
       const registradas: Array<{ metodo: string; ruta: string }> = [];
       const re = /app\.(get|post|put|patch|delete)\s*\(\s*(['"`])([^'"`]+)\2/g;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(fuente))) {
-        const ruta = m[3].split('?')[0];
-        if (ruta === '*') continue; // fallback SPA, no es un endpoint
-        registradas.push({ metodo: m[1].toUpperCase(), ruta });
+      for (const archivo of archivos) {
+        const fuente = fs.readFileSync(archivo, 'utf8');
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(fuente))) {
+          const ruta = m[3].split('?')[0];
+          if (ruta === '*') continue;
+          registradas.push({ metodo: m[1].toUpperCase(), ruta });
+        }
       }
 
       const aPatron = (ruta: string) => ruta.replace(/\/:\w+/g, '/*');
@@ -265,6 +303,7 @@ describe('SMOKE maestro — inventario de endpoints', () => {
         ...EXCLUIDAS_POR_GEMINI.map((r) => `POST ${aPatron(r)}`),
         ...CON_PARAMETRO.map((r) => `${r.metodo} ${aPatron(r.patron)}`),
         'POST /api/auth/logout', // 200 sin cuerpo: cierra sesión, no valida nada
+        'PUT /api/activos/*', 'POST /api/etiquetas/*/peso-neto',
       ]);
 
       const sinCubrir = registradas
@@ -272,7 +311,7 @@ describe('SMOKE maestro — inventario de endpoints', () => {
         .filter((clave) => !cubiertas.has(clave));
 
       expect(sinCubrir, `rutas nuevas sin smoke:\n${sinCubrir.join('\n')}`).toEqual([]);
-      expect(registradas.length, 'el inventario de server.ts cambió de tamaño; revisá las tablas').toBeGreaterThan(140);
+      expect(registradas.length, 'el inventario de routers cambió de tamaño; revisá las tablas').toBeGreaterThan(140);
     });
   });
 
@@ -280,7 +319,7 @@ describe('SMOKE maestro — inventario de endpoints', () => {
     it('todo GET de lista responde 200 con un arreglo', () => {
       return sondeosAgregados(LECTURAS_LISTA.map((ruta) => ({
         etiqueta: `GET ${ruta}`,
-        ejecutar: () => request(app).get(ruta),
+        ejecutar: () => (LECTURAS_PROTEGIDAS.has(ruta) ? requestAs(app, '1') : request(app)).get(ruta),
         verificar: (res) => {
           if (res.status !== 200) return `GET ${ruta} — esperaba 200 y recibió ${res.status}`;
           if (!Array.isArray(res.body)) return `GET ${ruta} — esperaba un arreglo y recibió ${JSON.stringify(res.body).slice(0, 80)}`;
@@ -292,7 +331,7 @@ describe('SMOKE maestro — inventario de endpoints', () => {
     it('todo GET de objeto responde 200 con las claves que la UI consume', () => {
       return sondeosAgregados(LECTURAS_OBJETO.map(({ ruta, claves }) => ({
         etiqueta: `GET ${ruta}`,
-        ejecutar: () => request(app).get(ruta),
+        ejecutar: () => (LECTURAS_PROTEGIDAS.has(ruta) ? requestAs(app, '1') : request(app)).get(ruta),
         verificar: (res) => {
           if (res.status !== 200) return `GET ${ruta} — esperaba 200 y recibió ${res.status}`;
           const faltantes = claves.filter((k) => !(k in (res.body ?? {})));
@@ -322,7 +361,7 @@ describe('SMOKE maestro — inventario de endpoints', () => {
     it('todo POST de escritura rechaza el cuerpo vacío con 400', () => {
       return sondeosAgregados(ESCRITURAS_VALIDAN.map((ruta) => ({
         etiqueta: `POST ${ruta}`,
-        ejecutar: () => request(app).post(ruta).send({}),
+        ejecutar: () => (ESCRITURAS_VALIDAN_PROTEGIDAS.has(ruta) ? requestAs(app, '1') : request(app)).post(ruta).send({}),
         verificar: esperando(400),
       })));
     });
@@ -342,10 +381,21 @@ describe('SMOKE maestro — inventario de endpoints', () => {
   });
 
   describe('Rutas con :param', () => {
+    it('DELETE de excepción con sesión conserva 404 para id inexistente', async () => {
+      const res = await request(app).delete('/api/precio-excepciones/no-existe').set('x-user-id', '1');
+      expect(res.status).toBe(404);
+    });
+
     it('ninguna revienta ni se hace la loca ante un id inexistente', () => {
       return sondeosAgregados(CON_PARAMETRO.map(({ metodo: m, patron, esperado, nota }) => ({
         etiqueta: `${m} ${patron}`,
-        ejecutar: () => llamar(m, patron.replace(/:(\w+)/g, ID_FALSO), {}),
+        ejecutar: () => {
+          const ruta = patron.replace(/:(\w+)/g, ID_FALSO);
+          const req = llamar(m, ruta, {});
+          if (esperado !== 401 && (m !== 'GET' || ruta !== '/api/roles/permisos')) req.set('x-user-id', '1');
+          return ((m === 'DELETE' && patron.startsWith('/api/precio-excepciones/'))
+            || (m === 'PATCH' && patron.startsWith('/api/precios/listas/'))) ? req.set('x-user-id', '1') : req;
+        },
         verificar: (res) => {
           if (res.status === esperado) return null;
           return ` — esperaba ${esperado} y recibió ${res.status}${nota ? ` (${nota})` : ''}`;
@@ -364,7 +414,7 @@ describe('SMOKE maestro — contratos que la UI consume por nombre', () => {
    * de que el bloque desaparezca en silencio.
    */
   it('GET /api/dashboard/enterprise — las 7 claves que lee Resumen', async () => {
-    const res = await request(app).get('/api/dashboard/enterprise');
+    const res = await requestAs(app, '1').get('/api/dashboard/enterprise');
     expect(res.status).toBe(200);
     for (const clave of [
       'cartonesProducidos', 'stockBodegaCentral', 'totalAvesVivas', 'rutasActivas',
@@ -375,7 +425,7 @@ describe('SMOKE maestro — contratos que la UI consume por nombre', () => {
   });
 
   it('GET /api/finanzas/resumen — la fuente única que Resumen muestra', async () => {
-    const res = await request(app).get('/api/finanzas/resumen');
+    const res = await requestAs(app, '1').get('/api/finanzas/resumen');
     expect(res.status).toBe(200);
     for (const clave of [
       'ingresosFacturados', 'ingresosCobrados', 'gastos', 'utilidad', 'margen',
@@ -393,8 +443,8 @@ describe('SMOKE maestro — contratos que la UI consume por nombre', () => {
   // `e2e-finanzas-roles.test.ts`; acá solo se ata que ambas rutas existen.
   it('finanzas/resumen y reportes/flujo-caja exponen el mismo P&L', async () => {
     const [resumen, flujo] = await Promise.all([
-      request(app).get('/api/finanzas/resumen'),
-      request(app).get('/api/reportes/flujo-caja'),
+      requestAs(app, '1').get('/api/finanzas/resumen'),
+      requestAs(app, '1').get('/api/reportes/flujo-caja'),
     ]);
     for (const cuerpo of [resumen.body, flujo.body]) {
       expect(Array.isArray(cuerpo.cicloDelDinero)).toBe(true);
@@ -410,7 +460,7 @@ describe('SMOKE maestro — contratos que la UI consume por nombre', () => {
   it('todos los reportes que consume Reportes.tsx resuelven 200', async () => {
     const ids = ['financiero', 'flujo-caja', 'ventas-por-ruta', 'produccion', 'inventario', 'desperdicios'];
     for (const id of ids) {
-      const res = await request(app).get(`/api/reportes/${id}`);
+      const res = await requestAs(app, '1').get(`/api/reportes/${id}`);
       expect(res.status, `reporte ${id}`).toBe(200);
     }
   });
@@ -431,19 +481,19 @@ describe('SMOKE maestro — contratos que la UI consume por nombre', () => {
   });
 
   it('GET /api/precios/lookup — 400 sin producto, 404 si no existe', async () => {
-    expect((await request(app).get('/api/precios/lookup')).status).toBe(400);
-    expect((await request(app).get('/api/precios/lookup?producto=NoExiste')).status).toBe(404);
+    expect((await requestAs(app, '1').get('/api/precios/lookup')).status).toBe(400);
+    expect((await requestAs(app, '1').get('/api/precios/lookup?producto=NoExiste')).status).toBe(404);
   });
 
   it('POST /api/produccion/recoleccion — falla sin galerón', async () => {
-    const res = await request(app).post('/api/produccion/recoleccion').send({ galeron: null, detalles: [] });
+    const res = await requestAs(app, '1').post('/api/produccion/recoleccion').send({ galeron: null, detalles: [] });
     expect(res.status).toBe(400);
   });
 
   it('POST /api/granjas/wizard — crea con nombre, rechaza sin nombre', async () => {
-    const creada = await request(app).post('/api/granjas/wizard').send({ nombre: 'Test Smoke Wizard' });
+    const creada = await requestAs(app, '1').post('/api/granjas/wizard').send({ nombre: 'Test Smoke Wizard' });
     expect(creada.status).toBe(201);
-    const sinNombre = await request(app).post('/api/granjas/wizard').send({});
+    const sinNombre = await requestAs(app, '1').post('/api/granjas/wizard').send({});
     expect(sinNombre.status).toBe(400);
   });
 });
@@ -468,10 +518,18 @@ describe('SMOKE maestro — escrituras detrás de sesión', () => {
     })));
   });
 
+  it('con sesión, depósito rechaza el cuerpo vacío con 400', () => {
+    return sondeosAgregados([{
+      etiqueta: 'POST /api/finanzas/depositos (autenticado)',
+      ejecutar: () => request(app).post('/api/finanzas/depositos').set('x-user-id', '1').send({}),
+      verificar: esperando(400),
+    }]);
+  });
+
   // Escrituras felices mínimas: prueban que el camino de éxito sigue en pie, no
   // solo que el endpoint rechaza. La profundidad vive en los e2e-*.
   it('gastos, rutas y clientes aceptan una escritura válida', async () => {
-    const gasto = await request(app).post('/api/gastos').send({
+    const gasto = await request(app).post('/api/gastos').set('x-user-id', '1').send({
       fecha: new Date().toISOString(),
       categoria: 'Diesel',
       monto: 15000,
@@ -481,17 +539,17 @@ describe('SMOKE maestro — escrituras detrás de sesión', () => {
     expect(gasto.status).toBe(200);
     expect(gasto.body.success).toBe(true);
 
-    const ruta = await request(app).post('/api/rutas').send({ nombre: 'Ruta Test', vendedor_asignado: 'Vendedor Test' });
+    const ruta = await requestAs(app, '1').post('/api/rutas').send({ nombre: 'Ruta Test', vendedor_asignado: 'Vendedor Test' });
     expect(ruta.status).toBe(201);
     expect(ruta.body.success).toBe(true);
 
-    const cliente = await request(app).post('/api/clientes').send({ nombre: 'Cliente Test', telefono: '8888-0000', ruta: 'Ruta Test', condicion_pago: 'Contado' });
+    const cliente = await requestAs(app, '1').post('/api/clientes').send({ nombre: 'Cliente Test', telefono: '8888-0000', ruta: 'Ruta Test', condicion_pago: 'Contado' });
     expect(cliente.status).toBe(201);
     expect(cliente.body.success).toBe(true);
   });
 
   it('el historial de producción acepta el filtro de granja', async () => {
-    const res = await request(app).get('/api/produccion/historial?granjaId=any');
+    const res = await requestAs(app, '1').get('/api/produccion/historial?granjaId=any');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
   });
@@ -499,15 +557,15 @@ describe('SMOKE maestro — escrituras detrás de sesión', () => {
 
 describe('SMOKE maestro — flujos con estado', () => {
   it('POST /api/ventas — auto-aplica el precio de lista', async () => {
-    const clientRes = await request(app).post('/api/clientes').send({ nombre: 'Test Client Precio', ruta: 'Ruta 1' });
+    const clientRes = await requestAs(app, '1').post('/api/clientes').send({ nombre: 'Test Client Precio', ruta: 'Ruta 1' });
     expect(clientRes.status).toBe(201);
     const clientId = clientRes.body.id;
 
-    const listaRes = await request(app).post('/api/precios/listas').send({ nombre: 'Lista Test', tipo: 'Global' });
+    const listaRes = await request(app).post('/api/precios/listas').set('x-user-id', '1').send({ nombre: 'Lista Test', tipo: 'Global' });
     expect(listaRes.status).toBe(201);
     const listaId = listaRes.body.id;
 
-    const detRes = await request(app).post('/api/precios/detalle').send({ listaId, producto: 'Huevos - Smoke TEST', precioUnitario: 2500 });
+    const detRes = await request(app).post('/api/precios/detalle').set('x-user-id', '1').send({ listaId, producto: 'Huevos - Smoke TEST', precioUnitario: 2500 });
     expect(detRes.status).toBe(201);
 
     const ventaRes = await request(app).post('/api/ventas').set('x-user-id', '1').send({
@@ -516,7 +574,7 @@ describe('SMOKE maestro — flujos con estado', () => {
     });
     expect(ventaRes.status).toBe(200);
     expect(ventaRes.body.preciosAplicados).toBeDefined();
-    expect(ventaRes.body.preciosAplicados[0].precio).toBe(2500);
+    expect(ventaRes.body.preciosAplicados[0].precioAplicado).toBe(2500);
   });
 
   describe('Galerón — ocupación y aves_en_produccion', () => {
@@ -524,7 +582,7 @@ describe('SMOKE maestro — flujos con estado', () => {
     let testGaleronId: string;
 
     it('wizard crea granja con galerón en cero', async () => {
-      const res = await request(app)
+      const res = await requestAs(app, '1')
         .post('/api/granjas/wizard')
         .send({
           nombre: 'Granja Test Ocupación',
@@ -535,11 +593,11 @@ describe('SMOKE maestro — flujos con estado', () => {
         });
       expect(res.status).toBe(201);
 
-      const g = (await request(app).get('/api/granjas')).body.find((x: any) => x.nombre === 'Granja Test Ocupación');
+      const g = (await requestAs(app, '1').get('/api/granjas')).body.find((x: any) => x.nombre === 'Granja Test Ocupación');
       expect(g).toBeDefined();
       testGranjaId = g.id;
 
-      const gal = (await request(app).get('/api/galerones')).body.find((x: any) => x.granjaId === testGranjaId && x.nombre === 'Galpón Ocupación');
+      const gal = (await requestAs(app, '1').get('/api/galerones')).body.find((x: any) => x.granjaId === testGranjaId && x.nombre === 'Galpón Ocupación');
       expect(gal).toBeDefined();
       expect(gal.capacidad_maxima).toBe(1000);
       expect(gal.aves_en_produccion).toBe(0);
@@ -547,9 +605,9 @@ describe('SMOKE maestro — flujos con estado', () => {
     });
 
     it('PUT actualiza aves_en_produccion y el detalle calcula la ocupación', async () => {
-      await request(app).put(`/api/galerones/${testGaleronId}`).send({ aves_en_produccion: 800 });
+      await requestAs(app, '1').put(`/api/galerones/${testGaleronId}`).send({ aves_en_produccion: 800 });
 
-      const res = await request(app).get(`/api/granjas/${testGranjaId}/detalle`);
+      const res = await requestAs(app, '1').get(`/api/granjas/${testGranjaId}/detalle`);
       expect(res.status).toBe(200);
       const gal = res.body.galerones.find((g: any) => g.id === testGaleronId);
       expect(gal.aves).toBe(800);
@@ -559,13 +617,13 @@ describe('SMOKE maestro — flujos con estado', () => {
     });
 
     it('la ocupación se recalcula al cambiar la capacidad, no solo las aves', async () => {
-      await request(app).put(`/api/galerones/${testGaleronId}`).send({ capacidad_maxima: 1200, aves_en_produccion: 360 });
-      let gal = (await request(app).get(`/api/granjas/${testGranjaId}/detalle`)).body.galerones.find((g: any) => g.id === testGaleronId);
+      await requestAs(app, '1').put(`/api/galerones/${testGaleronId}`).send({ capacidad_maxima: 1200, aves_en_produccion: 360 });
+      let gal = (await requestAs(app, '1').get(`/api/granjas/${testGranjaId}/detalle`)).body.galerones.find((g: any) => g.id === testGaleronId);
       expect(gal.aves).toBe(360);
       expect(gal.ocupacion).toBe(30);
 
-      await request(app).put(`/api/galerones/${testGaleronId}`).send({ capacidad_maxima: 1000, aves_en_produccion: 950 });
-      gal = (await request(app).get(`/api/granjas/${testGranjaId}/detalle`)).body.galerones.find((g: any) => g.id === testGaleronId);
+      await requestAs(app, '1').put(`/api/galerones/${testGaleronId}`).send({ capacidad_maxima: 1000, aves_en_produccion: 950 });
+      gal = (await requestAs(app, '1').get(`/api/granjas/${testGranjaId}/detalle`)).body.galerones.find((g: any) => g.id === testGaleronId);
       expect(gal.aves).toBe(950);
       expect(gal.ocupacion).toBe(95);
     });

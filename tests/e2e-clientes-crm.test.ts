@@ -6,6 +6,7 @@ import type { Express } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { ejecutarDdl, abrirClienteDePrueba } from './helpers/db';
+import { requestAs } from './helpers/request-as';
 
 let app: Express;
 let client: any;
@@ -41,28 +42,29 @@ afterAll(() => {
 });
 
 describe('E2E — MÓDULO CLIENTES CRM: cartera enriquecida, análisis por periodo, perfil 360, excepciones y CRUD', () => {
+  const adminRequest = () => requestAs(app, 'u-adm');
   let a: any; // campeón: paga puntual, mucho volumen
   let b: any; // atraso leve
   let c: any; // crónico, sobre el límite
 
   it('C1 — CRUD: crear clientes con condiciones y límites; búsqueda; edición', async () => {
-    const ca = await request(app).post('/api/clientes').send({ nombre: 'Pulpería La Central', ruta: 'Ruta 10', condicion_pago: 'Credito', limite_credito: 500000, telefono: '8701-2234', tipo_documento: 'Fisica', documento_id: '3-0455-7890' });
+    const ca = await adminRequest().post('/api/clientes').send({ nombre: 'Pulpería La Central', ruta: 'Ruta 10', condicion_pago: 'Credito', limite_credito: 500000, telefono: '8701-2234', tipo_documento: 'Fisica', documento_id: '3-0455-7890' });
     expect(ca.status).toBe(201);
     a = { id: ca.body.id, nombre: 'Pulpería La Central' };
 
-    const cb = await request(app).post('/api/clientes').send({ nombre: 'Restaurante El Fogón', ruta: 'Cacique', condicion_pago: 'Credito', limite_credito: 400000 });
+    const cb = await adminRequest().post('/api/clientes').send({ nombre: 'Restaurante El Fogón', ruta: 'Cacique', condicion_pago: 'Credito', limite_credito: 400000 });
     expect(cb.status).toBe(201);
     b = { id: cb.body.id, nombre: 'Restaurante El Fogón' };
 
-    const cc = await request(app).post('/api/clientes').send({ nombre: 'Super Mercadito La Fortuna', ruta: 'Cacique', condicion_pago: 'Credito', limite_credito: 450000 });
+    const cc = await adminRequest().post('/api/clientes').send({ nombre: 'Super Mercadito La Fortuna', ruta: 'Cacique', condicion_pago: 'Credito', limite_credito: 450000 });
     expect(cc.status).toBe(201);
     c = { id: cc.body.id, nombre: 'Super Mercadito La Fortuna' };
 
-    const clientes = (await request(app).get('/api/clientes')).body;
+    const clientes = (await adminRequest().get('/api/clientes')).body;
     expect(clientes).toHaveLength(3);
 
     // Edición
-    const up = await request(app).put(`/api/clientes/${c.id}`).send({ condicion_pago: 'Credito', limite_credito: 450000, notas: 'Cliente con historial de morosidad' });
+    const up = await adminRequest().put(`/api/clientes/${c.id}`).send({ condicion_pago: 'Credito', limite_credito: 450000, notas: 'Cliente con historial de morosidad' });
     expect(up.status).toBe(200);
   });
 
@@ -94,7 +96,7 @@ describe('E2E — MÓDULO CLIENTES CRM: cartera enriquecida, análisis por perio
   });
 
   it('C3 — CARTERA: endpoint enriquecido con segmento, score, comportamiento y uso de línea', async () => {
-    const res = await request(app).get('/api/clientes/cartera');
+    const res = await adminRequest().get('/api/clientes/cartera');
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(3);
 
@@ -118,7 +120,7 @@ describe('E2E — MÓDULO CLIENTES CRM: cartera enriquecida, análisis por perio
   });
 
   it('C4 — ANÁLISIS: KPIs por periodo, aging, worklist y segmentación con datos reales', async () => {
-    const res = await request(app).get('/api/clientes/analisis');
+    const res = await adminRequest().get('/api/clientes/analisis');
     expect(res.status).toBe(200);
     expect(res.body.totalClientes).toBe(3);
     expect(res.body.ventaDelMes).toBeGreaterThan(0);
@@ -134,7 +136,23 @@ describe('E2E — MÓDULO CLIENTES CRM: cartera enriquecida, análisis por perio
   });
 
   it('C5 — PERFIL 360: kpis, facturas con envejecimiento, documentos, mix y excepciones', async () => {
-    const res = await request(app).get(`/api/clientes/${b.id}/360`);
+    const facturaVinculada = (await client.execute({ sql: `SELECT id FROM facturas WHERE cliente_id = ? ORDER BY fecha LIMIT 1`, args: [b.id] })).rows[0] as any;
+    await client.execute({ sql: `INSERT INTO camiones (id, nombre, capacidad_cartones) VALUES (?, ?, ?)`, args: ['crm-truck', 'CRM Test', 100] });
+    await client.execute({ sql: `INSERT INTO guias_despacho (id, consecutivo, camion_id, fecha, total_cartones, estado) VALUES (?, ?, ?, ?, ?, ?)`, args: ['crm-guide', 'CRM-GD-001', 'crm-truck', D(0), 7, 'Cerrada'] });
+    const fechaTicket = D(0);
+    const ticketValues = (id: string, consecutivo: string, total: number, cartones: number, facturaId: string | null) => [
+      id, consecutivo, 'crm-truck', 'crm-guide', 'u-ven', fechaTicket, b.id, null, 'Huevos - Grande', cartones,
+      16000, total, 0, total, 'Efectivo', 'Emitida', facturaId, null,
+    ];
+    await client.execute({
+      sql: `INSERT INTO ventas_ruta (id, tiquete_consecutivo, camion_id, guia_id, vendedor_id, fecha_hora, cliente_id, etiqueta_id, producto, cartones, precio_unitario, subtotal, descuento, total, cobro, estado, factura_id, resolucion_precio_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: ticketValues('crm-ticket-invoiced', 'TQ-CRM-001', 64000, 4, facturaVinculada.id),
+    });
+    await client.execute({
+      sql: `INSERT INTO ventas_ruta (id, tiquete_consecutivo, camion_id, guia_id, vendedor_id, fecha_hora, cliente_id, etiqueta_id, producto, cartones, precio_unitario, subtotal, descuento, total, cobro, estado, factura_id, resolucion_precio_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: ticketValues('crm-ticket-standalone', 'TQ-CRM-002', 48000, 3, null),
+    });
+    const res = await adminRequest().get(`/api/clientes/${b.id}/360`);
     expect(res.status).toBe(200);
     expect(res.body.cliente.nombre).toBe('Restaurante El Fogón');
     expect(res.body.kpis.facturasAbiertas).toBe(1);
@@ -143,51 +161,104 @@ describe('E2E — MÓDULO CLIENTES CRM: cartera enriquecida, análisis por perio
     expect(res.body.facturas.every((f: any) => f.consecutivo.startsWith('FAC'))).toBe(true);
 
     const docs = res.body.documentos;
-    expect(docs.length).toBe(3);
-    expect(docs.every((d: any) => d.tipo === 'Factura')).toBe(true);
+    expect(docs.length).toBe(4); // 3 facturas + 1 tiquete no consolidado
+    expect(docs.filter((d: any) => d.tipo === 'Factura')).toHaveLength(3);
+    expect(docs.filter((d: any) => d.tipo === 'Tiquete').map((d: any) => d.consecutivo)).toEqual(['TQ-CRM-002']);
+    expect(res.body.tiquetes).toHaveLength(2); // conserva el documento asociado para auditoría
+    expect(res.body.kpis.pedidos30d).toBe(4); // 3 facturas + 1 compra en ruta no consolidada
+    expect(res.body.kpis.ticketProm).toBe(60000);
+    expect(res.body.kpis.venta12m).toBe(240000); // no suma otra vez el tiquete ya facturado
+    expect(res.body.mix.find((x: any) => x.producto === 'Huevos - Grande').unidades).toBe(15);
 
-    const c360 = await request(app).get(`/api/clientes/${c.id}/360`);
+    const c360 = await adminRequest().get(`/api/clientes/${c.id}/360`);
     expect(c360.status).toBe(200);
     expect(c360.body.facturas[0].diasVencido).toBeGreaterThan(30); // crónica
     expect(c360.body.mix).toEqual(expect.any(Array));
 
     // 404 para cliente inexistente
-    const nf = await request(app).get('/api/clientes/no-existe/360');
+    const nf = await adminRequest().get('/api/clientes/no-existe/360');
     expect(nf.status).toBe(404);
   });
 
   it('C6 — Excepciones de precio: crear, listar por cliente, ver en 360 y eliminar', async () => {
+    const fechaInicio = new Date().toISOString().slice(0, 10);
+    const fin = new Date(); fin.setDate(fin.getDate() + 30);
+    const fechaFin = fin.toISOString().slice(0, 10);
+    const finRuta = new Date(); finRuta.setDate(finRuta.getDate() + 5);
+    const fechaFinRuta = finRuta.toISOString().slice(0, 10);
+    const listaRuta = await request(app).post('/api/precios/listas').set('x-user-id', 'u-adm').send({
+      nombre: 'Tarifa Cacique', tipo: 'Ruta', rutaAsociada: 'Cacique', fechaInicio, fechaFin: fechaFinRuta,
+    });
+    expect(listaRuta.status).toBe(201);
+    const bandaRuta = await request(app).post('/api/precios/detalle').set('x-user-id', 'u-adm').send({
+      listaId: listaRuta.body.id, producto: 'Huevos - Grande', precioUnitario: 12000, precioMinimo: 11000, precioMaximo: 13000,
+    });
+    expect(bandaRuta.status).toBe(201);
+    const rutaSolapada = await request(app).post('/api/precios/listas').set('x-user-id', 'u-adm').send({
+      nombre: 'Tarifa Cacique duplicada', tipo: 'Ruta', rutaAsociada: 'Cacique', fechaInicio, fechaFin: fechaFinRuta,
+    });
+    expect(rutaSolapada.status).toBe(409);
+    const finSiguiente = new Date(finRuta); finSiguiente.setDate(finSiguiente.getDate() + 1);
+    const rutaSiguiente = await request(app).post('/api/precios/listas').set('x-user-id', 'u-adm').send({
+      nombre: 'Tarifa Cacique siguiente', tipo: 'Ruta', rutaAsociada: 'Cacique', fechaInicio: finSiguiente.toISOString().slice(0, 10),
+    });
+    expect(rutaSiguiente.status).toBe(201);
+    const precioRuta = await adminRequest().get(`/api/precios/lookup?producto=${encodeURIComponent('Huevos - Grande')}&clienteId=${b.id}`);
+    expect(precioRuta.body).toMatchObject({ precio: 12000, precioMinimo: 11000, precioMaximo: 13000, listaUsada: 'Tarifa Cacique' });
+    const noAdmin = await request(app).post('/api/precio-excepciones').set('x-user-id', 'u-ven').send({
+      clienteId: a.id, productoId: 'p-huevos-grande', precioExcepcion: 15000,
+      justificacion: 'Volumen alto', fechaInicio, fechaFin,
+    });
+    expect(noAdmin.status).toBe(403);
+    const listaNoAdmin = await request(app).post('/api/precios/listas').set('x-user-id', 'u-ven').send({ nombre: 'Lista no autorizada', tipo: 'Global' });
+    expect(listaNoAdmin.status).toBe(403);
+    const detalleNoAdmin = await request(app).post('/api/precios/detalle').set('x-user-id', 'u-ven').send({ listaId: 'no-existe', producto: 'Huevos - Grande', precioUnitario: 1000 });
+    expect(detalleNoAdmin.status).toBe(403);
+    const cambioNoAdmin = await request(app).post('/api/precios/cambiar').set('x-user-id', 'u-ven').send({ listaId: 'no-existe', producto: 'Huevos - Grande', precioNuevo: 1000 });
+    expect(cambioNoAdmin.status).toBe(403);
     const res = await request(app).post('/api/precio-excepciones').send({
       clienteId: a.id, productoId: 'p-huevos-grande', precioExcepcion: 15000,
-      justificacion: 'Volumen alto', aprobadoPor: 'Admin Test'
-    });
+      justificacion: 'Volumen alto', fechaInicio, fechaFin, aprobadoPor: 'Nombre falsificado'
+    }).set('x-user-id', 'u-adm');
     expect(res.status).toBe(201);
 
-    const lista = await request(app).get(`/api/precio-excepciones/${a.id}`);
+    const precioAplicado = await adminRequest().get(`/api/precios/lookup?producto=${encodeURIComponent('Huevos - Grande')}&clienteId=${a.id}`);
+    expect(precioAplicado.status).toBe(200);
+    expect(precioAplicado.body).toMatchObject({ precio: 15000, precioMinimo: 15000, precioMaximo: 15000 });
+
+    const solapada = await request(app).post('/api/precio-excepciones').set('x-user-id', 'u-adm').send({
+      clienteId: a.id, productoId: 'p-huevos-grande', precioExcepcion: 14500,
+      justificacion: 'Intento de vigencia duplicada', fechaInicio, fechaFin,
+    });
+    expect(solapada.status).toBe(409);
+
+    const lista = await adminRequest().get(`/api/precio-excepciones/${a.id}`);
     expect(lista.status).toBe(200);
     expect(lista.body).toHaveLength(1);
 
-    const perfil = await request(app).get(`/api/clientes/${a.id}/360`);
+    const perfil = await adminRequest().get(`/api/clientes/${a.id}/360`);
     expect(perfil.body.excepciones).toHaveLength(1);
-    expect(perfil.body.excepciones[0]).toMatchObject({ producto: 'Huevos - Grande', precioBase: 16000, precioExcepcion: 15000, aprobadoPor: 'Admin Test' });
+    expect(perfil.body.excepciones[0]).toMatchObject({ producto: 'Huevos - Grande', precioBase: 16000, precioExcepcion: 15000, aprobadoPor: 'Admin Test', fechaInicio, fechaFin, estado: 'Activa', estadoVigencia: 'Vigente' });
 
-    const del = await request(app).delete(`/api/precio-excepciones/${lista.body[0].id}`);
+    const del = await request(app).delete(`/api/precio-excepciones/${lista.body[0].id}`).set('x-user-id', 'u-adm');
     expect(del.status).toBe(200);
-    expect((await request(app).get(`/api/precio-excepciones/${a.id}`)).body).toHaveLength(0);
+    const despues = await adminRequest().get(`/api/precio-excepciones/${a.id}`);
+    expect(despues.body).toHaveLength(1);
+    expect(despues.body[0].estado).toBe('Inactiva');
   });
 
   it('C7 — El CRUD mínimo sigue vivo: eliminar cuenta y la cartera la refleja', async () => {
     // Un cliente sin movimiento queda como C en cartera; lo eliminamos para validar el ciclo completo.
-    const extra = await request(app).post('/api/clientes').send({ nombre: 'Cliente Descartable', ruta: 'Ruta 10', condicion_pago: 'Contado' });
+    const extra = await adminRequest().post('/api/clientes').send({ nombre: 'Cliente Descartable', ruta: 'Ruta 10', condicion_pago: 'Contado' });
     expect(extra.status).toBe(201);
 
-    const antes = await request(app).get('/api/clientes/cartera');
+    const antes = await adminRequest().get('/api/clientes/cartera');
     expect(antes.body.total).toBe(4);
 
-    const del = await request(app).delete(`/api/clientes/${extra.body.id}`);
+    const del = await adminRequest().delete(`/api/clientes/${extra.body.id}`);
     expect(del.status).toBe(200);
 
-    const despues = await request(app).get('/api/clientes/cartera');
+    const despues = await adminRequest().get('/api/clientes/cartera');
     expect(despues.body.total).toBe(3);
   });
 });

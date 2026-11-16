@@ -102,7 +102,7 @@ describe('AUTH — login real por token', () => {
   });
 
   it('GET /api/users no expone password_hash', async () => {
-    const res = await request(app).get('/api/users');
+    const res = await request(app).get('/api/users').set('x-user-id', '1');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     const admin = res.body.find((u: any) => u.id === '1');

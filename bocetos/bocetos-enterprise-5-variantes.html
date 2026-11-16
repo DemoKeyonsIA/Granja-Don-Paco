@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boceto — 5 variantes de acabado enterprise (claro + oscuro)</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════
+   CAPA DEL DOCUMENTO (marco del boceto, no es la app)
+   ══════════════════════════════════════════════════════════════════ */
+:root{
+  --pg-bg:#e9edf2; --pg-card:#ffffff; --pg-line:#d7dce2;
+  --pg-ink:#0f172a; --pg-ink2:#5b6675; --pg-ink3:#94a3b8;
+}
+html[data-theme="dark"]{
+  --pg-bg:#0a0d12; --pg-card:#111722; --pg-line:#263149;
+  --pg-ink:#e8eef7; --pg-ink2:#9aa8bc; --pg-ink3:#64748b;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--pg-bg);color:var(--pg-ink);
+     font-family:'Segoe UI',system-ui,-apple-system,sans-serif;line-height:1.55;}
+.wrap{max-width:1320px;margin:0 auto;padding:30px 22px 80px;}
+
+/* barra superior fija */
+.bar{position:sticky;top:0;z-index:50;background:var(--pg-card);
+     border-bottom:1px solid var(--pg-line);backdrop-filter:blur(6px);}
+.bar .inner{max-width:1320px;margin:0 auto;padding:12px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.bar h1{font-size:16px;font-weight:800;margin:0;letter-spacing:-.01em;}
+.bar .lbl{font-size:12px;color:var(--pg-ink2);}
+.jumps{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;}
+.jumps a{font-size:11.5px;font-weight:700;text-decoration:none;color:var(--pg-ink2);
+         border:1px solid var(--pg-line);border-radius:999px;padding:4px 11px;}
+.jumps a:hover{border-color:var(--pg-ink3);color:var(--pg-ink);}
+.tgl{display:inline-flex;border:1px solid var(--pg-line);border-radius:999px;overflow:hidden;}
+.tgl button{border:0;background:transparent;color:var(--pg-ink2);font-weight:700;font-size:11.5px;
+            padding:6px 14px;cursor:pointer;font-family:inherit;}
+.tgl button.on{background:var(--pg-ink);color:var(--pg-card);}
+
+/* intro */
+.lede{color:var(--pg-ink2);font-size:13.5px;max-width:900px;margin:2px 0 0;}
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;margin:18px 0 6px;}
+.legend div{background:var(--pg-card);border:1px solid var(--pg-line);border-radius:10px;
+            padding:8px 11px;font-size:12px;color:var(--pg-ink2);}
+.legend div b{color:var(--pg-ink);}
+.tag{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;
+     border-radius:5px;background:var(--pg-ink);color:var(--pg-card);font-size:10px;font-weight:800;
+     padding:0 4px;vertical-align:1px;}
+
+/* tarjeta de variante */
+.variant{margin-top:34px;background:var(--pg-card);border:1px solid var(--pg-line);
+         border-radius:16px;pad:0;overflow:hidden;}
+.variant > .vhead{padding:16px 20px 14px;border-bottom:1px solid var(--pg-line);}
+.vname{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+.vname h2{font-size:17px;margin:0;letter-spacing:-.02em;}
+.vname .n{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+          color:var(--pg-card);background:var(--pg-ink);border-radius:6px;padding:3px 8px;}
+.vname .who{font-size:12px;color:var(--pg-ink2);}
+.vdesc{font-size:12.5px;color:var(--pg-ink2);margin:8px 0 0;max-width:880px;}
+.vdesc b{color:var(--pg-ink);}
+.practices{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+.practices span{font-size:10.5px;font-weight:700;border:1px solid var(--pg-line);border-radius:999px;
+                padding:3px 9px;color:var(--pg-ink2);}
+
+/* paletas estáticas (claro + oscuro) */
+.palettes{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px 20px;border-bottom:1px solid var(--pg-line);}
+@media (max-width:760px){.palettes{grid-template-columns:1fr;}}
+.palhdr{font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+        color:var(--pg-ink3);margin-bottom:7px;display:flex;align-items:center;gap:7px;}
+.palhdr::before{content:"";width:12px;height:12px;border-radius:4px;border:1px solid var(--pg-line);}
+.pal.light .palhdr::before{background:#fff;}
+.pal.dark .palhdr::before{background:#111722;}
+.sw-row{display:flex;flex-wrap:wrap;gap:6px;}
+.sw{flex:1 1 62px;min-width:62px;}
+.sw i{display:block;height:26px;border-radius:7px;border:1px solid rgba(0,0,0,.14);}
+.sw b{display:block;font-size:9.5px;font-weight:700;color:var(--pg-ink);margin-top:4px;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sw s{display:block;font-size:9px;color:var(--pg-ink3);text-decoration:none;font-family:Consolas,monospace;}
+
+/* ══════════════════════════════════════════════════════════════════
+   CAPA DE LA APP (lo que se está diseñando). Toda la UI usa tokens
+   semánticos --t-*; los valores cambian por variante y por tema.
+   ══════════════════════════════════════════════════════════════════ */
+.appwrap{padding:16px 20px 20px;overflow-x:auto;}
+.mock{display:flex;min-width:960px;border:1px solid var(--t-border);border-radius:14px;
+      overflow:hidden;background:var(--t-bg);color:var(--t-text);box-shadow:var(--t-shadow);}
+
+/* sidebar */
+.m-side{width:206px;flex:none;background:var(--t-sidebar);display:flex;flex-direction:column;}
+.m-logo{display:flex;gap:10px;align-items:center;padding:16px 15px 14px;}
+.m-egg{width:34px;height:34px;border-radius:10px;background:var(--t-action);color:var(--t-action-ink);
+       display:flex;align-items:center;justify-content:center;font-size:16px;}
+.m-logo b{display:block;font-size:14px;font-weight:800;line-height:1.1;color:var(--t-sidebar-ink);}
+.m-logo span{display:block;font-size:10.5px;font-weight:700;color:var(--t-accent);}
+.m-navlbl{font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;
+          color:var(--t-sidebar-muted);padding:6px 16px 6px;}
+.m-nav{display:flex;align-items:center;gap:9px;padding:7px 16px;font-size:12px;font-weight:600;
+       color:var(--t-sidebar-muted);}
+.m-nav i{width:16px;text-align:center;font-style:normal;}
+.m-nav.on{background:var(--t-action-soft);color:var(--t-action);
+          box-shadow:inset 3px 0 0 var(--t-action);}
+.m-user{margin-top:auto;padding:11px 14px;border-top:1px solid rgba(255,255,255,.09);
+        display:flex;gap:9px;align-items:center;}
+.m-av{width:30px;height:30px;border-radius:8px;background:var(--t-action);color:var(--t-action-ink);
+      display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11.5px;flex:none;}
+.m-user b{color:var(--t-sidebar-ink);font-size:11.5px;display:block;line-height:1.2;}
+.m-user span{color:var(--t-sidebar-muted);font-size:10px;}
+
+/* main */
+.m-main{flex:1;min-width:0;display:flex;flex-direction:column;}
+.m-top{height:46px;background:var(--t-surface);border-bottom:1px solid var(--t-border);
+       display:flex;align-items:center;gap:10px;padding:0 14px;flex:none;}
+.m-search{width:230px;height:30px;background:var(--t-surface-2);border:1px solid var(--t-border);
+          border-radius:8px;display:flex;align-items:center;gap:8px;padding:0 10px;
+          font-size:11.5px;color:var(--t-text-muted);}
+.m-search kbd{margin-left:auto;font-family:inherit;font-size:10px;font-weight:800;
+              border:1px solid var(--t-border-strong);border-radius:5px;padding:1px 6px;color:var(--t-text-muted);}
+.m-topsp{margin-left:auto;display:flex;align-items:center;gap:9px;}
+.m-btn{border:1px solid var(--t-border-strong);background:var(--t-surface);color:var(--t-text-muted);
+       font-family:inherit;font-size:11.5px;font-weight:700;border-radius:8px;padding:6px 11px;cursor:default;white-space:nowrap;}
+.m-btn.action{background:var(--t-action);border-color:var(--t-action);color:var(--t-action-ink);}
+.m-btn.accent{background:var(--t-accent);border-color:var(--t-accent);color:var(--t-action-ink);}
+.m-btn.ghost{background:transparent;border-color:transparent;color:var(--t-text-muted);}
+.m-btn.danger{background:var(--t-danger);border-color:var(--t-danger);color:#fff;}
+.m-btn.sm{font-size:10.5px;padding:4px 9px;border-radius:7px;}
+.m-theme{color:var(--t-text-muted);font-size:14px;}
+.m-content{padding:14px 18px 20px;}
+
+/* head + rol */
+.m-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.m-crumb{font-size:10.5px;color:var(--t-text-subtle);margin-bottom:3px;}
+.m-head h3{font-size:20px;font-weight:800;letter-spacing:-.02em;margin:0;color:var(--t-text);}
+.m-sub{font-size:11px;color:var(--t-text-muted);margin-top:2px;}
+.m-seg{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--t-text-muted);
+       background:var(--t-surface-2);border:1px solid var(--t-border);border-radius:9px;padding:6px 11px;}
+.m-seg b{color:var(--t-text);}
+
+/* KPIs — 1 principal + 3 de apoyo (jerarquía de un solo KPI) */
+.m-kpis{display:grid;grid-template-columns:1.35fr 1fr 1fr 1fr;gap:10px;margin:14px 0 12px;}
+.m-kpi{background:var(--t-surface);border:1px solid var(--t-border);border-radius:13px;
+       padding:12px 13px;box-shadow:var(--t-shadow);}
+.m-kpi.hero{border-top:3px solid var(--t-action);}
+.m-kl{font-size:9.5px;color:var(--t-text-muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em;}
+.m-kv{font-size:23px;font-weight:800;margin:4px 0 2px;letter-spacing:-.03em;color:var(--t-text);
+      font-variant-numeric:tabular-nums;}
+.m-kpi.hero .m-kv{font-size:30px;color:var(--t-action);}
+.m-kd{font-size:10px;color:var(--t-text-muted);}
+.m-kd.up{color:var(--t-success);font-weight:700;}
+
+/* tarjetas de acción (insight → acción) */
+.m-actions{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;
+           padding:10px;border:1px solid var(--t-border);border-radius:12px;background:var(--t-surface);
+           box-shadow:var(--t-shadow);margin-bottom:8px;}
+.m-actions + .m-actions{margin-top:0;}
+.m-attn{min-width:0;}
+.m-attn b{display:block;font-size:12px;color:var(--t-text);}
+.m-attn span{display:block;font-size:10.5px;color:var(--t-text-muted);}
+.m-actions.warn{border-left:3px solid var(--t-warning);}
+.m-actions.crit{border-left:3px solid var(--t-danger);}
+
+/* panel + tabla enterprise */
+.m-panel{background:var(--t-surface);border:1px solid var(--t-border);border-radius:13px;
+         box-shadow:var(--t-shadow);overflow:hidden;margin-top:12px;}
+.m-bulk{display:flex;align-items:center;gap:9px;padding:9px 13px;background:var(--t-action-soft);
+        border-bottom:1px solid var(--t-border);}
+.m-bulk b{font-size:11.5px;color:var(--t-text);}
+.m-bulk .m-bulkx{margin-left:auto;font-size:11px;font-weight:700;color:var(--t-action);}
+.m-check{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;
+         border:1.5px solid var(--t-border-strong);background:var(--t-action);}
+.m-check::after{content:"✓";font-size:9px;color:var(--t-action-ink);font-weight:900;}
+.m-tablewrap{max-height:224px;overflow:auto;}
+table.m-t{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;}
+.m-t th{position:sticky;top:0;z-index:2;text-align:left;font-size:9.5px;font-weight:800;
+        text-transform:uppercase;letter-spacing:.05em;color:var(--t-text-muted);
+        background:var(--t-surface-2);padding:9px 12px;border-bottom:1px solid var(--t-border);}
+.m-t td{padding:9px 12px;border-bottom:1px solid var(--t-border);color:var(--t-text);}
+.m-t tbody tr:last-child td{border-bottom:0;}
+.m-t td.num,.m-t th.num{text-align:right;font-variant-numeric:tabular-nums;}
+.m-t th.m-ck,.m-t td.m-ck{position:sticky;left:0;z-index:3;width:36px;padding-right:0;}
+.m-t th.m-guia,.m-t td.m-guia{position:sticky;left:36px;z-index:3;width:104px;}
+.m-t th.m-ck,.m-t td.m-ck,.m-t th.m-guia,.m-t td.m-guia{background:var(--t-surface);}
+.m-t th.m-ck,.m-t th.m-guia{background:var(--t-surface-2);z-index:4;}
+.m-t td.m-ck,.m-t td.m-guia{box-shadow:1px 0 0 var(--t-border);}
+.m-t tbody tr.sel td{background:var(--t-action-soft);}
+.m-t tbody tr.sel td.m-ck,.m-t tbody tr.sel td.m-guia{background:var(--t-action-soft);}
+.m-guiai{font-family:Consolas,monospace;font-size:11px;color:var(--t-text);}
+.m-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;
+        font-size:10px;font-weight:800;white-space:nowrap;border:1px solid transparent;}
+.m-chip.ok{background:var(--t-success-soft);color:var(--t-success);}
+.m-chip.info{background:var(--t-info-soft);color:var(--t-info);}
+.m-chip.warn{background:var(--t-warning-soft);color:var(--t-warning);}
+.m-chip.mute{background:var(--t-surface-2);color:var(--t-text-muted);border-color:var(--t-border);}
+.m-empty{padding:12px 14px;font-size:11.5px;color:var(--t-text-muted);background:var(--t-surface-2);
+         border-top:1px dashed var(--t-border-strong);}
+.m-empty b{color:var(--t-action);}
+.m-footnote{padding:9px 13px;font-size:10.5px;color:var(--t-text-muted);border-top:1px solid var(--t-border);}
+.m-footnote b{color:var(--t-text);}
+</style>
+</head>
+<body>
+<div class="bar">
+  <div class="inner">
+    <h1>5 bocetos · acabado enterprise</h1>
+    <span class="lbl">Mejores prácticas UI/UX 2026, cada una con paleta claro + oscuro</span>
+    <nav class="jumps" id="jumps"></nav>
+    <div class="tgl">
+      <button id="tLight" class="on">☀ Claro</button>
+      <button id="tDark">☾ Oscuro</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <p class="lede">Cinco direcciones visuales distintas aplicando las mismas prácticas enterprise
+     (research 2026). En las cinco se reusa <b>un solo markup</b> movido por tokens semánticos
+     <code style="font-family:Consolas,monospace">--t-*</code>: cambiar de variante o de tema no toca la estructura, solo los valores.
+     Eso es exactamente el patrón de design tokens (DTCG).</p>
+
+  <div class="legend" id="legend"></div>
+
+  <div id="variants"></div>
+</div>
+
+<script>
+/* ── Prácticas (research 2026) ─────────────────────────────────── */
+const PRACTICES = [
+  ["Jerarquía de un solo KPI", "Una métrica principal fuerte vence a 5 tarjetas iguales."],
+  ["Insight → acción inline", "Cada tarjeta de estado trae el botón que resuelve, sin cambiar de módulo."],
+  ["Densidad de datos bien hecha", "Más info útil por píxel; se separa con tipografía, agrupación y color."],
+  ["Progressive disclosure", "Lo esencial a la vista; el detalle aparece al pedirlo."],
+  ["Tabla enterprise", "Encabezado fijo, columna identificadora congelada y barra de acciones masivas."],
+  ["Tokens semánticos (DTCG)", "Colores nombrados por función (action, surface…) y no por valor."],
+  ["Diseño por rol", "La vista por defecto cambia según el rol, no solo qué pestañas se ocultan."],
+  ["Feedback rápido", "Se confirma la acción y se muestra la antigüedad del dato."],
+  ["Command palette + a11y", "Cmd/Ctrl-K y foco visible, targets grandes, teclado completo (WCAG 2.2)."],
+  ["Estados vacío / sin datos", "«No hay nada» y «nada coincide» son pantallas distintas."]
+];
+
+/* ── Las 5 variantes y sus paletas ─────────────────────────────── */
+const VARIANTS = [
+  {
+    id:1, name:"Marca Don Paco, elevada", who:"verde + oro actual",
+    desc:"No reinventa: toma el verde de marca (#3D7A4A) y el oro y los ordena en un sistema serio con superficies por capas, sombras suaves y jerarquía tipográfica. Es la ruta de menor riesgo porque <b>mantiene la identidad y sube el acabado</b>.",
+    practices:["Tokens semánticos","Tabla enterprise","Insight → acción","Single KPI"],
+    t:{
+      light:{bg:"#F6F8F7",surface:"#FFFFFF",surface2:"#F1F4F2",border:"#E2E6EA",borderStrong:"#CED4DA",
+             text:"#1A1D21",muted:"#5F6B7A",subtle:"#8C95A0",action:"#2F6B40",actionInk:"#FFFFFF",
+             actionSoft:"#E8F5EC",accent:"#A8791A",accentSoft:"#FDF6E3",success:"#15803D",successSoft:"#DCFCE7",
+             warning:"#B45309",warningSoft:"#FEF3C7",danger:"#DC2626",dangerSoft:"#FEE2E2",
+             info:"#2563EB",infoSoft:"#DBEAFE",sidebar:"#0F1923",sidebarInk:"#E6EDF3",sidebarMuted:"#7C8A99",
+             shadow:"0 1px 2px rgba(15,25,35,.06), 0 10px 28px rgba(15,25,35,.08)"},
+      dark:{bg:"#0D1117",surface:"#161B22",surface2:"#1C2333",border:"#30363D",borderStrong:"#484F58",
+            text:"#E6EDF3",muted:"#8B949E",subtle:"#6E7681",action:"#5DAE6D",actionInk:"#06210E",
+            actionSoft:"rgba(93,174,109,.15)",accent:"#D4A017",accentSoft:"rgba(212,160,23,.13)",
+            success:"#3FB950",successSoft:"rgba(63,185,80,.16)",warning:"#E3B341",warningSoft:"rgba(227,179,65,.16)",
+            danger:"#F85149",dangerSoft:"rgba(248,81,73,.16)",info:"#58A6FF",infoSoft:"rgba(88,166,255,.16)",
+            sidebar:"#0D1117",sidebarInk:"#E6EDF3",sidebarMuted:"#7C8A99",
+            shadow:"0 0 0 1px #30363D"}
+    }
+  },
+  {
+    id:2, name:"Calm monochrome", who:"gris neutro + índigo",
+    desc:"Casi sin color: grises neutros y <b>un único acento índigo</b> reservado a la acción. Reduce la carga cognitiva y hace que el estado (verde/ámbar/rojo) sea lo único que grita. Estilo Linear/Notion llevado a gestión.",
+    practices:["Calm design","Tokens semánticos","Progressive disclosure","Command palette"],
+    t:{
+      light:{bg:"#FBFBFD",surface:"#FFFFFF",surface2:"#F4F4F7",border:"#E7E7EE",borderStrong:"#D3D3DE",
+             text:"#17171C",muted:"#63636F",subtle:"#9A9AA6",action:"#4F46E5",actionInk:"#FFFFFF",
+             actionSoft:"#EEF0FE",accent:"#0F766E",accentSoft:"#E6F4F2",success:"#059669",successSoft:"#D6F5E9",
+             warning:"#B45309",warningSoft:"#FEF3C7",danger:"#DC2626",dangerSoft:"#FEE2E2",
+             info:"#4F46E5",infoSoft:"#EAEBFD",sidebar:"#14141A",sidebarInk:"#EDEDF2",sidebarMuted:"#6E6E7A",
+             shadow:"0 1px 2px rgba(17,17,28,.05), 0 10px 26px rgba(17,17,28,.06)"},
+      dark:{bg:"#0A0A0C",surface:"#141418",surface2:"#1B1B21",border:"#2A2A32",borderStrong:"#3A3A45",
+            text:"#ECECF1",muted:"#9A9AA6",subtle:"#6E6E7A",action:"#818CF8",actionInk:"#0A0A0C",
+            actionSoft:"rgba(129,140,248,.16)",accent:"#2DD4BF",accentSoft:"rgba(45,212,191,.14)",
+            success:"#34D399",successSoft:"rgba(52,211,153,.16)",warning:"#FBBF24",warningSoft:"rgba(251,191,36,.16)",
+            danger:"#F87171",dangerSoft:"rgba(248,113,113,.16)",info:"#A5B4FC",infoSoft:"rgba(165,180,252,.16)",
+            sidebar:"#0A0A0C",sidebarInk:"#EDEDF2",sidebarMuted:"#6E6E7A",
+            shadow:"0 0 0 1px #2A2A32"}
+    }
+  },
+  {
+    id:3, name:"Data-dense operativa", who:"pizarra + ámbar · APLICADA en src/index.css",
+    desc:"Máxima densidad para quien vive en la pantalla: filas apretadas, <b>números tabulares</b>, bordes marcados y cero aire desperdiciado. El ámbar señala lo que hay que mirar. El extremo opuesto al «whitespace que mata la app».",
+    practices:["Densidad de datos","Tabla enterprise","Feedback rápido","Single KPI"],
+    t:{
+      light:{bg:"#EDF0F3",surface:"#FFFFFF",surface2:"#F4F6F8",border:"#D5DCE4",borderStrong:"#B9C3CE",
+             text:"#0F172A",muted:"#556074",subtle:"#8590A0",action:"#1E40AF",actionInk:"#FFFFFF",
+             actionSoft:"#E4E9FE",accent:"#B45309",accentSoft:"#FDF0DC",success:"#15803D",successSoft:"#DCFCE7",
+             warning:"#B45309",warningSoft:"#FEF3C7",danger:"#B91C1C",dangerSoft:"#FEE2E2",
+             info:"#1D4ED8",infoSoft:"#DBEAFE",sidebar:"#0B1220",sidebarInk:"#E2E8F0",sidebarMuted:"#7C8AA0",
+             shadow:"0 1px 1px rgba(15,23,42,.06), 0 8px 20px rgba(15,23,42,.07)"},
+      dark:{bg:"#0B0F16",surface:"#121826",surface2:"#172033",border:"#263149",borderStrong:"#384766",
+            text:"#E6EDF7",muted:"#94A2BA",subtle:"#64748B",action:"#60A5FA",actionInk:"#04122A",
+            actionSoft:"rgba(96,165,250,.16)",accent:"#F59E0B",accentSoft:"rgba(245,158,11,.15)",
+            success:"#22C55E",successSoft:"rgba(34,197,94,.16)",warning:"#F59E0B",warningSoft:"rgba(245,158,11,.16)",
+            danger:"#F87171",dangerSoft:"rgba(248,113,113,.16)",info:"#60A5FA",infoSoft:"rgba(96,165,250,.16)",
+            sidebar:"#070A10",sidebarInk:"#E2E8F0",sidebarMuted:"#7C8AA0",
+            shadow:"0 0 0 1px #263149"}
+    }
+  },
+  {
+    id:4, name:"Agro cálida", who:"salvia + terracota + crema",
+    desc:"Paleta de campo, no de data-center: <b>verde salvia, terracota y crema</b>. Cálida, humana, alineada al rubro avícola/granja. Sigue siendo densa y ordenada, pero deja de parecer un panel bancario.",
+    practices:["Calm design","Tokens semánticos","Diseño por rol","Insight → acción"],
+    t:{
+      light:{bg:"#FAF6EE",surface:"#FFFDF8",surface2:"#F3ECDF",border:"#E6DCC8",borderStrong:"#D3C4A6",
+             text:"#2C2822",muted:"#6E6557",subtle:"#9B907C",action:"#4F7A46",actionInk:"#FFFFFF",
+             actionSoft:"#E9F2E4",accent:"#BE6B37",accentSoft:"#FBEDE2",success:"#4F7A46",successSoft:"#E9F2E4",
+             warning:"#B45309",warningSoft:"#FBE9CE",danger:"#C0392B",dangerSoft:"#FBE0DC",
+             info:"#3B6E8F",infoSoft:"#E1EEF4",sidebar:"#241F18",sidebarInk:"#F1E9DA",sidebarMuted:"#A99C86",
+             shadow:"0 1px 2px rgba(44,40,34,.06), 0 10px 26px rgba(44,40,34,.08)"},
+      dark:{bg:"#15120D",surface:"#1E1A13",surface2:"#262017",border:"#3A3225",borderStrong:"#4E4433",
+            text:"#F0E9DC",muted:"#B3A88F",subtle:"#857A63",action:"#8FBF7F",actionInk:"#10240C",
+            actionSoft:"rgba(143,191,127,.16)",accent:"#E08A4E",accentSoft:"rgba(224,138,78,.15)",
+            success:"#8FBF7F",successSoft:"rgba(143,191,127,.16)",warning:"#E0A94E",warningSoft:"rgba(224,169,78,.16)",
+            danger:"#E57368",dangerSoft:"rgba(229,115,104,.16)",info:"#78B4D6",infoSoft:"rgba(120,180,214,.16)",
+            sidebar:"#100D09",sidebarInk:"#F1E9DA",sidebarMuted:"#A99C86",
+            shadow:"0 0 0 1px #3A3225"}
+    }
+  },
+  {
+    id:5, name:"Alto contraste / WCAG", who:"negro + turquesa",
+    desc:"Accesibilidad primero: bordes negros gruesos en claro, texto negro puro sobre blanco (<b>contraste AAA</b>), targets grandes y foco evidente. En oscuro, negro real con turquesa/cian. Para operarios en galpón, con sol o pantallas viejas.",
+    practices:["WCAG 2.2 AAA","Tabla enterprise","Command palette","Estados vacío/sin datos"],
+    t:{
+      light:{bg:"#FFFFFF",surface:"#FFFFFF",surface2:"#F2F4F5",border:"#0B0B0B",borderStrong:"#000000",
+             text:"#000000",muted:"#3F3F3F",subtle:"#5A5A5A",action:"#0B6B7A",actionInk:"#FFFFFF",
+             actionSoft:"#E0F2F5",accent:"#8A1D6B",accentSoft:"#F7E4F1",success:"#136F1E",successSoft:"#E1F5E3",
+             warning:"#8A5000",warningSoft:"#FCEFD6",danger:"#B00020",dangerSoft:"#FBE0E4",
+             info:"#0B4F9E",infoSoft:"#E1ECFB",sidebar:"#000000",sidebarInk:"#FFFFFF",sidebarMuted:"#C9C9C9",
+             shadow:"0 2px 0 rgba(0,0,0,.16)"},
+      dark:{bg:"#000000",surface:"#0C0C0C",surface2:"#161616",border:"#6E6E6E",borderStrong:"#B0B0B0",
+            text:"#FFFFFF",muted:"#D0D0D0",subtle:"#A8A8A8",action:"#22D3EE",actionInk:"#001014",
+            actionSoft:"rgba(34,211,238,.18)",accent:"#F0A0E0",accentSoft:"rgba(240,160,224,.16)",
+            success:"#4ADE80",successSoft:"rgba(74,222,128,.18)",warning:"#FBBF24",warningSoft:"rgba(251,191,36,.18)",
+            danger:"#FF6B6B",dangerSoft:"rgba(255,107,107,.18)",info:"#7DD3FC",infoSoft:"rgba(125,211,252,.18)",
+            sidebar:"#000000",sidebarInk:"#FFFFFF",sidebarMuted:"#C9C9C9",
+            shadow:"0 0 0 1px #6E6E6E"}
+    }
+  }
+];
+
+/* ── Paleta mostrada en las fichas (tokens clave, hex de cara) ──── */
+const PAL = [
+  ["bg","background"],["surface","surface"],["border","border"],["text","text"],
+  ["muted","muted"],["action","action"],["accent","accent"],["success","success"],
+  ["warning","warning"],["danger","danger"]
+];
+
+/* ── Markup de la pantalla (se reusa en las 5) ─────────────────── */
+function screen(){
+  return `
+  <div class="mock">
+    <aside class="m-side">
+      <div class="m-logo"><span class="m-egg">🥚</span>
+        <div><b>Granja Don Paco</b><span>Gestión avícola</span></div></div>
+      <div class="m-navlbl">Operación</div>
+      <div class="m-nav on"><i>◈</i> Resumen del día</div>
+      <div class="m-nav"><i>🚚</i> Despacho</div>
+      <div class="m-nav"><i>📦</i> Bodega</div>
+      <div class="m-nav"><i>🛣</i> Rutas</div>
+      <div class="m-nav"><i>👥</i> Clientes</div>
+      <div class="m-nav"><i>💲</i> Finanzas</div>
+      <div class="m-user"><span class="m-av">EP</span>
+        <div><b>Elena P.</b><span>Encargada de bodega</span></div></div>
+    </aside>
+    <div class="m-main">
+      <div class="m-top">
+        <div class="m-search">🔍 Buscar guías, clientes… <kbd>⌘K</kbd></div>
+        <div class="m-topsp">
+          <button class="m-btn action">+ Nueva guía</button>
+          <span class="m-theme">☾</span>
+          <span class="m-av">EP</span>
+        </div>
+      </div>
+      <div class="m-content">
+        <div class="m-head">
+          <div>
+            <div class="m-crumb">Operación / Resumen del día</div>
+            <h3>Resumen del día</h3>
+            <div class="m-sub">Viernes 16 de octubre · actualizado hace 2 min</div>
+          </div>
+          <div class="m-seg"><span>Vista:</span><b>Encargada de bodega</b></div>
+        </div>
+
+        <div class="m-kpis">
+          <div class="m-kpi hero">
+            <div class="m-kl">Cartones vendidos hoy</div>
+            <div class="m-kv">1.240</div>
+            <div class="m-kd up">▲ 8,4 % vs. ayer</div>
+          </div>
+          <div class="m-kpi"><div class="m-kl">Merma</div><div class="m-kv">1,2 %</div><div class="m-kd">objetivo ≤ 1,5 %</div></div>
+          <div class="m-kpi"><div class="m-kl">Guías activas</div><div class="m-kv">3</div><div class="m-kd">1 sin cerrar</div></div>
+          <div class="m-kpi"><div class="m-kl">Camiones en ruta</div><div class="m-kv">2/3</div><div class="m-kd">NAR-001 libre</div></div>
+        </div>
+
+        <div class="m-actions">
+          <div class="m-attn"><b>Ruta Naranjo–San Ramón sin cerrar</b>
+            <span>Salida 06:10 · 45 cartones · vence hoy 18:00</span></div>
+          <button class="m-btn action sm">Cerrar ruta</button>
+          <button class="m-btn ghost sm">Ver guía</button>
+        </div>
+        <div class="m-actions warn">
+          <div class="m-attn"><b>Merma en Abastecedor La Unión</b>
+            <span>4 cartones rotos registrados en la descarga</span></div>
+          <button class="m-btn ghost sm">Ver desglose</button>
+          <button class="m-btn ghost sm">Descartar</button>
+        </div>
+
+        <div class="m-panel">
+          <div class="m-bulk">
+            <span class="m-check"></span><b>3 seleccionadas</b>
+            <button class="m-btn ghost sm">Asignar camión</button>
+            <button class="m-btn ghost sm">Imprimir</button>
+            <span class="m-bulkx">Limpiar</span>
+          </div>
+          <div class="m-tablewrap">
+            <table class="m-t">
+              <thead>
+                <tr>
+                  <th class="m-ck"></th><th class="m-guia">Guía</th><th>Cliente</th>
+                  <th>Ruta</th><th>Estado</th><th class="num">Cartones</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="sel">
+                  <td class="m-ck"><span class="m-check"></span></td>
+                  <td class="m-guia"><span class="m-guiai">GD-1042</span></td>
+                  <td>Pulpería Don José</td><td>Naranjo–San Ramón</td>
+                  <td><span class="m-chip ok">EnRuta</span></td><td class="num">18</td>
+                  <td><button class="m-btn ghost sm">›</button></td>
+                </tr>
+                <tr class="sel">
+                  <td class="m-ck"><span class="m-check"></span></td>
+                  <td class="m-guia"><span class="m-guiai">GD-1041</span></td>
+                  <td>Tienda La Esquina</td><td>Naranjo–San Ramón</td>
+                  <td><span class="m-chip info">Cargada</span></td><td class="num">12</td>
+                  <td><button class="m-btn ghost sm">›</button></td>
+                </tr>
+                <tr class="sel">
+                  <td class="m-ck"><span class="m-check"></span></td>
+                  <td class="m-guia"><span class="m-guiai">GD-1040</span></td>
+                  <td>Super La Fortuna</td><td>Palmares</td>
+                  <td><span class="m-chip mute">Cerrada</span></td><td class="num">9</td>
+                  <td><button class="m-btn ghost sm">›</button></td>
+                </tr>
+                <tr>
+                  <td class="m-ck"></td>
+                  <td class="m-guia"><span class="m-guiai">GD-1039</span></td>
+                  <td>Tienda Mar y Sol</td><td>Puntarenas</td>
+                  <td><span class="m-chip warn">Retornada</span></td><td class="num">6</td>
+                  <td><button class="m-btn ghost sm">›</button></td>
+                </tr>
+                <tr>
+                  <td class="m-ck"></td>
+                  <td class="m-guia"><span class="m-guiai">GD-1038</span></td>
+                  <td>Mini Super San Ramón</td><td>San Carlos</td>
+                  <td><span class="m-chip ok">EnRuta</span></td><td class="num">21</td>
+                  <td><button class="m-btn ghost sm">›</button></td>
+                </tr>
+                <tr>
+                  <td class="m-ck"></td>
+                  <td class="m-guia"><span class="m-guiai">GD-1037</span></td>
+                  <td>Pulpería Palma Real</td><td>San Carlos</td>
+                  <td><span class="m-chip mute">Cerrada</span></td><td class="num">15</td>
+                  <td><button class="m-btn ghost sm">›</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="m-empty">Deslizá para ver el resto. <b>No hay más guías abiertas para hoy.</b></div>
+          <div class="m-footnote"><b>⌘K</b> abre la paleta de comandos · <b>Tab</b> navega toda la tabla ·
+            foco visible con anillo de marca (WCAG 2.2).</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ── Render ────────────────────────────────────────────────────── */
+function hex(t,v,k){ return v.t[t][k]; }
+
+function renderVariant(v){
+  const palLight=PAL.map(([k,l])=>`<div class="sw"><i style="background:${hex("light",v,k)}"></i><b>${l}</b><s>${hex("light",v,k)}</s></div>`).join("");
+  const palDark =PAL.map(([k,l])=>`<div class="sw"><i style="background:${hex("dark",v,k)}"></i><b>${l}</b><s>${hex("dark",v,k)}</s></div>`).join("");
+  const lstyle=Object.entries(v.t.light).map(([k,val])=>`--t-${camelToKebab(k)}:${val}`).join(";");
+  const dstyle=Object.entries(v.t.dark).map(([k,val])=>`--t-${camelToKebab(k)}:${val}`).join(";");
+
+  return `
+  <section class="variant" id="v${v.id}">
+    <div class="vhead">
+      <div class="vname">
+        <span class="n">Variante ${v.id}</span>
+        <h2>${v.name}</h2>
+        <span class="who">· ${v.who}</span>
+      </div>
+      <p class="vdesc">${v.desc}</p>
+      <div class="practices">${v.practices.map(p=>`<span>${p}</span>`).join("")}</div>
+    </div>
+
+    <div class="palettes">
+      <div class="pal light">
+        <div class="palhdr">Paleta · modo claro</div>
+        <div class="sw-row">${palLight}</div>
+      </div>
+      <div class="pal dark">
+        <div class="palhdr">Paleta · modo oscuro</div>
+        <div class="sw-row">${palDark}</div>
+      </div>
+    </div>
+
+    <div class="appwrap">
+      <div class="vscope" data-v="${v.id}">
+        <style>
+          .vscope[data-v="${v.id}"]{${lstyle}}
+          html[data-theme="dark"] .vscope[data-v="${v.id}"]{${dstyle}}
+        </style>
+        ${screen()}
+      </div>
+    </div>
+  </section>`;
+}
+
+function camelToKebab(s){ return s.replace(/[A-Z]/g,m=>"-"+m.toLowerCase()); }
+
+/* leyenda + saltos */
+document.getElementById("legend").innerHTML =
+  PRACTICES.map(([t,d],i)=>`<div><b><span class="tag">${i+1}</span> ${t}</b><br>${d}</div>`).join("");
+document.getElementById("jumps").innerHTML =
+  VARIANTS.map(v=>`<a href="#v${v.id}">${v.id} · ${v.name.split(" ")[0]}</a>`).join("");
+
+document.getElementById("variants").innerHTML = VARIANTS.map(renderVariant).join("");
+
+/* toggle de tema */
+const bL=document.getElementById("tLight"), bD=document.getElementById("tDark");
+function setTheme(t){
+  document.documentElement.dataset.theme=t;
+  bL.classList.toggle("on",t==="light");
+  bD.classList.toggle("on",t==="dark");
+}
+bL.onclick=()=>setTheme("light");
+bD.onclick=()=>setTheme("dark");
+</script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { requestAs } from './helpers/request-as';
 import { drizzle } from 'drizzle-orm/libsql';
 import * as schema from '../src/db/schema';
 import type { Express } from 'express';
@@ -30,7 +31,7 @@ async function crearDosGranjas() {
     ['Granja Norte', 'enc-1'],
     ['Granja Sur', 'enc-2'],
   ]) {
-    const res = await comoAdmin(request(app).post('/api/granjas/wizard')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/granjas/wizard')).send({
       nombre,
       ubicacion: 'Alajuela',
       tipo_produccion: 'Postura',
@@ -55,6 +56,10 @@ beforeAll(async () => {
       args: [id, name, `${id}@granja.com`, role],
     });
   }
+  await client.execute({
+    sql: `INSERT INTO productos_catalogo (id, nombre, unidad, precio_base, categoria, estado, fecha_creacion) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: ['p-huevos', 'Huevos', 'cartones', 500, 'Huevos', 'Activo', new Date().toISOString()],
+  });
   const testDb = drizzle(client, { schema });
   const mod = await import('../server');
   app = await mod.createApp(true, testDb);
@@ -81,7 +86,7 @@ describe('POST /api/ventas', () => {
   ];
 
   it.each(incompletos)('responde 400 sin SQL y nombra lo que falta: %s', async (_nombre, body) => {
-    const res = await comoAdmin(request(app).post('/api/ventas')).send(body as any);
+    const res = await comoAdmin(requestAs(app, '1').post('/api/ventas')).send(body as any);
     expect(res.status).toBe(400);
     // El mensaje tiene que ser accionable: decir qué campo, no "Failed query".
     expect(res.body.error).not.toMatch(/Failed query|SQLITE/i);
@@ -89,10 +94,10 @@ describe('POST /api/ventas', () => {
   });
 
   it('acepta el body mínimo y deriva fecha y totales', async () => {
-    const res = await comoAdmin(request(app).post('/api/ventas')).send(ventaMinima);
+    const res = await comoAdmin(requestAs(app, '1').post('/api/ventas')).send(ventaMinima);
     expect(res.status).toBe(200);
 
-    const facturas = (await comoAdmin(request(app).get('/api/facturas'))).body;
+    const facturas = (await comoAdmin(requestAs(app, '1').get('/api/facturas'))).body;
     const lista = Array.isArray(facturas) ? facturas : facturas.facturas;
     const guardada = lista[lista.length - 1];
     expect(guardada.fecha, 'la fecha la pone el servidor').toBeTruthy();
@@ -104,7 +109,7 @@ describe('POST /api/ventas', () => {
   });
 
   it('rechaza con 400 una línea sin precio y sin lista que lo resuelva', async () => {
-    const res = await comoAdmin(request(app).post('/api/ventas')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/ventas')).send({
       factura: { clienteId: 'consumidor-final', condicion_pago: 'Contado' },
       detalles: [{ producto: 'Producto Sin Precio', cantidad: 3 }],
     });
@@ -112,8 +117,17 @@ describe('POST /api/ventas', () => {
     expect(String(res.body.error)).toMatch(/precio/i);
   });
 
+  it('rechaza precio manual si el producto no tiene precio configurado', async () => {
+    const res = await comoAdmin(requestAs(app, '1').post('/api/ventas')).send({
+      factura: { clienteId: 'consumidor-final', condicion_pago: 'Contado' },
+      detalles: [{ producto: 'Producto Sin Precio', cantidad: 3, precio_unitario: 1 }],
+    });
+    expect(res.status).toBe(400);
+    expect(String(res.body.error)).toMatch(/Sin precio autorizado/i);
+  });
+
   it('rechaza con 400 un cliente que no existe', async () => {
-    const res = await comoAdmin(request(app).post('/api/ventas')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/ventas')).send({
       factura: { clienteId: 'no-existe', condicion_pago: 'Contado' },
       detalles: [{ producto: 'Huevos', cantidad: 1, precio_unitario: 1 }],
     });
@@ -124,7 +138,7 @@ describe('POST /api/ventas', () => {
 
 describe('POST /api/granjas/wizard', () => {
   it('rechaza con 400 galerones que no son objetos', async () => {
-    const res = await comoAdmin(request(app).post('/api/granjas/wizard')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/granjas/wizard')).send({
       nombre: 'Granja Rara',
       ubicacion: 'Alajuela',
       tipo_produccion: 'Postura',
@@ -137,7 +151,7 @@ describe('POST /api/granjas/wizard', () => {
   });
 
   it('rechaza con 400 un galerón sin nombre', async () => {
-    const res = await comoAdmin(request(app).post('/api/granjas/wizard')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/granjas/wizard')).send({
       nombre: 'Granja Rara 2',
       encargadoId: 'enc-1',
       galerones: [{ capacidad_maxima: 100 }],
@@ -147,13 +161,13 @@ describe('POST /api/granjas/wizard', () => {
   });
 
   it('guarda capacidad 0 en vez de NaN cuando no viene', async () => {
-    const res = await comoAdmin(request(app).post('/api/granjas/wizard')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/granjas/wizard')).send({
       nombre: 'Granja Sin Capacidad',
       encargadoId: 'enc-1',
       galerones: [{ nombre: 'Galerón Sin Capacidad' }],
     });
     expect(res.status).toBe(201);
-    const galerones = (await comoAdmin(request(app).get('/api/galerones'))).body;
+    const galerones = (await comoAdmin(requestAs(app, '1').get('/api/galerones'))).body;
     const creado = galerones.find((g: any) => g.nombre === 'Galerón Sin Capacidad');
     expect(creado).toBeTruthy();
     expect(Number.isInteger(creado.capacidad_maxima)).toBe(true);
@@ -161,7 +175,7 @@ describe('POST /api/granjas/wizard', () => {
   });
 
   it('acepta la granja sin galerones', async () => {
-    const res = await comoAdmin(request(app).post('/api/granjas/wizard')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/granjas/wizard')).send({
       nombre: 'Granja Sin Galerones',
       encargadoId: 'enc-1',
     });
@@ -171,8 +185,8 @@ describe('POST /api/granjas/wizard', () => {
 
 /** Las granjas del seed junto al galerón homónimo que cada una recibió. */
 async function galeronesPorGranja() {
-  const granjas = (await comoAdmin(request(app).get('/api/granjas'))).body;
-  const galerones = (await comoAdmin(request(app).get('/api/galerones'))).body;
+  const granjas = (await comoAdmin(requestAs(app, '1').get('/api/granjas'))).body;
+  const galerones = (await comoAdmin(requestAs(app, '1').get('/api/galerones'))).body;
   return granjas.map((g: any) => ({
     granja: g,
     galeron: galerones.find((x: any) => x.granjaId === g.id && x.nombre === 'Galerón Central'),
@@ -188,7 +202,7 @@ describe('POST /api/produccion/recoleccion', () => {
     expect(pares[0].galeron.id).not.toBe(pares[1].galeron.id);
 
     for (const { granja, galeron } of pares) {
-      const res = await comoAdmin(request(app).post('/api/produccion/recoleccion')).send({
+      const res = await comoAdmin(requestAs(app, '1').post('/api/produccion/recoleccion')).send({
         galeron: galeron.nombre,
         galeronId: galeron.id,
         granjaId: granja.id,
@@ -211,7 +225,7 @@ describe('POST /api/produccion/recoleccion', () => {
   });
 
   it('rechaza un nombre de galerón ambiguo sin granjaId', async () => {
-    const res = await comoAdmin(request(app).post('/api/produccion/recoleccion')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/produccion/recoleccion')).send({
       galeron: 'Galerón Central',
       detalles: [{ producto: 'Huevos', cantidad: 1 }],
     });
@@ -221,7 +235,7 @@ describe('POST /api/produccion/recoleccion', () => {
 
   it('acepta nombre + granjaId y guarda en el galerón de esa granja', async () => {
     const sur = (await galeronesPorGranja()).find(p => p.granja.nombre === 'Granja Sur')!;
-    const res = await comoAdmin(request(app).post('/api/produccion/recoleccion')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/produccion/recoleccion')).send({
       galeron: sur.galeron.nombre,
       granjaId: sur.granja.id,
       detalles: [{ producto: 'Huevos', cantidad: 5 }],
@@ -239,7 +253,7 @@ describe('POST /api/produccion/recoleccion', () => {
     const pares = await galeronesPorGranja();
     const norte = pares.find(p => p.granja.nombre === 'Granja Norte')!;
     const sur = pares.find(p => p.granja.nombre === 'Granja Sur')!;
-    const res = await comoAdmin(request(app).post('/api/produccion/recoleccion')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/produccion/recoleccion')).send({
       galeron: norte.galeron.nombre,
       galeronId: norte.galeron.id,
       granjaId: sur.granja.id,
@@ -250,7 +264,7 @@ describe('POST /api/produccion/recoleccion', () => {
   });
 
   it('responde 400 y no 500 cuando el galerón no existe', async () => {
-    const res = await comoAdmin(request(app).post('/api/produccion/recoleccion')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/produccion/recoleccion')).send({
       galeron: 'No Existe',
       detalles: [{ producto: 'Huevos', cantidad: 5 }],
     });
@@ -259,7 +273,7 @@ describe('POST /api/produccion/recoleccion', () => {
   });
 
   it('rechaza un body sin detalles', async () => {
-    const res = await comoAdmin(request(app).post('/api/produccion/recoleccion')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/produccion/recoleccion')).send({
       galeron: 'Galerón Central',
     });
     expect(res.status).toBe(400);
@@ -279,7 +293,7 @@ describe('GET /api/produccion/historial', () => {
    */
   it('el rango de un solo día incluye lo que se registró hoy', async () => {
     const sur = (await galeronesPorGranja()).find(p => p.granja.nombre === 'Granja Sur')!;
-    const res = await comoAdmin(request(app).post('/api/produccion/recoleccion')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/produccion/recoleccion')).send({
       galeronId: sur.galeron.id,
       granjaId: sur.granja.id,
       detalles: [{ producto: 'Huevos', cantidad: 7 }],
@@ -287,7 +301,7 @@ describe('GET /api/produccion/historial', () => {
     expect(res.status).toBe(200);
 
     const hoy = new Date().toISOString().slice(0, 10);
-    const delDia = await request(app)
+    const delDia = await requestAs(app, '1')
       .get(`/api/produccion/historial?granjaId=${sur.granja.id}&desde=${hoy}&hasta=${hoy}`);
     expect(delDia.status).toBe(200);
     expect(delDia.body.some((p: any) => Number(p.cantidad) === 7)).toBe(true);
@@ -296,7 +310,7 @@ describe('GET /api/produccion/historial', () => {
   it('un rango que no incluye hoy no inventa registros', async () => {
     const sur = (await galeronesPorGranja()).find(p => p.granja.nombre === 'Granja Sur')!;
     const anteayer = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
-    const res = await request(app).get(
+    const res = await requestAs(app, '1').get(
       `/api/produccion/historial?granjaId=${sur.granja.id}&desde=${anteayer}&hasta=${anteayer}`,
     );
     expect(res.status).toBe(200);
@@ -308,7 +322,7 @@ describe('POST/PUT /api/ordenes-mantenimiento', () => {
   let activoId = '';
 
   beforeAll(async () => {
-    const res = await comoAdmin(request(app).post('/api/activos')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/activos')).send({
       nombre: 'Comedor', tipo: 'Equipo',
     });
     expect(res.status).toBe(201);
@@ -334,11 +348,11 @@ describe('POST/PUT /api/ordenes-mantenimiento', () => {
   ] as const;
 
   it.each(conJson)('acepta %s y lo guarda como JSON legible', async (_nombre, extra) => {
-    const res = await comoAdmin(request(app).post('/api/ordenes-mantenimiento'))
+    const res = await comoAdmin(requestAs(app, '1').post('/api/ordenes-mantenimiento'))
       .send({ ...base(), ...extra });
     expect(res.status).toBe(201);
 
-    const ordenes = (await comoAdmin(request(app).get('/api/ordenes-mantenimiento'))).body;
+    const ordenes = (await comoAdmin(requestAs(app, '1').get('/api/ordenes-mantenimiento'))).body;
     const guardada = ordenes.find((o: any) => o.id === res.body.id);
     expect(guardada).toBeTruthy();
     // Lo que sale por GET tiene que poder parsearse: si se guardó "[object Object]"
@@ -350,7 +364,7 @@ describe('POST/PUT /api/ordenes-mantenimiento', () => {
   });
 
   it('acepta texto JSON que ya venía serializado', async () => {
-    const res = await comoAdmin(request(app).post('/api/ordenes-mantenimiento')).send({
+    const res = await comoAdmin(requestAs(app, '1').post('/api/ordenes-mantenimiento')).send({
       ...base(),
       checklist: JSON.stringify([{ item: 'a', ok: false }]),
     });
@@ -367,28 +381,28 @@ describe('POST/PUT /api/ordenes-mantenimiento', () => {
   ] as const;
 
   it.each(noJson)('el POST rechaza %s con 400', async (_nombre, extra) => {
-    const res = await comoAdmin(request(app).post('/api/ordenes-mantenimiento'))
+    const res = await comoAdmin(requestAs(app, '1').post('/api/ordenes-mantenimiento'))
       .send({ ...base(), ...extra });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/array o un texto/);
   });
 
   it('el PUT también rechaza un valor que no sea array ni texto', async () => {
-    const creada = await comoAdmin(request(app).post('/api/ordenes-mantenimiento')).send(base());
+    const creada = await comoAdmin(requestAs(app, '1').post('/api/ordenes-mantenimiento')).send(base());
     expect(creada.status).toBe(201);
-    const res = await comoAdmin(request(app).put(`/api/ordenes-mantenimiento/${creada.body.id}`))
+    const res = await comoAdmin(requestAs(app, '1').put(`/api/ordenes-mantenimiento/${creada.body.id}`))
       .send({ insumosUsados: { insumoId: 'i1' } });
     expect(res.status).toBe(400);
   });
 
   it('el PUT también serializa insumosUsados', async () => {
-    const creada = await comoAdmin(request(app).post('/api/ordenes-mantenimiento')).send(base());
+    const creada = await comoAdmin(requestAs(app, '1').post('/api/ordenes-mantenimiento')).send(base());
     expect(creada.status).toBe(201);
-    const res = await comoAdmin(request(app).put(`/api/ordenes-mantenimiento/${creada.body.id}`))
+    const res = await comoAdmin(requestAs(app, '1').put(`/api/ordenes-mantenimiento/${creada.body.id}`))
       .send({ estado: 'Completado', insumosUsados: [{ insumoId: 'i1', cantidad: 3 }] });
     expect(res.status).toBe(200);
 
-    const ordenes = (await comoAdmin(request(app).get('/api/ordenes-mantenimiento'))).body;
+    const ordenes = (await comoAdmin(requestAs(app, '1').get('/api/ordenes-mantenimiento'))).body;
     const guardada = ordenes.find((o: any) => o.id === creada.body.id);
     expect(() => JSON.parse(guardada.insumosUsados)).not.toThrow();
     expect(JSON.parse(guardada.insumosUsados)).toEqual([{ insumoId: 'i1', cantidad: 3 }]);
@@ -398,13 +412,13 @@ describe('POST/PUT /api/ordenes-mantenimiento', () => {
     for (const campo of ['activoId', 'tipo', 'fechaProgramada', 'responsable']) {
       const body: any = base();
       delete body[campo];
-      const res = await comoAdmin(request(app).post('/api/ordenes-mantenimiento')).send(body);
+      const res = await comoAdmin(requestAs(app, '1').post('/api/ordenes-mantenimiento')).send(body);
       expect(res.status, `sin ${campo}`).toBe(400);
     }
   });
 
   it('el PUT de una orden inexistente responde 404', async () => {
-    const res = await comoAdmin(request(app).put('/api/ordenes-mantenimiento/no-existe'))
+    const res = await comoAdmin(requestAs(app, '1').put('/api/ordenes-mantenimiento/no-existe'))
       .send({ estado: 'Completado' });
     expect(res.status).toBe(404);
   });

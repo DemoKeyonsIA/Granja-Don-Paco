@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Boceto · Seguimiento de entradas a bodega</title>
+  <style>
+    :root{--navy:#12152f;--blue:#4d6799;--blue-strong:#496394;--blue-soft:#e8eef9;--ink:#171a34;--muted:#66708a;--line:#dfe2e8;--paper:#fff;--page:#f5f5f7;--green:#d9e5d6;--green-ink:#254b3b;--amber:#f8edc9;--amber-ink:#70551c;--shadow:0 10px 30px rgba(17,24,39,.08)}
+    *{box-sizing:border-box} body{margin:0;background:#e8e9ed;color:var(--ink);font:15px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+    .page{max-width:1400px;margin:auto;padding:26px 28px 40px}.intro{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:800}.intro h1{margin:5px 0 4px;font-size:25px;letter-spacing:-.035em}.intro p{margin:0;color:var(--muted)}.badge{padding:7px 11px;border:1px solid #cbd5e5;border-radius:999px;color:var(--blue-strong);font-size:12px;font-weight:800;background:#f8faff}
+    .previews{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:26px;align-items:start}.panel{background:var(--paper);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden}.desktop{min-height:760px}.appbar{height:54px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 22px}.brand{display:flex;align-items:center;gap:9px;font-weight:850;color:var(--navy)}.egg{height:28px;width:28px;border-radius:9px;background:#789cdc;display:grid;place-items:center;color:var(--navy);font-size:19px}.appbar-right{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:13px}.avatar{height:30px;width:30px;border-radius:50%;background:#789cdc;color:var(--navy);font-weight:900;display:grid;place-items:center}.deskbody{padding:24px 26px}.crumb{font-size:13px;color:var(--muted);margin-bottom:18px}.crumb strong{color:var(--ink)}.title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.title-row h2{font-size:24px;letter-spacing:-.03em;margin:0 0 3px}.title-row p{margin:0;color:var(--muted)}.actions{display:flex;gap:9px}.btn{border:0;border-radius:12px;padding:11px 16px;font-weight:800;font-size:13px;white-space:nowrap}.btn.primary{background:var(--blue-strong);color:#fff;box-shadow:0 5px 14px #49639430}.btn.secondary{background:#fff;color:var(--blue-strong);border:1px solid var(--line)}
+    .flow{margin-top:22px;border:1px solid var(--line);border-radius:16px;background:#fff;padding:13px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.step{border:1px solid transparent;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:11px;text-align:left;background:#fff;color:var(--muted);cursor:pointer}.step:hover{background:#f5f7fb}.step.active{background:var(--blue-soft);border-color:#d5e1f5;color:var(--blue-strong)}.step.done{color:var(--green-ink)}.bubble{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:#edf0f5;color:#53607a;font-weight:900;flex:none}.active .bubble{background:#789cdc;color:var(--navy)}.done .bubble{background:var(--green);color:var(--green-ink)}.step-label{font-size:13px;font-weight:850;display:block}.step-count{display:block;margin-top:1px;font-size:12px;color:var(--muted)}.tools{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:20px 0 13px}.search{width:min(390px,100%);height:42px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:0 14px;color:var(--muted);display:flex;align-items:center;gap:9px}.filter{border:1px solid var(--line);border-radius:11px;padding:9px 12px;background:#fff;color:var(--muted);font-size:13px}
+    .list-head{display:flex;align-items:center;justify-content:space-between;margin:13px 2px 10px}.list-head h3{margin:0;font-size:16px}.list-head span{font-size:12px;color:var(--muted)}.loads{display:grid;gap:10px}.load{display:grid;grid-template-columns:1fr 135px 150px;gap:15px;align-items:center;border:1px solid var(--line);border-radius:15px;padding:16px 17px;background:#fff}.load-name{font-size:15px;font-weight:850}.sub{color:var(--muted);font-size:12px;margin-top:3px}.tag{display:inline-flex;border-radius:999px;padding:4px 9px;background:var(--blue-soft);color:var(--blue-strong);font-size:11px;font-weight:850;margin-left:7px}.metric{font-weight:850;font-size:15px}.metric small{display:block;color:var(--muted);font-size:11px;font-weight:600;margin-top:2px}.right-action{text-align:right}.statusline{font-size:12px;color:var(--muted);margin-bottom:6px}.linkbtn{background:var(--blue-strong);color:#fff;border:0;border-radius:10px;padding:9px 13px;font-weight:850;font-size:12px}.received .tag{background:var(--green);color:var(--green-ink)}.diff .tag{background:var(--amber);color:var(--amber-ink)}.legend{margin-top:15px;padding:12px 14px;background:#f6f7f9;border-radius:12px;color:var(--muted);font-size:12px}.legend b{color:var(--ink)}
+    .mobile-wrap{position:sticky;top:20px}.phone{border:7px solid #252943;border-radius:36px;background:var(--page);overflow:hidden;box-shadow:0 18px 42px rgba(17,24,39,.22);min-height:760px}.phone-top{height:26px;background:#fff;display:flex;align-items:center;justify-content:center}.notch{width:84px;height:14px;border-radius:0 0 11px 11px;background:#252943}.mobile-appbar{height:54px;padding:0 15px;display:flex;align-items:center;justify-content:space-between;background:#fff;border-bottom:1px solid var(--line)}.mobile-logo{display:flex;align-items:center;gap:8px;font-weight:850}.mobile-logo .egg{width:27px;height:27px}.menu{font-size:20px;color:var(--muted)}.mobile-body{padding:17px 13px}.mobile-crumb{font-size:11px;color:var(--muted);margin-bottom:12px}.mobile-body h2{font-size:20px;margin:0 0 4px;letter-spacing:-.03em}.mobile-body .desc{font-size:12px;color:var(--muted);margin:0}.mobile-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:15px 0}.mobile-actions .btn{padding:10px 7px;font-size:11px}.mobile-flow{display:flex;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:#fff;padding:4px;gap:3px}.mobile-flow button{flex:1;min-width:0;border:0;border-radius:9px;background:transparent;color:var(--muted);font-size:10px;font-weight:850;padding:9px 3px}.mobile-flow button.active{background:var(--blue-strong);color:#fff}.mobile-flow button span{display:block;font-size:11px;margin-top:2px}.mobile-filter{display:flex;gap:7px;margin:13px 0}.mobile-search{flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;padding:9px;font-size:11px;color:var(--muted);background:#fff}.mobile-filter .filter{font-size:11px;padding:8px}.mobile-card{background:#fff;border:1px solid var(--line);border-radius:15px;padding:13px;margin-bottom:9px}.mobile-card-head{display:flex;justify-content:space-between;align-items:center;gap:5px}.mobile-card h3{font-size:14px;margin:0;font-weight:850}.mobile-status{font-size:9px;font-weight:900;letter-spacing:.035em;background:var(--blue-soft);color:var(--blue-strong);border-radius:999px;padding:5px 7px;white-space:nowrap}.mobile-status.progress{background:var(--amber);color:var(--amber-ink)}.mobile-status.ok{background:var(--green);color:var(--green-ink)}.mobile-status.alert{background:var(--amber);color:var(--amber-ink)}.mobile-card p{font-size:11px;color:var(--muted);margin:5px 0}.mobile-kilos{font-size:12px;font-weight:850;margin:9px 0}.mobile-card .linkbtn{width:100%;padding:10px;margin-top:7px}.progressbar{height:6px;border-radius:9px;background:#eceef3;overflow:hidden;margin-top:8px}.progressbar i{height:100%;display:block;background:#789cdc;border-radius:9px}.mobile-note{font-size:10px;color:var(--muted);text-align:center;padding:4px 6px 12px}.mobile-bottom{position:absolute;bottom:7px;left:7px;right:7px;border-top:1px solid var(--line);background:#fff;padding:9px 4px;display:flex;justify-content:space-around;color:var(--muted);font-size:9px;font-weight:700}.phone{position:relative;padding-bottom:38px}
+    .concept{margin-top:18px;padding:14px 16px;border-left:4px solid #789cdc;background:#fff;border-radius:0 12px 12px 0;color:var(--muted);font-size:12px}.concept b{color:var(--ink)}.foot{margin-top:16px;text-align:right;color:#858ba0;font-size:11px}
+    @media(max-width:1000px){.previews{grid-template-columns:1fr}.mobile-wrap{position:static;display:flex;justify-content:center}.phone{width:360px}.desktop{min-height:unset}}
+    @media(max-width:650px){.page{padding:18px 12px 30px}.intro{display:block}.badge{display:inline-block;margin-top:12px}.deskbody{padding:17px 14px}.title-row{display:block}.actions{margin-top:13px}.flow{gap:3px;padding:5px}.step{padding:9px 6px;gap:6px}.step-count{font-size:10px}.step-label{font-size:11px}.bubble{width:26px;height:26px;font-size:12px}.load{grid-template-columns:1fr;gap:9px}.right-action{text-align:left}.tools{align-items:stretch;flex-direction:column}.filter{width:max-content}.page h1{font-size:22px}}
+  </style>
+</head>
+<body>
+<main class="page">
+  <header class="intro"><div><div class="eyebrow">Boceto de experiencia · Bodega</div><h1>Seguimiento de entradas</h1><p>Una misma vista para saber qué viene, qué se está recibiendo y qué ya quedó registrado.</p></div><span class="badge">Propuesta visual · no modifica el sistema</span></header>
+  <section class="previews">
+    <div>
+      <div class="panel desktop">
+        <div class="appbar"><div class="brand"><span class="egg">◯</span><span>Granja Don Paco</span></div><div class="appbar-right"><span>Operaciones y Bodegas</span><span class="avatar">A</span></div></div>
+        <div class="deskbody">
+          <div class="crumb">Operaciones y Bodegas　›　<strong>Bodega</strong>　›　Entradas</div>
+          <div class="title-row"><div><h2>Entradas a bodega</h2><p>Revisa las cargas que llegan y registra los kilos recibidos.</p></div><div class="actions"><button class="btn primary">＋ Nueva remisión</button><button class="btn secondary">＋ Entrada manual</button></div></div>
+          <nav class="flow" aria-label="Estado de las entradas">
+            <button class="step active" data-stage="camino"><span class="bubble">1</span><span><span class="step-label">En camino</span><span class="step-count">4 cargas</span></span></button>
+            <button class="step" data-stage="recepcion"><span class="bubble">2</span><span><span class="step-label">En recepción</span><span class="step-count">1 carga</span></span></button>
+            <button class="step done" data-stage="completados"><span class="bubble">✓</span><span><span class="step-label">Completados</span><span class="step-count">18 hoy</span></span></button>
+          </nav>
+          <div class="tools"><div class="search">⌕ <span>Buscar camión, granja o número de guía…</span></div><button class="filter">Hoy　⌄</button></div>
+          <div id="desktop-list"></div>
+          <div class="concept"><b>Diseño:</b> el usuario ve una etapa clara, el número de cargas y la siguiente acción. Las diferencias quedan visibles aunque la recepción esté cerrada.</div>
+        </div>
+      </div>
+    </div>
+    <aside class="mobile-wrap">
+      <div class="phone">
+        <div class="phone-top"><div class="notch"></div></div>
+        <div class="mobile-appbar"><span class="menu">☰</span><span class="mobile-logo"><span class="egg">◯</span> Bodega</span><span class="avatar">A</span></div>
+        <div class="mobile-body">
+          <div class="mobile-crumb">Operaciones › Bodega › Entradas</div>
+          <h2>Entradas</h2><p class="desc">Sigue las cargas por estado.</p>
+          <div class="mobile-actions"><button class="btn primary">＋ Nueva remisión</button><button class="btn secondary">＋ Entrada manual</button></div>
+          <nav class="mobile-flow" aria-label="Etapas">
+            <button class="active" data-stage="camino">En camino<span>4</span></button>
+            <button data-stage="recepcion">En recepción<span>1</span></button>
+            <button data-stage="completados">Completados<span>18</span></button>
+          </nav>
+          <div class="mobile-filter"><div class="mobile-search">⌕ Buscar carga…</div><button class="filter">Hoy</button></div>
+          <div id="mobile-list"></div>
+          <div class="mobile-note">Toca una carga para revisar o continuar la recepción.</div>
+        </div>
+        <div class="mobile-bottom"><span>✉<br>Dirección</span><span>⬡<br>Ops</span><span>♙<br>Clientes</span><span>＄<br>Finanzas</span><span>⚙<br>Admin</span></div>
+      </div>
+    </aside>
+  </section>
+  <div class="foot">Las pestañas cambian de ejemplo para mostrar las tres etapas.</div>
+</main>
+<script>
+  const data={
+    camino:[
+      {name:'Camión Ruta 10',place:'Granja Concepción',ref:'GD-1042',products:'Huevos grandes · 1 producto',qty:'42 kg esperados',time:'Salida 8:15 a. m.',action:'Registrar llegada',status:'En camino'},
+      {name:'Camión Ruta 8',place:'Granja Principal',ref:'GD-1043',products:'Huevos medianos · 2 productos',qty:'68 kg esperados',time:'Salida 8:40 a. m.',action:'Registrar llegada',status:'En camino'},
+      {name:'Remisión GR-1044',place:'Granja San Miguel',ref:'GR-1044',products:'Huevos grandes · 1 producto',qty:'35 kg esperados',time:'Salida 9:05 a. m.',action:'Registrar llegada',status:'En camino'}
+    ],
+    recepcion:[
+      {name:'Camión Ruta 3',place:'Granja Concepción',ref:'GD-1041',products:'Huevos grandes y medianos · 2 productos',qty:'1 de 2 productos revisados',time:'Iniciada 9:12 a. m.',action:'Continuar recepción',status:'En recepción',progress:55}
+    ],
+    completados:[
+      {name:'Camión Ruta 6',place:'Granja Principal',ref:'GD-1038',products:'Huevos grandes · 1 producto',qty:'42 kg recibidos',time:'Cerrada 8:42 a. m.',action:'Ver recepción',status:'Conforme'},
+      {name:'Camión Ruta 2',place:'Granja San Miguel',ref:'GD-1037',products:'Huevos medianos · 2 productos',qty:'54 kg recibidos · faltan 2 kg por explicar',time:'Cerrada 8:16 a. m.',action:'Ver diferencia',status:'Con diferencia',diff:true}
+    ]
+  };
+  const labels={camino:'En camino',recepcion:'En recepción',completados:'Completados'};
+  function render(stage){
+    document.querySelectorAll('[data-stage]').forEach(el=>el.classList.toggle('active',el.dataset.stage===stage));
+    const list=data[stage];
+    const desktop=document.getElementById('desktop-list');
+    desktop.innerHTML=`<div class="list-head"><h3>${labels[stage]}</h3><span>${list.length} ${list.length===1?'carga':'cargas'}</span></div><div class="loads">${list.map(item=>`<article class="load ${item.diff?'diff':''}"><div><div class="load-name">${item.name}<span class="tag">${item.status}</span></div><div class="sub">${item.place} · Guía ${item.ref}</div><div class="sub">${item.products}</div>${item.progress?`<div class="progressbar"><i style="width:${item.progress}%"></i></div>`:''}</div><div class="metric">${item.qty}<small>${item.time}</small></div><div class="right-action"><div class="statusline">${item.diff?'Requiere revisión':stage==='completados'?'Recepción registrada':'Siguiente paso'}</div><button class="linkbtn">${item.action}</button></div></article>`).join('')}</div>`;
+    document.getElementById('mobile-list').innerHTML=list.map(item=>`<article class="mobile-card"><div class="mobile-card-head"><h3>${item.name}</h3><span class="mobile-status ${stage==='recepcion'?'progress':stage==='completados'?(item.diff?'alert':'ok'):''}">${item.status.toUpperCase()}</span></div><p>${item.place} · ${item.ref}</p><p>${item.products}</p><div class="mobile-kilos">${item.qty}</div>${item.progress?`<div class="progressbar"><i style="width:${item.progress}%"></i></div>`:''}<p>${item.time}</p><button class="linkbtn">${item.action}</button></article>`).join('');
+  }
+  document.querySelectorAll('[data-stage]').forEach(el=>el.addEventListener('click',()=>render(el.dataset.stage)));
+  render('camino');
+</script>
+</body>
+</html>

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle, Plus, Trash2, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { Cliente } from '../types';
+import { Cliente, User } from '../types';
+import { sessionHeaders } from '../lib/session';
+import { toast } from 'sonner';
 import './gcrm.css';
 
 interface ProductoCatalogo { id: string; nombre: string; precioBase: number; unidad: string; }
@@ -10,12 +12,14 @@ type Tab = 'resumen' | 'pedidos' | 'docs' | 'rutas' | 'credito' | 'precios' | 'n
 
 interface Cliente360Props {
   cliente: Cliente | null;
+  currentUser: User;
   open: boolean;
   onClose: () => void;
   onEdit?: (cliente: Cliente) => void;
 }
 
 const fmt = (n: any) => `₡${Number(n || 0).toLocaleString()}`;
+const fmtKg = (n: any) => `${Number(n || 0).toLocaleString('es-CR', { maximumFractionDigits: 2 })} kg`;
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'resumen', label: 'Resumen' },
@@ -36,45 +40,63 @@ function RiskChip({ estado, diasVencido }: { estado: string; diasVencido?: numbe
   return <span className="chip blue">Al día</span>;
 }
 
-export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente360Props) {
+function fechaLocal(d: Date) {
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+export default function Cliente360({ cliente, currentUser, open, onClose, onEdit }: Cliente360Props) {
   const [activeTab, setActiveTab] = useState<Tab>('resumen');
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const [catalogo, setCatalogo] = useState<ProductoCatalogo[]>([]);
   const [showExcForm, setShowExcForm] = useState(false);
-  const [formExc, setFormExc] = useState({ productoId: '', precioExcepcion: 0, justificacion: '', aprobadoPor: '' });
+  const [formExc, setFormExc] = useState(() => {
+    const hoy = new Date();
+    const fin = new Date(hoy);
+    fin.setDate(fin.getDate() + 30);
+    return { productoId: '', precioExcepcion: 0, justificacion: '', fechaInicio: fechaLocal(hoy), fechaFin: fechaLocal(fin) };
+  });
 
   useEffect(() => {
     if (!open) return;
-    fetch('/api/productos-catalogo').then(r => r.ok ? r.json() : []).then(setCatalogo).catch(() => setCatalogo([]));
+    fetch('/api/productos-catalogo', { headers: sessionHeaders(currentUser.id) }).then(r => r.ok ? r.json() : []).then(setCatalogo).catch(() => setCatalogo([]));
   }, [open]);
 
   const cargarPerfil = async () => {
     if (!cliente) return;
     try {
-      const res = await fetch(`/api/clientes/${cliente.id}/360`);
+      const res = await fetch(`/api/clientes/${cliente.id}/360`, { headers: sessionHeaders(currentUser.id) });
       if (res.ok) setData(await res.json());
     } catch { }
   };
 
   const agregarExcepcion = async () => {
-    if (!cliente || !formExc.productoId || !formExc.precioExcepcion) return;
+    if (!cliente || !formExc.productoId || !formExc.precioExcepcion || !formExc.justificacion.trim()) return;
     const res = await fetch('/api/precio-excepciones', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: sessionHeaders(currentUser.id, true),
       body: JSON.stringify({ clienteId: cliente.id, ...formExc })
     });
     if (res.ok) {
       setShowExcForm(false);
-      setFormExc({ productoId: '', precioExcepcion: 0, justificacion: '', aprobadoPor: '' });
+      const hoy = new Date();
+      const fin = new Date(hoy);
+      fin.setDate(fin.getDate() + 30);
+      setFormExc({ productoId: '', precioExcepcion: 0, justificacion: '', fechaInicio: fechaLocal(hoy), fechaFin: fechaLocal(fin) });
       cargarPerfil();
+      toast.success('Excepción autorizada por 30 días');
+    } else {
+      const body = await res.json().catch(() => ({}));
+      toast.error(body.error || 'No se pudo autorizar la excepción');
     }
   };
 
   const eliminarExcepcion = async (id: string) => {
     if (!window.confirm('¿Eliminar esta excepción?')) return;
-    const res = await fetch(`/api/precio-excepciones/${id}`, { method: 'DELETE' });
-    if (res.ok) cargarPerfil();
+    const res = await fetch(`/api/precio-excepciones/${id}`, { method: 'DELETE', headers: sessionHeaders(currentUser.id) });
+    if (res.ok) { toast.success('Excepción desactivada'); cargarPerfil(); }
+    else toast.error('No se pudo desactivar la excepción');
   };
 
   useEffect(() => {
@@ -92,7 +114,9 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
 
   if (!open) return null;
 
-  const c = data?.cliente || cliente || ({} as any);
+  // Mantiene a mano los datos ricos de la fila de cartera mientras carga el
+  // 360; así la explicación de segmento no desaparece por un payload parcial.
+  const c = { ...(cliente || {} as any), ...(data?.cliente || {}) };
   const k = data?.kpis || {};
   const iniciales = (String(c.nombre || '?')).split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
   const ultimaFechaLegible = k.ultimaCompra ? new Date(k.ultimaCompra).toLocaleDateString('es', { day: 'numeric', month: 'short' }) : '—';
@@ -103,12 +127,13 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
 
   const proximaAccion =
     riesgoNivel === 'high'
-      ? ['Llamada urgente + carta L4 antes de las 12', 'vencido + uso de línea alto · prioridad alta']
+      ? ['Revisar saldo y facturas vencidas', `${vencidas} factura(s) vencida(s) · saldo ${fmt(deuda)} · uso de línea ${uso}%`]
       : riesgoNivel === 'mid'
-        ? ['Gestionar factura en riesgo antes de cobrar', 'SLA 5d · evidencia pendiente']
+        ? ['Revisar el saldo pendiente', `saldo ${fmt(deuda)} · uso de línea ${uso}%`]
         : !k.diasUltima || k.diasUltima > 14
-          ? ['Campaña de reactivación', 'sin compras recientes · NRR en riesgo']
-          : ['Revisión anual de línea', 'uso estable · revisión dic · regla CreditPulse'];
+          ? ['Contactar para conocer próxima necesidad', k.diasUltima != null ? `última compra hace ${k.diasUltima} días` : 'todavía no hay compras registradas']
+          : ['Mantener seguimiento habitual', `última compra hace ${k.diasUltima} días · saldo ${fmt(deuda)}`];
+  const ubicacionCliente = [c.direccion, c.distrito, c.canton, c.provincia].filter(Boolean).join(' · ');
 
   return (
     <div className="gcrm">
@@ -118,6 +143,7 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
                 {c.ruta && <span className="chip green">{c.ruta}</span>}
+                {c.segmento && <span className={cn('seg', c.segmento === 'A' ? 'seg-A' : c.segmento === 'B' ? 'seg-B' : 'seg-C')} title="Segmento según compras de los últimos 90 días">Segmento {c.segmento}</span>}
                 <span className={c.condicionPago === 'Credito' ? 'chip amber' : 'chip green'}>{c.condicionPago}</span>
                 <span className="chip gray">tipo {c.tipoDocumento}</span>
               </div>
@@ -125,7 +151,13 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
                 <div className="ava">{iniciales}</div>
                 <div>
                   <div style={{ fontSize: '20px', fontWeight: 800, lineHeight: 1.15, color: 'var(--ink)' }}>{c.nombre}</div>
-                  <div className="mini" style={{ marginTop: 3 }}>{c.tipoDocumento} {c.documentoId || '—'} · {c.email || '—'} · {c.telefono || '—'}</div>
+                  <div className="mini" style={{ marginTop: 3 }}>{c.tipoDocumento || 'Identificación'} {c.documentoId || '—'} · {c.telefono || 'Sin teléfono'} · {c.email || 'Sin correo'}</div>
+                  <div className="mini" style={{ marginTop: 5, color: 'var(--ink2)', maxWidth: 560 }}>
+                    {ubicacionCliente || 'Ubicación sin registrar'}{c.ruta ? ` · ${c.ruta}` : ''}
+                  </div>
+                  {c.segmento && <div className="mini" style={{ marginTop: 4, maxWidth: 560 }}>
+                    Segmento {c.segmento}: {fmt(c.monto90d)} en {c.pedidos90d || 0} compra(s) en 90 días. {c.segmento === 'A' ? 'Nivel A: ₡400.000 o más.' : c.segmento === 'B' ? 'Nivel B: entre ₡120.000 y ₡399.999.' : `Nivel C: faltan ${fmt(Math.max(0, 120000 - Number(c.monto90d || 0)))} para llegar a B.`}
+                  </div>}
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
                     {onEdit && <button className="btn sm" onClick={() => { if (cliente) { onEdit(cliente); } }}>Editar</button>}
                     <button className="btn sm" onClick={() => window.confirm(`Llamar a ${c.nombre} (demo)`) ? undefined : undefined}>Llamar</button>
@@ -142,7 +174,7 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
             </div>
           </div>
 
-          <div className="drawer-body" style={{ paddingTop: 14 }}>
+          <div className="drawer-body" style={{ paddingTop: 14, flex: '0 0 auto', overflow: 'visible' }}>
             <div className="upnext">
               <span className="tag">Próxima acción</span>
               <span className="act">{proximaAccion[0]}</span>
@@ -158,7 +190,7 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
             ))}
           </div>
 
-          <div className="drawer-body" style={{ paddingTop: 14 }}>
+          <div className="drawer-body" style={{ paddingTop: 14, flex: '0 0 auto', overflow: 'visible' }}>
             {isLoading && (
               <div className="empty">Cargando perfil 360…</div>
             )}
@@ -232,7 +264,7 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
                 <div className="kpis" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
                   <div className="kpi"><div className="l">Frecuencia</div><div className="v">{((k.pedidos30d || 0) / 4).toFixed(1)}<span style={{ fontSize: 13 }}>/sem</span></div><div className="ins">{k.pedidos30d || 0} pedidos · 30d</div></div>
                   <div className="kpi"><div className="l">Ticket prom.</div><div className="v">{fmt(k.ticketProm)}</div><div className="ins">compra prom. por pedido</div></div>
-                  <div className="kpi"><div className="l">Tiquetes 30d</div><div className="v">{k.tiquetes30d ?? 0}</div><div className="ins">{fmt(k.montoTiquetes30d)}</div></div>
+                  <div className="kpi"><div className="l">Por facturar · 30d</div><div className="v">{k.tiquetes30d ?? 0}</div><div className="ins">{fmt(k.montoTiquetes30d)}</div></div>
                   <div className="kpi"><div className="l">Mix cesta</div><div className="v" style={{ fontSize: 15, paddingTop: 5 }}>{data?.mix?.[0]?.producto || '—'}</div><div className="ins">top producto por monto</div></div>
                 </div>
                 <div className="cols-2" style={{ marginTop: 16 }}>
@@ -242,12 +274,12 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
                       <div className="empty">Sin ventas con detalle en 90d</div>
                     ) : (
                       <table>
-                        <thead><tr><th>Producto</th><th className="num">Unid.</th><th className="num">Monto</th></tr></thead>
+                        <thead><tr><th>Producto</th><th className="num">Cantidad entregada</th><th className="num">Monto</th></tr></thead>
                         <tbody>
                           {data.mix.slice(0, 6).map((m: any, i: number) => (
                             <tr key={i}>
                               <td className="strong">{m.producto}</td>
-                              <td className="num mono">{m.unidades}</td>
+                              <td className="num mono" title={m.pesoPendiente || m.kilos == null ? 'Este documento no tiene un peso en kg validado.' : 'Cantidad de huevo vendida y entregada en kilogramos.'}>{m.pesoPendiente || m.kilos == null ? 'Peso pendiente de validar' : fmtKg(m.kilos)}</td>
                               <td className="num mono">{fmt(m.monto)}</td>
                             </tr>
                           ))}
@@ -283,7 +315,7 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
                 <div className="kpis" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
                   <div className="kpi"><div className="l">Facturas abiertas</div><div className="v">{k.facturasAbiertas ?? 0}</div><div className="ins">{fmt(k.montoPorCobrar)} por cobrar</div></div>
                   <div className="kpi"><div className="l">Vencidas</div><div className="v" style={{ color: vencidas > 0 ? 'var(--amber)' : 'var(--brand)' }}>{vencidas}</div><div className="ins">{vencidas > 0 ? 'en riesgo' : 'sin vencidas'}</div></div>
-                  <div className="kpi"><div className="l">Tiquetes 30d</div><div className="v">{k.tiquetes30d ?? 0}</div><div className="ins">{fmt((k.tiquetes30d && k.montoTiquetes30d) ? k.montoTiquetes30d : 0)}</div></div>
+                  <div className="kpi"><div className="l">Por facturar · 30d</div><div className="v">{k.tiquetes30d ?? 0}</div><div className="ins">{fmt((k.tiquetes30d && k.montoTiquetes30d) ? k.montoTiquetes30d : 0)}</div></div>
                   <div className="kpi"><div className="l">Últ. tiquete</div><div className="v" style={{ fontSize: 15, paddingTop: 5 }}>
                     {k.ultimoTiquete ? new Date(k.ultimoTiquete.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short' }) : '—'}
                   </div><div className="ins">{k.ultimoTiquete?.consecutivo || 'sin tiquetes'}</div></div>
@@ -294,11 +326,16 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
                     <div className="empty">Sin facturas</div>
                   ) : (
                     <table>
-                      <thead><tr><th>Factura</th><th className="num">Monto</th><th className="num">Vence</th><th>Estado</th></tr></thead>
+                      <thead><tr><th>Factura</th><th>Productos y regla aplicada</th><th className="num">Monto</th><th className="num">Vence</th><th>Estado</th></tr></thead>
                       <tbody>
                         {(data?.facturas || []).map((f: any) => (
                           <tr key={f.id}>
                             <td className="strong mono">{f.consecutivo}</td>
+                            <td>{(f.lineas || []).length ? f.lineas.map((l: any, i: number) => (
+                              <div key={i} className="mini">
+                                {l.producto} × {l.cantidad} · {fmt(l.precioUnitario)} · {l.resolucionPrecio?.regla || 'precio histórico'}
+                              </div>
+                            )) : <span className="mini">Sin detalle de líneas</span>}</td>
                             <td className="num mono">{fmt(f.total)}</td>
                             <td className="num mono">{f.estado === 'Pagada' ? '—' : `${f.diasVencido} d`}</td>
                             <td><RiskChip estado={f.estado} diasVencido={f.diasVencido} /></td>
@@ -314,12 +351,16 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
                     <div className="empty">Sin tiquetes</div>
                   ) : (
                     <table>
-                      <thead><tr><th>Tiquete</th><th className="num">Monto</th><th>Fecha</th><th>Tipo</th><th>Estado</th></tr></thead>
+                      <thead><tr><th>Tiquete</th><th>Producto</th><th className="num">Precio</th><th>Regla</th><th className="num">Monto</th><th>Factura vinculada</th><th>Fecha</th><th>Tipo</th><th>Estado</th></tr></thead>
                       <tbody>
                         {(data?.tiquetes || []).map((t: any) => (
                           <tr key={t.id}>
                             <td className="strong mono">{t.consecutivo}</td>
+                            <td>{t.producto} × {t.cantidad}</td>
+                            <td className="num mono">{fmt(t.precioUnitario)}</td>
+                            <td>{t.resolucionPrecio?.regla || 'precio histórico'}</td>
                             <td className="num mono">{fmt(t.monto)}</td>
+                            <td className="mono">{t.facturaConsecutivo || 'Por facturar'}</td>
                             <td className="mono">{new Date(t.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short' })}</td>
                             <td>{t.cobro || 'Efectivo'}</td>
                             <td><span className={t.estado === 'Anulada' ? 'chip gray' : 'chip green'}>{t.estado}</span></td>
@@ -344,10 +385,10 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
                   <div className="panel" style={{ padding: 16 }}>
                     <div className="sect"><h4>Ubicación / punto de entrega</h4></div>
                     {c.direccion ? (
-                      <div style={{ background: 'linear-gradient(135deg,#dbeafe,#dcfce7)', borderRadius: 12, height: 110, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#1d4ed8', fontWeight: 800, fontSize: 11 }}>
+                      <div style={{ background: 'var(--status-info-soft)', borderRadius: 12, height: 110, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--status-info)', fontWeight: 800, fontSize: 11 }}>
                         <div style={{ fontSize: 20 }}>📍</div>
                         {c.direccion}<br />
-                        <span className="mini" style={{ color: '#1e40af' }}>ruta: {c.ruta || 'sin asignar'}</span>
+                        <span className="mini" style={{ color: 'var(--text-primary)' }}>ruta: {c.ruta || 'sin asignar'}</span>
                       </div>
                     ) : (
                       <div className="empty">Sin dirección registrada</div>
@@ -411,15 +452,15 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
                 <div className="panel" style={{ padding: 16 }}>
                   <div className="panel-title" style={{ marginBottom: 12 }}>Matriz de precios · excepciones del cliente</div>
                   <div className="info-note" style={{ marginTop: 4 }}>
-                    Tarifa base para {c.condicionPago || 'Contado'}: {c.precioEspecial ? `₡${c.precioEspecial}` : 'Estándar'}. Las excepciones aplican por producto y requieren aprobación.
+                    Tarifa base para {c.condicionPago || 'Contado'}: {c.precioEspecial ? `₡${c.precioEspecial}` : 'Estándar'}. Las excepciones requieren autorización de Admin y vencen en la fecha indicada.
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                  {currentUser.role === 'Admin' && <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
                     <button className="btn sm brand" onClick={() => setShowExcForm(!showExcForm)}>
-                      <Plus className="w-3.5 h-3.5" /> {showExcForm ? 'Cancelar' : 'Nueva excepción'}
+                      <Plus className="w-3.5 h-3.5" /> {showExcForm ? 'Cancelar' : 'Nueva excepción temporal'}
                     </button>
-                  </div>
+                  </div>}
                   {showExcForm && (
-                    <div style={{ border: '1px solid #a7f3d0', background: '#f0fdf4', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                    <div style={{ border: '1px solid var(--status-success)', background: 'var(--status-success-soft)', borderRadius: 12, padding: 14, marginBottom: 12 }}>
                       <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
                         <div className="field">
                           <label>Producto <span className="req">*</span></label>
@@ -440,11 +481,8 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
                           <input type="text" value={formExc.justificacion} placeholder="Motivo de la excepción"
                             onChange={e => setFormExc({ ...formExc, justificacion: e.target.value })} />
                         </div>
-                        <div className="field">
-                          <label>Aprobado por</label>
-                          <input type="text" value={formExc.aprobadoPor} placeholder="Nombre del aprobador"
-                            onChange={e => setFormExc({ ...formExc, aprobadoPor: e.target.value })} />
-                        </div>
+                        <div className="field"><label>Válida desde <span className="req">*</span></label><input type="date" value={formExc.fechaInicio} onChange={e => setFormExc({ ...formExc, fechaInicio: e.target.value })} /></div>
+                        <div className="field"><label>Válida hasta <span className="req">*</span></label><input type="date" value={formExc.fechaFin} onChange={e => setFormExc({ ...formExc, fechaFin: e.target.value })} /></div>
                       </div>
                       <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
                         <button className="btn sm brand" onClick={agregarExcepcion}><Check className="w-3.5 h-3.5" /> Guardar</button>
@@ -465,8 +503,8 @@ export default function Cliente360({ cliente, open, onClose, onEdit }: Cliente36
                             <td className="num mono" style={{ color: e.precioBase > e.precioExcepcion ? 'var(--blue)' : 'var(--brand)' }}>
                               {e.precioBase > 0 ? `${((e.precioExcepcion - e.precioBase) / e.precioBase * 100).toFixed(0)}%` : '—'}
                             </td>
-                            <td>{e.aprobadoPor || '—'}</td>
-                            <td><button className="btn ico" onClick={() => eliminarExcepcion(e.id)} title="Eliminar"><Trash2 className="w-3.5 h-3.5" style={{ color: 'var(--red)' }} /></button></td>
+                            <td>{e.aprobadoPor || '—'}<div className="mini">{e.fechaInicio || 'Histórica'} – {e.fechaFin || 'sin vencimiento'} · {e.estadoVigencia || e.estado}</div></td>
+                            <td>{currentUser.role === 'Admin' && e.estado === 'Activa' && <button className="btn ico" onClick={() => eliminarExcepcion(e.id)} title="Desactivar excepción"><Trash2 className="w-3.5 h-3.5" style={{ color: 'var(--red)' }} /></button>}</td>
                           </tr>
                         ))}
                       </tbody>

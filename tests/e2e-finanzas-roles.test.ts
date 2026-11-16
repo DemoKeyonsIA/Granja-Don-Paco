@@ -17,6 +17,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { requestAs } from './helpers/request-as';
 import { drizzle } from 'drizzle-orm/libsql';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import * as schema from '../src/db/schema';
@@ -62,7 +63,7 @@ afterAll(() => {
 
 describe('GET /api/reportes/flujo-caja', () => {
   it('responde 200 con la forma del ciclo', async () => {
-    const res = await request(app).get('/api/reportes/flujo-caja').query(MES);
+    const res = await requestAs(app, 'adm-fin-roles').get('/api/reportes/flujo-caja').query(MES);
     expectApi(res, 200);
     expect(Array.isArray(res.body.cicloDelDinero)).toBe(true);
     expect(res.body.cicloDelDinero.map((n: any) => n.etapa)).toEqual([
@@ -72,8 +73,8 @@ describe('GET /api/reportes/flujo-caja', () => {
 
   it('es el mismo cuerpo que /api/finanzas/resumen, cifra por cifra', async () => {
     const [resumen, flujo] = await Promise.all([
-      request(app).get('/api/finanzas/resumen').query(MES),
-      request(app).get('/api/reportes/flujo-caja').query(MES),
+      requestAs(app, 'adm-fin-roles').get('/api/finanzas/resumen').query(MES),
+      requestAs(app, 'adm-fin-roles').get('/api/reportes/flujo-caja').query(MES),
     ]);
     expectApi(resumen, 200);
     expectApi(flujo, 200);
@@ -83,13 +84,13 @@ describe('GET /api/reportes/flujo-caja', () => {
   });
 
   it('el filtro de fechas funciona con el nombre que manda la pantalla', async () => {
-    const mes = await request(app).get('/api/reportes/flujo-caja').query(MES);
+    const mes = await requestAs(app, 'adm-fin-roles').get('/api/reportes/flujo-caja').query(MES);
     expectApi(mes, 200);
 
     // Un rango sin facturas ni gastos: los flujos del mes valen cero, pero el saldo
     // por cobrar sigue ahí. Una factura de septiembre no deja de deber existir en
     // enero; lo que no existe en enero es la venta.
-    const vacio = await request(app).get('/api/reportes/flujo-caja').query({
+    const vacio = await requestAs(app, 'adm-fin-roles').get('/api/reportes/flujo-caja').query({
       fechaInicio: '2026-01-01', fechaFin: '2026-01-31',
     });
     expectApi(vacio, 200);
@@ -104,8 +105,8 @@ describe('GET /api/reportes/flujo-caja', () => {
   });
 
   it('el rango cambia el resultado, o sea que el filtro se aplica de verdad', async () => {
-    const septiembre = await request(app).get('/api/reportes/flujo-caja').query(MES);
-    const agosto = await request(app).get('/api/reportes/flujo-caja').query({
+    const septiembre = await requestAs(app, 'adm-fin-roles').get('/api/reportes/flujo-caja').query(MES);
+    const agosto = await requestAs(app, 'adm-fin-roles').get('/api/reportes/flujo-caja').query({
       fechaInicio: '2026-08-01', fechaFin: '2026-08-31',
     });
     expectApi(septiembre, 200);
@@ -115,12 +116,12 @@ describe('GET /api/reportes/flujo-caja', () => {
   });
 
   it('rechaza fechas mal escritas en vez de devolver el mes en curso', async () => {
-    const res = await request(app).get('/api/reportes/flujo-caja').query({ desde: 'septiembre', hasta: '2026-09-30' });
+    const res = await requestAs(app, 'adm-fin-roles').get('/api/reportes/flujo-caja').query({ desde: 'septiembre', hasta: '2026-09-30' });
     expectApi(res, 400);
   });
 
   it('rechaza un rango al revés', async () => {
-    const res = await request(app).get('/api/reportes/flujo-caja').query({
+    const res = await requestAs(app, 'adm-fin-roles').get('/api/reportes/flujo-caja').query({
       desde: '2026-09-30', hasta: '2026-09-01',
     });
     expectApi(res, 400);
@@ -128,19 +129,33 @@ describe('GET /api/reportes/flujo-caja', () => {
 });
 
 describe('Documentos y gastos siguen respondiendo igual', () => {
+  it('gastos exige sesión válida y valida el monto', async () => {
+    const anonimo = await request(app).post('/api/gastos').send({ categoria: 'Viáticos', monto: 100, descripcion: 'Sin sesión' });
+    expectApi(anonimo, 401, 'sin sesión');
+    const invalido = await requestAs(app, 'adm-fin-roles').post('/api/gastos').set('x-user-id', ADMIN).send({ categoria: 'Viáticos', monto: -1, descripcion: 'Monto inválido' });
+    expectApi(invalido, 400, 'monto negativo');
+  });
+
   it('las facturas del modulo siguen listadas por GET /api/facturas', async () => {
-    const res = await request(app).get('/api/facturas');
+    const res = await requestAs(app, 'adm-fin-roles').get('/api/facturas');
     expectApi(res, 200);
     expect(res.body.length).toBeGreaterThanOrEqual(2);
   });
 
   it('un gasto nuevo entra por POST /api/gastos y aparece en el resumen', async () => {
-    const res = await request(app).post('/api/gastos').send({
+    const payload = {
       fecha: '2026-09-20', categoria: 'Viáticos', monto: 7500, descripcion: 'Gasto de prueba', usuarioId: ADMIN,
-    });
+    };
+    const res = await requestAs(app, 'adm-fin-roles').post('/api/gastos').set('x-user-id', ADMIN).set('Idempotency-Key', 'gasto-prueba-1').send(payload);
     expectApi(res, 200);
+    expect(res.body.repetido).toBe(false);
+    const reintento = await requestAs(app, 'adm-fin-roles').post('/api/gastos').set('x-user-id', ADMIN).set('Idempotency-Key', 'gasto-prueba-1').send(payload);
+    expectApi(reintento, 200, 'reintento idempotente');
+    expect(reintento.body.repetido).toBe(true);
+    const conflicto = await requestAs(app, 'adm-fin-roles').post('/api/gastos').set('x-user-id', ADMIN).set('Idempotency-Key', 'gasto-prueba-1').send({ ...payload, monto: 999 });
+    expectApi(conflicto, 409, 'llave usada para otro contenido');
 
-    const resumen = await request(app).get('/api/finanzas/resumen').query(MES);
+    const resumen = await requestAs(app, 'adm-fin-roles').get('/api/finanzas/resumen').query(MES);
     expectApi(resumen, 200);
     expect(resumen.body.gastos).toBeGreaterThanOrEqual(32500);
   });

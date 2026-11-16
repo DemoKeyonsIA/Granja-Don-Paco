@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Plus, Search, FileText, Printer, Check, X, CreditCard, ScanLine, Ticket, Wifi, WifiOff, RefreshCw, AlertTriangle, Minus, ShoppingCart, Send, Download, CheckCircle, XCircle, Clock, ArrowRight, ArrowLeft, Trash2 } from 'lucide-react';
+import { Package, Plus, Search, FileText, Printer, Check, X, CreditCard, ScanLine, Ticket, RefreshCw, AlertTriangle, Minus, ShoppingCart, Send, Download, CheckCircle, XCircle, Clock, ArrowRight, ArrowLeft, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import Breadcrumb from './Breadcrumb';
 import WizardProgress from './WizardProgress';
 import { Factura, User, DetalleFactura, Cliente, InventarioItem, FacturaElectronica } from '../types';
 import { Spinner } from './Spinner';
+import { sessionHeaders } from '../lib/session';
+import { factorPara } from '../lib/kilos';
+import AccionFijaMovil from './AccionFijaMovil';
 
 const DRAFT_KEY = 'granja_don_paco_draft_invoice';
+
+// El valor en BD sigue siendo `'Tiquete'` (no hay migración de datos). Lo que
+// cambia en la consolidación G8 es cómo se llama en pantalla: en Facturación ya
+// no es un "tiquete" —ese es el de ruta (TQ-)— acá es una Nota de venta.
+const NOMBRE_NOTA_VENTA = 'Nota de venta';
+const formatoCRC = (valor: number) => new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 0 }).format(Number(valor) || 0);
 
 interface DraftState {
   tipoDocumento: 'Factura' | 'Tiquete';
@@ -69,20 +78,27 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
   const [rutasDia, setRutasDia] = useState<RutaDia[]>([]);
   const [catalogo, setCatalogo] = useState<{id:string;nombre:string;precioBase:number}[]>([]);
 
-  const precioCatalogoProd = (nombre: string) => catalogo.find(c => c.nombre === nombre)?.precioBase || 0;
+  const resolverPrecio = async (nombre: string, clienteId = selectedCliente) => {
+    const query = new URLSearchParams({ producto: nombre });
+    if (clienteId) query.set('clienteId', clienteId);
+    const response = await fetch(`/api/precios/lookup?${query}`, { headers: sessionHeaders(currentUser.id) });
+    const data = await response.json();
+    if (!response.ok || !Number.isFinite(Number(data.precio))) throw new Error(data.error || `No hay precio autorizado para ${nombre}`);
+    return Number(data.precio);
+  };
 
   // Headers de auth: el rol NO viaja en el header (lo resuelve el server contra la BD).
-  const authHeaders = { 'Content-Type': 'application/json', 'x-user-id': currentUser.id };
+  const authHeaders = sessionHeaders(currentUser.id, true);
 
   const fetchData = async () => {
     try {
       const [invRes, cliRes, facRes, feRes, rutRes, cRes] = await Promise.all([
-        fetch('/api/inventario'),
-        fetch('/api/clientes'),
-        fetch('/api/facturas'),
-        fetch('/api/facturacion/documentos'),
-        fetch('/api/facturacion/rutas-dia'),
-        fetch('/api/productos-catalogo')
+        fetch('/api/inventario', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/clientes', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/facturas', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/facturacion/documentos', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/facturacion/rutas-dia', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/productos-catalogo', { headers: sessionHeaders(currentUser.id) })
       ]);
       if (invRes.ok) setInventario(await invRes.json());
       if (cliRes.ok) setClientes(await cliRes.json());
@@ -99,7 +115,15 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
 
   const [isCreating, setIsCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isOffline, setIsOffline] = useState(currentUser.role === 'Comercial');
+  const [facturaSeleccionada, setFacturaSeleccionada] = useState<Factura | null>(null);
+  const [creandoFactura, setCreandoFactura] = useState(false);
+
+  const handleImprimirFactura = () => {
+    const limpiarModoImpresion = () => document.body.classList.remove('print-invoice-only');
+    window.addEventListener('afterprint', limpiarModoImpresion, { once: true });
+    document.body.classList.add('print-invoice-only');
+    window.print();
+  };
 
   // Load draft on mount
   const draft = loadDraft();
@@ -165,30 +189,37 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
     }
   };
 
-  const handleScanBarcode = () => {
+  const handleScanBarcode = async () => {
     if (catalogo.length === 0) {
       toast.error('Catálogo vacío: no hay productos para escanear');
       return;
     }
     const prodName = catalogo.find(p => !detalles.some(d => d.producto === p.nombre))?.nombre || catalogo[0].nombre;
-    const pUnit = precioCatalogoProd(prodName) || 2000;
+    const pUnit = selectedCliente ? await resolverPrecio(prodName, selectedCliente).catch(() => 0) : 0;
     const newDetalles = [...detalles];
     const emptyIndex = newDetalles.findIndex(d => d.cantidad === 0 && d.precio_unitario === 0);
     const scannedItem = { producto: prodName, cantidad: 10, precio_unitario: pUnit, subtotal: 10 * pUnit };
     if (emptyIndex !== -1) { newDetalles[emptyIndex] = scannedItem; } else { newDetalles.push(scannedItem); }
     setDetalles(newDetalles);
-    toast.info(`Escaneo de demostración: +10 ${prodName} (₡${pUnit.toLocaleString()} c/u)`);
+    toast.info(`Escaneo de demostración: +10 ${prodName}${selectedCliente ? ` (₡${pUnit.toLocaleString()} por kg)` : ' · el precio se calcula al elegir el cliente'}`);
   };
 
-  const handleClienteChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleClienteChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const id = e.target.value;
     setSelectedCliente(id);
     const cliente = getCliente(id);
     if (cliente) {
       setTipoDocumento('Factura');
       setCondicionPago(cliente.condicion_pago);
-      if (cliente.precio_especial) {
-        setDetalles(detalles.map(d => ({ ...d, precio_unitario: cliente.precio_especial!, subtotal: d.cantidad * cliente.precio_especial! })));
+      if (detalles.some(d => d.cantidad > 0)) {
+        try {
+          const precios = await Promise.all(detalles.map(async d => d.cantidad > 0
+            ? resolverPrecio(d.producto, id)
+            : d.precio_unitario));
+          setDetalles(detalles.map((d, i) => ({ ...d, precio_unitario: precios[i], subtotal: d.cantidad * precios[i] })));
+        } catch (error: any) {
+          toast.error(error.message || 'No se pudo resolver el precio del cliente');
+        }
       }
     }
   };
@@ -212,11 +243,22 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
     return true;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!canAdvance()) {
       if (wizardStep === 1) toast.error('Agrega al menos un producto al carrito');
       if (wizardStep === 2) toast.error('Selecciona un cliente');
       return;
+    }
+    if (wizardStep === 2 && selectedCliente && tipoDocumento === 'Factura') {
+      try {
+        const precios = await Promise.all(detalles.map(async d => d.cantidad > 0
+          ? resolverPrecio(d.producto, selectedCliente)
+          : d.precio_unitario));
+        setDetalles(detalles.map((d, i) => ({ ...d, precio_unitario: precios[i], subtotal: d.cantidad * precios[i] })));
+      } catch (error: any) {
+        toast.error(error.message || 'No se pudo resolver el precio autorizado');
+        return;
+      }
     }
     setWizardStep(Math.min(wizardStep + 1, 3));
   };
@@ -224,6 +266,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
   const handlePrev = () => setWizardStep(Math.max(wizardStep - 1, 1));
 
   const handleCreate = async () => {
+    if (creandoFactura) return;
     if (!selectedCliente && tipoDocumento === 'Factura') {
       toast.error('Selecciona un cliente para la factura');
       return;
@@ -233,6 +276,17 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
       return;
     }
 
+    let detallesAutorizados: DetalleFactura[];
+    try {
+      detallesAutorizados = await Promise.all(detalles.filter(d => d.cantidad > 0).map(async d => {
+        const precio = await resolverPrecio(d.producto, selectedCliente || undefined);
+        return { ...d, precio_unitario: precio, subtotal: d.cantidad * precio };
+      }));
+    } catch (error: any) {
+      toast.error(error.message || 'No se pudo resolver el precio autorizado');
+      return;
+    }
+    const subtotalAutorizado = detallesAutorizados.reduce((sum, d) => sum + d.subtotal, 0);
     const newFactura: Factura = {
       id: crypto.randomUUID(),
       // R1: el consecutivo lo expide el backend (serie FAC global) — aquí va vacío.
@@ -240,13 +294,14 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
       fecha: new Date().toISOString(),
       clienteId: selectedCliente || 'consumidor-final',
       vendedorId: currentUser.id,
-      detalles: [...detalles.filter(d => d.cantidad > 0)],
-      subtotal, descuento, total,
+      detalles: detallesAutorizados,
+      subtotal: subtotalAutorizado, descuento, total: subtotalAutorizado - descuento,
       condicion_pago: condicionPago,
       metodo_pago: condicionPago === 'Contado' ? metodoPago : undefined,
       estado: condicionPago === 'Contado' ? 'Pagada' : 'Pendiente'
     };
 
+    setCreandoFactura(true);
     try {
       const res = await fetch('/api/ventas', {
         method: 'POST',
@@ -254,11 +309,16 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
         body: JSON.stringify({ factura: newFactura, detalles: newFactura.detalles })
       });
       if (!res.ok) { const data = await res.json(); throw new Error(data.error); }
+      const ventaCreada = await res.json();
+      const facturaParaAbrir: Factura = {
+        ...newFactura,
+        consecutivo: ventaCreada.consecutivo || newFactura.consecutivo,
+      };
 
       const cliente = getCliente(selectedCliente);
       const resDoc = await fetch('/api/facturacion/crear-documento', {
         method: 'POST',
-        headers: authHeaders,
+        headers: { ...authHeaders, 'Idempotency-Key': `documento:${newFactura.id}:${tipoDocumento}` },
         body: JSON.stringify({
           facturaId: newFactura.id, tipoDocumento,
           emisorNombre: 'Granja Don Paco', emisorCedula: '3-101-XXXXXX',
@@ -274,6 +334,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
       setIsCreating(false);
       setWizardStep(1);
       await fetchData();
+      setFacturaSeleccionada(facturaParaAbrir);
 
       // La factura ya quedó guardada, así que esto no es un fallo de la venta:
       // es una venta sin respaldo fiscal. Antes se avisaba "Factura creada y
@@ -292,6 +353,8 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
       toast.success('Factura creada y documento fiscal generado');
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setCreandoFactura(false);
     }
   };
 
@@ -332,7 +395,15 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
     setEnviandoFE(null);
   };
 
-  const filteredFacturas = facturas.filter(f => {
+  const facturasActivas = facturas.filter(f => {
+    const estado = String(f.estado || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const estadoContable = String((f as any).estadoContabilidad || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const recibidaContabilidad = Boolean((f as any).recibidaPorContador || (f as any).recibidaContabilidad || (f as any).fechaRecepcionContable)
+      || /recibid|contabiliz|archivad/.test(estadoContable)
+      || /recibid|contabiliz/.test(estado);
+    return estado !== 'anulada' && !recibidaContabilidad;
+  });
+  const filteredFacturas = facturasActivas.filter(f => {
     const cliente = getCliente(f.clienteId)?.nombre || '';
     return f.consecutivo.toLowerCase().includes(searchTerm.toLowerCase()) || cliente.toLowerCase().includes(searchTerm.toLowerCase());
   });
@@ -341,7 +412,8 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
     switch (estado) {
       case 'Aceptado': return <CheckCircle className="w-4 h-4" style={{ color: 'var(--brand-primary)' }} />;
       case 'Rechazado': return <XCircle className="w-4 h-4 text-red-500" />;
-      case 'Enviado': case 'Pendiente': return <Clock className="w-4 h-4" style={{ color: 'var(--brand-secondary)' }} />;
+      case 'Enviado': return <Clock className="w-4 h-4" style={{ color: 'var(--status-info)' }} />;
+      case 'Pendiente': return <Clock className="w-4 h-4" style={{ color: 'var(--status-warning)' }} />;
       default: return <FileText className="w-4 h-4 text-neutral-400" />;
     }
   };
@@ -350,7 +422,43 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
   const stockUbicacion = guiaActiva?.camionNombre || 'Bodega Central';
   const stockPara = (prodName: string) => {
     const items = inventario.filter(i => i.producto === prodName && i.ubicacion === stockUbicacion);
-    return items.reduce((a, i) => a + Number(i.cantidad), 0);
+    const itemCatalogo = catalogo.find((c: any) => c.nombre === prodName) as any;
+    const factor = itemCatalogo?.unidad === 'kg' ? 1 : factorPara(prodName, itemCatalogo ? [itemCatalogo] : []);
+    if (!factor) return 0;
+    return items.reduce((a, i) => a + Number(i.cantidad) * (i.unidad === 'kg' ? 1 : factor), 0);
+  };
+  const clienteFactura = facturaSeleccionada ? getCliente(facturaSeleccionada.clienteId) : undefined;
+  const documentoFiscalFactura = facturaSeleccionada
+    ? documentosElectronicos.find(d => d.facturaId === facturaSeleccionada.id && ['Factura', 'Tiquete'].includes(d.tipoDocumento))
+    : undefined;
+  const cedulaEmisorVisible = documentoFiscalFactura?.emisorCedula && !/[xX]/.test(documentoFiscalFactura.emisorCedula)
+    ? documentoFiscalFactura.emisorCedula
+    : undefined;
+  const claveFiscalValida = Boolean(documentoFiscalFactura?.clave && /^\d{50}$/.test(documentoFiscalFactura.clave));
+  const consecutivoFiscalValido = Boolean(documentoFiscalFactura?.consecutivo && /^\d{20}$/.test(documentoFiscalFactura.consecutivo));
+
+  const handleEnviarCorreoFactura = () => {
+    if (!facturaSeleccionada) return;
+    const correo = documentoFiscalFactura?.receptorCorreo || clienteFactura?.email;
+    if (!correo) {
+      toast.error('Este cliente no tiene un correo registrado. Agrégalo en su perfil para preparar el envío.');
+      return;
+    }
+    const asunto = `${documentoFiscalFactura?.tipoDocumento === 'Tiquete' ? 'Nota de venta' : 'Factura'} ${facturaSeleccionada.consecutivo} · Granja Don Paco`;
+    const lineas = facturaSeleccionada.detalles?.map(d => `• ${d.producto}: ${Number(d.cantidad).toLocaleString('es-CR')} kg — ${formatoCRC(d.subtotal)}`).join('\n') || '';
+    const cuerpo = [
+      `Hola ${clienteFactura?.nombre || 'cliente'},`,
+      '',
+      `Te compartimos el detalle de ${asunto}:`,
+      lineas,
+      '',
+      `Total: ${formatoCRC(facturaSeleccionada.total)}`,
+      `Fecha: ${new Date(facturaSeleccionada.fecha).toLocaleDateString('es-CR')}`,
+      '',
+      'Adjunta la representación impresa de la factura antes de enviar este correo.',
+      'Granja Don Paco · Siempre frescos',
+    ].filter(Boolean).join('\n');
+    window.location.href = `mailto:${encodeURIComponent(correo)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
   };
 
   return (
@@ -370,23 +478,14 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
           <p className="text-sm text-neutral-500 mt-1">Facturas, documentos electrónicos y rutas por facturar.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => setIsOffline(!isOffline)}
-            className={cn("flex items-center justify-center px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-sm border",
-              isOffline ? "border-stone-200" : "border-stone-200")}
-            style={isOffline
-              ? { background: 'color-mix(in srgb, var(--brand-secondary) 8%, transparent)', color: 'var(--brand-secondary-dark)' }
-              : { background: 'color-mix(in srgb, var(--brand-primary) 8%, transparent)', color: 'var(--brand-primary-dark)' }
-            }>
-            {isOffline ? <><WifiOff className="w-4 h-4 mr-1.5" /> Offline</> : <><Wifi className="w-4 h-4 mr-1.5" /> En Línea</>}
-          </button>
           <button onClick={() => {
             if (isCreating) { clearDraft(); resetForm(); setWizardStep(1); }
             setIsCreating(!isCreating);
           }}
             className="flex items-center justify-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
             style={isCreating
-              ? { background: '#E7E5E4', color: '#57534E' }
-              : { background: 'var(--brand-primary)', color: 'white' }
+              ? { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }
+              : { background: 'var(--brand-primary)', color: 'var(--text-on-action)' }
             }>
             {isCreating ? <><X className="w-5 h-5 mr-2" /> Cancelar</> : <><Plus className="w-5 h-5 mr-2" /> Nueva Venta</>}
           </button>
@@ -395,23 +494,23 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
 
       {/* Draft indicator */}
       {!isCreating && draft && (
-        <div className="border rounded-xl p-4 flex items-center justify-between" style={{ background: 'color-mix(in srgb, var(--brand-secondary) 5%, transparent)', borderColor: 'color-mix(in srgb, var(--brand-secondary) 20%, transparent)' }}>
+        <div className="border rounded-xl p-4 flex items-center justify-between" style={{ background: 'var(--status-warning-soft)', borderColor: 'var(--status-warning)' }}>
           <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5" style={{ color: 'var(--brand-secondary)' }} />
+            <AlertTriangle className="w-5 h-5" style={{ color: 'var(--status-warning)' }} />
             <div>
               <p className="text-sm font-bold text-stone-800">Borrador guardado</p>
-              <p className="text-xs" style={{ color: 'var(--brand-secondary)' }}>Tienes una factura en progreso sin finalizar.</p>
+              <p className="text-xs" style={{ color: 'var(--status-warning)' }}>Tienes una factura en progreso sin finalizar.</p>
             </div>
           </div>
           <button onClick={() => { setIsCreating(true); setWizardStep(draft.wizardStep || 1); }}
-            className="px-4 py-2 text-white rounded-lg text-xs font-bold transition-colors" style={{ background: 'var(--brand-secondary)' }}>
+            className="px-4 py-2 rounded-lg text-xs font-bold transition-colors" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
             Continuar
           </button>
         </div>
       )}
 
       {isCreating ? (
-        <div className="bg-neutral-50 p-2 md:p-6 rounded-3xl animate-in slide-in-from-top-4">
+        <div className="p-2 md:p-6 rounded-3xl animate-in slide-in-from-top-4" style={{ background: 'var(--bg-muted)' }}>
           <WizardProgress
             steps={[
               { number: 1, label: 'Productos' },
@@ -424,33 +523,34 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
           {/* Step 1: Productos */}
           {wizardStep === 1 && (
             <div className="space-y-6 animate-in fade-in">
-              <div className="bg-white p-4 rounded-2xl shadow-sm border border-neutral-200">
+              <div className="p-4 rounded-2xl shadow-sm border" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-bold text-lg text-neutral-800 flex items-center gap-2">
+                  <h3 className="font-bold text-lg flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                     <Package className="w-5 h-5" style={{ color: 'var(--brand-primary)' }} /> Seleccionar Productos
                   </h3>
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 bg-neutral-100 p-1 rounded-xl">
+                    <div className="flex items-center gap-2 p-1 rounded-xl" style={{ background: 'var(--bg-muted)' }}>
                       <button type="button" onClick={() => setTipoDocumento('Factura')}
                         className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center",
-                          tipoDocumento === 'Factura' ? "bg-white shadow-sm" : "text-stone-400")}
-                        style={tipoDocumento === 'Factura' ? { color: 'var(--brand-primary-dark)' } : {}}>
+                          tipoDocumento === 'Factura' ? "shadow-sm" : "")}
+                        style={tipoDocumento === 'Factura' ? { background: 'var(--bg-card)', color: 'var(--text-link)' } : { color: 'var(--text-muted)' }}>
                         <FileText className="w-3.5 h-3.5 mr-1" /> Factura
                       </button>
                       <button type="button" onClick={() => { setTipoDocumento('Tiquete'); setSelectedCliente(''); }}
                         className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center",
-                          tipoDocumento === 'Tiquete' ? "bg-white shadow-sm" : "text-stone-400")}
-                        style={tipoDocumento === 'Tiquete' ? { color: 'var(--brand-primary-dark)' } : {}}>
-                        <Ticket className="w-3.5 h-3.5 mr-1" /> Tiquete
+                          tipoDocumento === 'Tiquete' ? "shadow-sm" : "")}
+                        style={tipoDocumento === 'Tiquete' ? { background: 'var(--bg-card)', color: 'var(--text-link)' } : { color: 'var(--text-muted)' }}>
+                        <Ticket className="w-3.5 h-3.5 mr-1" /> {NOMBRE_NOTA_VENTA}
                       </button>
                     </div>
                     <button type="button" onClick={handleScanBarcode}
-                      className="text-xs font-bold text-neutral-600 hover:text-neutral-900 flex items-center bg-neutral-100 hover:bg-neutral-200 px-3 py-1.5 rounded-lg transition-colors">
+                      className="min-h-10 text-xs font-bold flex items-center px-3 py-1.5 rounded-lg transition-colors"
+                      style={{ color: 'var(--text-secondary)', background: 'var(--bg-muted)' }}>
                       <ScanLine className="w-4 h-4 mr-1.5" /> Escanear (demo)
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
                   {catalogo.length === 0 ? (
                     <div className="col-span-full rounded-2xl border-2 border-dashed p-8 text-center" style={{ borderColor: 'var(--border-default)' }}>
                       <Package className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--text-muted)' }} />
@@ -463,12 +563,12 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                     const cantidad = isAdded ? detalles[existingDetIndex].cantidad : 0;
                     const stockDisponible = stockPara(prodName);
 
-                    const handleIncrement = () => {
-                      if (cantidad >= stockDisponible) { toast.error(`No hay más ${prodName} en inventario (${stockUbicacion})`); return; }
-                      if (isAdded) { updateDetalle(existingDetIndex, 'cantidad', cantidad + 1); }
+                    const handleIncrement = async () => {
+                      if (cantidad + 1 > stockDisponible) { toast.error(`No hay más ${prodName} en inventario (${stockUbicacion})`); return; }
+                      if (isAdded) { updateDetalle(existingDetIndex, 'cantidad', Math.round((cantidad + 1) * 100) / 100); }
                       else {
                         const emptyIdx = detalles.findIndex(d => d.cantidad === 0 && d.producto === 'Aves');
-                        const pUnit = precioCatalogoProd(prodName) || 1000;
+                        const pUnit = selectedCliente ? await resolverPrecio(prodName, selectedCliente).catch((error: any) => { toast.error(error.message); return 0; }) : 0;
                         if (emptyIdx >= 0) {
                           setDetalles(detalles.map((d, i) => i === emptyIdx ? { ...d, producto: prodName, cantidad: 1, precio_unitario: pUnit, subtotal: pUnit } : d));
                         } else {
@@ -478,34 +578,35 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                     };
                     const handleDecrement = () => {
                       if (isAdded && cantidad > 0) {
-                        if (cantidad === 1) removeDetalle(existingDetIndex);
-                        else updateDetalle(existingDetIndex, 'cantidad', cantidad - 1);
+                        if (cantidad <= 0.1) removeDetalle(existingDetIndex);
+                        else updateDetalle(existingDetIndex, 'cantidad', Math.round((cantidad - 1) * 100) / 100);
                       }
                     };
 
                     return (
-                      <div key={prodName} className={cn("relative border rounded-2xl p-3 flex flex-col items-center justify-between min-h-[120px] transition-all",
-                        cantidad > 0 ? "bg-stone-50" : "bg-white")}>
+                      <div key={prodName} className="relative border-2 rounded-2xl p-4 flex flex-col items-stretch justify-between min-h-[142px] transition-all"
+                        style={{ background: cantidad > 0 ? 'var(--brand-primary-soft)' : 'var(--bg-card)', borderColor: cantidad > 0 ? 'var(--brand-primary)' : 'var(--border-default)' }}>
                         {cantidad > 0 && (
                           <div className="absolute -top-2 -right-2 w-5 h-5 text-white rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: 'var(--brand-primary)' }}>
                             {cantidad}
                           </div>
                         )}
-                        <p className="font-bold text-neutral-800 text-sm text-center mb-0 leading-tight">{prodName}</p>
-                        <p className="text-[10px] text-neutral-500 font-medium mb-2" title={`Inventario en ${stockUbicacion}`}>Disp: {stockDisponible}</p>
+                        <p className="font-bold text-sm text-left leading-tight" style={{ color: 'var(--text-primary)' }}>{prodName}</p>
+                        <p className="text-xs font-medium mb-3" style={{ color: 'var(--text-muted)' }} title={`Inventario en ${stockUbicacion}`}>{stockDisponible > 0 ? `${stockDisponible.toFixed(2)} kg disponibles` : 'Sin existencias'} · {stockUbicacion}</p>
                         {cantidad > 0 ? (
                           <div className="flex items-center justify-between w-full bg-white rounded-xl shadow-sm border border-stone-200 p-1">
-                            <button type="button" onClick={handleDecrement} className="w-8 h-8 flex items-center justify-center rounded-lg bg-stone-50 hover:bg-stone-100" style={{ color: 'var(--brand-primary)' }}>
+                            <button type="button" onClick={handleDecrement} className="min-h-11 min-w-11 flex items-center justify-center rounded-lg" style={{ background: 'var(--bg-muted)', color: 'var(--text-link)' }} aria-label={`Restar ${prodName}`}>
                               <Minus className="w-4 h-4" />
                             </button>
-                            <span className="font-black" style={{ color: 'var(--brand-primary-dark)' }}>{cantidad}</span>
-                            <button type="button" onClick={handleIncrement} className="w-8 h-8 flex items-center justify-center rounded-lg text-white hover:opacity-90" style={{ background: 'var(--brand-primary)' }}>
+                            <span className="font-black tabular-nums" style={{ color: 'var(--text-primary)' }}>{cantidad} kg</span>
+                            <button type="button" onClick={handleIncrement} disabled={cantidad + 1 > stockDisponible} className="min-h-11 min-w-11 flex items-center justify-center rounded-lg disabled:opacity-40" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }} aria-label={`Sumar ${prodName}`}>
                               <Plus className="w-4 h-4" />
                             </button>
                           </div>
                         ) : (
-                          <button type="button" onClick={handleIncrement}
-                            className="w-full py-2 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold text-sm transition-colors">
+                          <button type="button" onClick={handleIncrement} disabled={stockDisponible <= 0}
+                            className="w-full min-h-11 rounded-xl font-bold text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                            style={{ background: 'var(--brand-primary-soft)', color: 'var(--text-link)' }}>
                             Agregar
                           </button>
                         )}
@@ -528,7 +629,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                         <div key={idx} className="flex justify-between items-center py-2 border-b border-neutral-100 last:border-0">
                           <div className="flex items-center gap-3">
                             <span className="font-bold text-sm text-neutral-800">{det.producto}</span>
-                            <span className="text-xs text-neutral-500">{det.cantidad} x ₡{det.precio_unitario.toLocaleString()}</span>
+                            <span className="text-xs text-neutral-500">{det.cantidad} kg × {det.precio_unitario > 0 ? `₡${det.precio_unitario.toLocaleString()}/kg` : 'precio al elegir cliente'}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-sm text-neutral-900">₡{det.subtotal.toLocaleString()}</span>
@@ -553,19 +654,19 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
           {wizardStep === 2 && (
             <div className="space-y-6 animate-in fade-in">
               {tipoDocumento === 'Factura' ? (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-200 space-y-4">
-                  <h3 className="font-bold text-lg text-neutral-800 flex items-center gap-2">
+                <div className="p-6 rounded-2xl shadow-sm border space-y-4" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+                  <h3 className="font-bold text-lg flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                     <ShoppingCart className="w-5 h-5" style={{ color: 'var(--brand-primary)' }} /> Seleccionar Cliente
                   </h3>
                   <select value={selectedCliente} onChange={handleClienteChange}
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-sm outline-none">
+                    className="w-full rounded-xl border px-4 py-3 text-sm outline-none" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>
                     <option value="">Seleccione un cliente...</option>
                     {clientes.map(c => (
                       <option key={c.id} value={c.id}>{c.nombre} ({c.ruta || 'Sin ruta'})</option>
                     ))}
                   </select>
                   {selectedCliente && facturas.some(f => f.clienteId === selectedCliente && f.estado === 'Pendiente') && (
-                    <div className="flex items-start bg-red-50 text-red-700 p-3 rounded-xl border border-red-100">
+                    <div className="flex items-start p-3 rounded-xl border" style={{ background: 'var(--status-danger-soft)', color: 'var(--status-danger)', borderColor: 'var(--status-danger)' }}>
                       <AlertTriangle className="w-5 h-5 mr-2 shrink-0 mt-0.5" />
                       <div>
                         <p className="font-bold text-sm">Alerta de Crédito</p>
@@ -582,30 +683,30 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 </div>
               ) : (
                 <div className="p-6 rounded-2xl border text-center" style={{ background: 'color-mix(in srgb, var(--brand-primary) 5%, transparent)', borderColor: 'color-mix(in srgb, var(--brand-primary) 15%, transparent)' }}>
-                  <p className="font-bold" style={{ color: 'var(--brand-primary-dark)' }}>Tiquete — No requiere cliente</p>
+                  <p className="font-bold" style={{ color: 'var(--text-link)' }}>{NOMBRE_NOTA_VENTA} — No requiere cliente</p>
                   <p className="text-sm mt-1" style={{ color: 'var(--brand-primary)' }}>El documento se emitirá como Consumidor Final.</p>
                 </div>
               )}
 
               {/* Payment details */}
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-200">
-                <h3 className="font-bold text-lg text-neutral-800 mb-4 flex items-center gap-2">
+              <div className="p-6 rounded-2xl shadow-sm border" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                   <CreditCard className="w-5 h-5" style={{ color: 'var(--brand-primary)' }} /> Condición de Pago
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider block mb-2">Condición</label>
+                    <label className="text-xs font-bold uppercase tracking-wider block mb-2" style={{ color: 'var(--text-muted)' }}>Condición</label>
                     <select value={condicionPago} onChange={e => setCondicionPago(e.target.value as any)}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm outline-none">
+                      className="w-full rounded-xl border px-4 py-3 text-sm outline-none" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>
                       <option value="Contado">Contado</option>
                       <option value="Credito">Crédito</option>
                     </select>
                   </div>
                   {condicionPago === 'Contado' && (
                     <div>
-                      <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider block mb-2">Método de Pago</label>
+                      <label className="text-xs font-bold uppercase tracking-wider block mb-2" style={{ color: 'var(--text-muted)' }}>Método de Pago</label>
                       <select value={metodoPago} onChange={e => setMetodoPago(e.target.value as any)}
-                        className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm outline-none">
+                        className="w-full rounded-xl border px-4 py-3 text-sm outline-none" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>
                         <option value="Efectivo">Efectivo</option>
                         <option value="SINPE">SINPE Móvil</option>
                         <option value="Transferencia">Transferencia</option>
@@ -620,8 +721,8 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
           {/* Step 3: Confirmar */}
           {wizardStep === 3 && (
             <div className="space-y-6 animate-in fade-in">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-neutral-200">
-                <h3 className="font-bold text-lg text-neutral-800 mb-4 flex items-center gap-2">
+              <div className="p-6 rounded-2xl shadow-sm border" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                   <CheckCircle className="w-5 h-5" style={{ color: 'var(--brand-primary)' }} /> Resumen de la Venta
                 </h3>
 
@@ -629,7 +730,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 {selectedCliente && (
                   <div className="p-4 rounded-xl mb-4" style={{ background: 'color-mix(in srgb, var(--brand-primary) 6%, transparent)' }}>
                     <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--brand-primary)' }}>Cliente</p>
-                    <p className="font-bold text-stone-900">{getCliente(selectedCliente)?.nombre}</p>
+                    <p className="font-bold" style={{ color: 'var(--text-primary)' }}>{getCliente(selectedCliente)?.nombre}</p>
                     <p className="text-xs" style={{ color: 'var(--brand-primary)' }}>{getCliente(selectedCliente)?.ruta} — {condicionPago} {condicionPago === 'Contado' ? `(${metodoPago})` : ''}</p>
                   </div>
                 )}
@@ -639,35 +740,38 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                   {itemsEnCarrito.map((det, idx) => (
                     <div key={idx} className="flex justify-between items-center py-3">
                       <div>
-                        <p className="font-bold text-sm text-neutral-800">{det.producto}</p>
-                        <p className="text-xs text-neutral-500">{det.cantidad} x ₡{det.precio_unitario.toLocaleString()}</p>
+                        <p className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>{det.producto}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{det.cantidad} kg × ₡{det.precio_unitario.toLocaleString()}/kg</p>
                       </div>
-                      <p className="font-bold text-neutral-900">₡{det.subtotal.toLocaleString()}</p>
+                      <p className="font-bold" style={{ color: 'var(--text-primary)' }}>₡{det.subtotal.toLocaleString()}</p>
                     </div>
                   ))}
                 </div>
 
                 {/* Totals */}
-                <div className="bg-neutral-50 p-4 rounded-xl space-y-2">
-                  <div className="flex justify-between text-sm text-neutral-600">
+                <div className="p-4 rounded-xl space-y-2" style={{ background: 'var(--bg-muted)' }}>
+                  <div className="flex justify-between text-sm" style={{ color: 'var(--text-secondary)' }}>
                     <span>Subtotal</span><span>₡{subtotal.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between text-sm text-neutral-600">
+                  <div className="flex justify-between text-sm" style={{ color: 'var(--text-secondary)' }}>
                     <span>Descuento</span>
                     <input type="number" value={descuento || ''} onChange={e => setDescuento(Number(e.target.value))}
-                      className="w-24 bg-white border border-neutral-200 rounded px-2 py-1 text-right text-xs outline-none" placeholder="0" />
+                      className="w-24 rounded border px-2 py-1 text-right text-xs outline-none" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} placeholder="0" />
                   </div>
                   <div className="flex justify-between items-end pt-2 mt-2 border-t border-neutral-200">
-                    <span className="font-bold text-neutral-900">Total a Cobrar</span>
+                    <span className="font-bold" style={{ color: 'var(--text-primary)' }}>Total a Cobrar</span>
                     <span className="text-3xl font-black" style={{ color: 'var(--brand-primary)' }}>₡{total.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
+              <p className="rounded-xl px-4 py-3 text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--text-secondary)' }}>
+                Al confirmar se guardará la venta y se abrirá su documento para imprimirlo o preparar el correo al cliente.
+              </p>
             </div>
           )}
 
           {/* Navigation buttons */}
-          <div className="flex justify-between items-center mt-6">
+          <div className="hidden md:flex justify-between items-center mt-6">
             <button type="button" onClick={handlePrev}
               disabled={wizardStep === 1}
               className={cn("flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm transition-colors",
@@ -680,12 +784,30 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 Siguiente <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
-              <button type="button" onClick={handleCreate}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-colors shadow-md" style={{ background: 'var(--brand-primary)' }}>
+              <button type="button" onClick={handleCreate} disabled={creandoFactura}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-colors shadow-md disabled:opacity-60" style={{ background: 'var(--brand-primary)' }}>
                 <Check className="w-5 h-5" /> Confirmar y Cobrar
               </button>
             )}
           </div>
+          <AccionFijaMovil etiquetaAccesible="Continuar creación de factura">
+            <div className="mx-auto flex max-w-md gap-3">
+              {wizardStep > 1 && (
+                <button type="button" onClick={handlePrev} className="min-h-12 min-w-12 rounded-xl border px-4 font-bold" style={{ color: 'var(--text-primary)', borderColor: 'var(--border-default)', background: 'var(--bg-card)' }} aria-label="Paso anterior">
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+              )}
+              {wizardStep < 3 ? (
+                <button type="button" onClick={handleNext} disabled={!canAdvance()} className="min-h-12 flex-1 rounded-xl px-5 font-bold shadow-sm disabled:cursor-not-allowed disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
+                  {wizardStep === 1 ? 'Continuar al cliente' : 'Revisar factura'} <ArrowRight className="ml-2 inline h-4 w-4" />
+                </button>
+              ) : (
+                <button type="button" onClick={handleCreate} disabled={creandoFactura} className="min-h-12 flex-1 rounded-xl px-5 font-bold shadow-sm disabled:cursor-wait disabled:opacity-60" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
+                  {creandoFactura ? <><Spinner tamano="xs" /> Guardando…</> : <><Check className="mr-2 inline h-5 w-5" /> Confirmar y cobrar</>}
+                </button>
+              )}
+            </div>
+          </AccionFijaMovil>
         </div>
       ) : (
         <div className="bg-white rounded-3xl shadow-sm border border-neutral-200 overflow-hidden">
@@ -699,9 +821,9 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
 
           <section data-testid="documentos-ventas">
             <h3 className="px-6 py-3 text-xs font-black uppercase tracking-wider text-neutral-500 border-b border-neutral-200">
-              Facturas ({facturas.length})
+              Facturas activas ({facturasActivas.length})
             </h3>
-            <div className="overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-neutral-50 text-neutral-500 uppercase tracking-wider font-bold text-xs border-b border-neutral-200">
                   <tr>
@@ -717,7 +839,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 <tbody className="divide-y divide-neutral-100">
                   {filteredFacturas.map(f => (
                     <tr key={f.id} className="hover:bg-stone-50 transition-colors">
-                      <td className="px-6 py-4 font-bold text-neutral-900">{f.consecutivo}</td>
+                      <td className="px-6 py-4 font-bold text-neutral-900"><button type="button" onClick={() => setFacturaSeleccionada(f)} className="text-left underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2" aria-label={`Abrir factura ${f.consecutivo}`}>{f.consecutivo}</button></td>
                       <td className="px-6 py-4 text-neutral-500">{new Date(f.fecha).toLocaleDateString()}</td>
                       <td className="px-6 py-4 font-medium text-neutral-800">{getCliente(f.clienteId)?.nombre || 'Desconocido'}</td>
                       <td className="px-6 py-4">
@@ -730,23 +852,19 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                       <td className="px-6 py-4 text-center">
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
                           style={f.estado === 'Pagada'
-                            ? { background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--brand-primary-dark)' }
+                            ? { background: 'var(--status-success-soft)', color: 'var(--status-success)' }
                             : f.estado === 'Pendiente'
-                            ? { background: 'color-mix(in srgb, var(--brand-secondary) 10%, transparent)', color: 'var(--brand-secondary-dark)' }
-                            : { background: '#FEE2E2', color: '#DC2626' }
+                            ? { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' }
+                            : { background: 'var(--status-danger-soft)', color: 'var(--status-danger)' }
                           }>
                           {f.estado}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        {/* El botón no tenía onClick: no hacía nada. `window.print()`
-                            imprime la página actual; las reglas `@media print` de
-                            `index.css` quitan sidebar, cabecera y filas de tabs para
-                            que salga la tabla de facturas y no el shell. */}
-                        <button onClick={() => window.print()}
-                          title={`Imprimir factura ${f.consecutivo}`}
-                          className="p-1.5 hover:bg-stone-50 rounded-lg transition-colors inline-flex items-center space-x-1" style={{ color: 'var(--brand-primary)' }}>
-                          <Printer className="w-4 h-4" /><span className="text-xs font-bold">Imprimir</span>
+                        <button onClick={() => setFacturaSeleccionada(f)}
+                          title={`Ver factura ${f.consecutivo}`}
+                          className="p-1.5 hover:bg-stone-50 rounded-lg transition-colors inline-flex items-center space-x-1" style={{ color: 'var(--text-link)' }}>
+                          <FileText className="w-4 h-4" /><span className="text-xs font-bold">Ver</span>
                         </button>
                       </td>
                     </tr>
@@ -757,13 +875,32 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 </tbody>
               </table>
             </div>
+            <div className="md:hidden divide-y" style={{ borderColor: 'var(--border-default)' }}>
+              {filteredFacturas.map(f => (
+                <button key={f.id} type="button" onClick={() => setFacturaSeleccionada(f)} className="w-full p-4 text-left active:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-[-2px]" style={{ color: 'var(--text-primary)' }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold truncate">{f.consecutivo}</p>
+                      <p className="text-sm mt-1 truncate" style={{ color: 'var(--text-secondary)' }}>{getCliente(f.clienteId)?.nombre || 'Desconocido'}</p>
+                    </div>
+                    <span className="shrink-0 px-2 py-1 rounded-full text-[11px] font-bold" style={f.estado === 'Pagada' ? { background: 'var(--status-success-soft)', color: 'var(--status-success)' } : f.estado === 'Pendiente' ? { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' } : { background: 'var(--status-danger-soft)', color: 'var(--status-danger)' }}>{f.estado}</span>
+                  </div>
+                  <div className="mt-3 flex items-end justify-between gap-3">
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{new Date(f.fecha).toLocaleDateString()} · {f.condicion_pago}</span>
+                    <span className="font-black">₡{f.total.toLocaleString()}</span>
+                  </div>
+                  <span className="mt-2 inline-flex items-center gap-1 text-xs font-bold" style={{ color: 'var(--text-link)' }}><FileText className="w-3.5 h-3.5" /> Ver factura</span>
+                </button>
+              ))}
+              {filteredFacturas.length === 0 && <p className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>No se encontraron facturas.</p>}
+            </div>
           </section>
 
           <section data-testid="documentos-rutas" className="border-t-8 border-neutral-100">
             <h3 className="px-6 py-3 text-xs font-black uppercase tracking-wider text-neutral-500 border-b border-neutral-200">
               Rutas del día ({rutasDia.length})
             </h3>
-            <div className="overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-neutral-50 text-neutral-500 uppercase tracking-wider font-bold text-xs border-b border-neutral-200">
                   <tr>
@@ -787,8 +924,8 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                       <td className="px-6 py-4 text-center">
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
                           style={r.consolidada
-                            ? { background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--brand-primary-dark)' }
-                            : { background: 'color-mix(in srgb, var(--brand-secondary) 10%, transparent)', color: 'var(--brand-secondary-dark)' }
+                            ? { background: 'var(--status-success-soft)', color: 'var(--status-success)' }
+                            : { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' }
                           }>
                           {r.consolidada ? 'Consolidada' : r.estado}
                         </span>
@@ -801,7 +938,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                         {!r.consolidada && (
                           <button onClick={() => handleConsolidarRuta(r.guiaId)} disabled={consolidandoRuta === r.guiaId}
                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 hover:opacity-90"
-                            style={{ background: 'var(--brand-primary)', color: 'white' }}>
+                            style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
                             {consolidandoRuta === r.guiaId ? <Spinner tamano="xs" /> : <FileText className="w-3.5 h-3.5" />}
                             Generar facturas
                           </button>
@@ -815,13 +952,21 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 </tbody>
               </table>
             </div>
+            <div className="md:hidden divide-y" style={{ borderColor: 'var(--border-default)' }}>
+              {rutasDia.map(r => <div key={r.guiaId} className="p-4 space-y-3">
+                <div className="flex justify-between gap-3"><div><p className="font-bold font-mono text-sm" style={{ color: 'var(--text-primary)' }}>{r.consecutivo}</p><p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{r.camionNombre}</p></div><span className="self-start rounded-full px-2 py-1 text-[11px] font-bold" style={r.consolidada ? { background: 'var(--status-success-soft)', color: 'var(--status-success)' } : { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' }}>{r.consolidada ? 'Consolidada' : r.estado}</span></div>
+                <div className="grid grid-cols-2 gap-3 text-sm"><div><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Fecha</p><p style={{ color: 'var(--text-primary)' }}>{new Date(r.fecha).toLocaleDateString()}</p></div><div><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Total vendido</p><p className="font-bold" style={{ color: 'var(--text-primary)' }}>₡{r.totalGenerado.toLocaleString()}</p></div><div><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Kilos vendidos</p><p style={{ color: 'var(--text-primary)' }}>{r.vendidos} kg</p></div><div><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Tiquetes · retornos</p><p style={{ color: 'var(--text-primary)' }}>{r.tiquetesEmitidos} · {r.retornos}</p></div></div>
+                {!r.consolidada && <button onClick={() => handleConsolidarRuta(r.guiaId)} disabled={consolidandoRuta === r.guiaId} className="w-full min-h-11 inline-flex justify-center items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-50" style={{ background: 'var(--brand-action)', color: '#fff' }}>{consolidandoRuta === r.guiaId ? <Spinner tamano="xs" /> : <FileText className="w-4 h-4" />} Generar facturas</button>}
+              </div>)}
+              {rutasDia.length === 0 && <p className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>No hay rutas cerradas del día.</p>}
+            </div>
           </section>
 
           <section data-testid="documentos-fisicos" className="border-t-8 border-neutral-100">
             <h3 className="px-6 py-3 text-xs font-black uppercase tracking-wider text-neutral-500 border-b border-neutral-200">
               Documentos electrónicos ({documentosElectronicos.length})
             </h3>
-            <div className="overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="bg-neutral-50 text-neutral-500 uppercase tracking-wider font-bold text-xs border-b border-neutral-200">
                   <tr>
@@ -840,10 +985,10 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                       <td className="px-6 py-4">
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold"
                           style={doc.tipoDocumento === 'Factura'
-                            ? { background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--brand-primary-dark)' }
+                            ? { background: 'var(--status-info-soft)', color: 'var(--status-info)' }
                             : doc.tipoDocumento === 'Tiquete'
-                            ? { background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--brand-primary-dark)' }
-                            : { background: 'color-mix(in srgb, var(--brand-secondary) 10%, transparent)', color: 'var(--brand-secondary-dark)' }
+                            ? { background: 'var(--status-info-soft)', color: 'var(--status-info)' }
+                            : { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }
                           }>
                           {doc.tipoDocumento}
                         </span>
@@ -855,14 +1000,14 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                       <td className="px-6 py-4 text-center">
                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold uppercase"
                           style={doc.estado === 'Aceptado'
-                            ? { background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--brand-primary-dark)' }
+                            ? { background: 'var(--status-success-soft)', color: 'var(--status-success)' }
                             : doc.estado === 'Rechazado'
-                            ? { background: '#FEE2E2', color: '#DC2626' }
+                            ? { background: 'var(--status-danger-soft)', color: 'var(--status-danger)' }
                             : doc.estado === 'Enviado'
-                            ? { background: 'color-mix(in srgb, var(--brand-primary) 8%, transparent)', color: 'var(--brand-primary)' }
+                            ? { background: 'var(--status-info-soft)', color: 'var(--status-info)' }
                             : doc.estado === 'Pendiente'
-                            ? { background: 'color-mix(in srgb, var(--brand-secondary) 10%, transparent)', color: 'var(--brand-secondary-dark)' }
-                            : { background: '#F5F5F4', color: '#78716C' }
+                            ? { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' }
+                            : { background: 'var(--status-neutral-soft)', color: 'var(--text-secondary)' }
                           }>
                           {getEstadoIcon(doc.estado)} {doc.estado}
                         </span>
@@ -902,6 +1047,49 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 </tbody>
               </table>
             </div>
+            <div className="md:hidden divide-y" style={{ borderColor: 'var(--border-default)' }}>
+              {documentosElectronicos.map(doc => <div key={doc.id} className="p-4 space-y-3">
+                <div className="flex justify-between items-start gap-3"><div className="min-w-0"><span className="inline-flex rounded-full px-2 py-1 text-[11px] font-bold" style={{ background: 'var(--brand-primary-soft)', color: 'var(--text-primary)' }}>{doc.tipoDocumento}</span><p className="mt-2 font-bold font-mono text-xs break-all" style={{ color: 'var(--text-primary)' }}>{doc.consecutivo}</p><p className="text-sm mt-1 truncate" style={{ color: 'var(--text-secondary)' }}>{doc.receptorNombre || 'Consumidor Final'}</p></div><span className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold" style={doc.estado === 'Aceptado' ? { background: 'var(--status-success-soft)', color: 'var(--status-success)' } : doc.estado === 'Rechazado' ? { background: 'var(--status-danger-soft)', color: 'var(--status-danger)' } : { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' }}>{doc.estado}</span></div>
+                <div className="flex justify-between text-sm"><span style={{ color: 'var(--text-muted)' }}>{new Date(doc.fechaEmision).toLocaleDateString()}</span><span className="font-bold" style={{ color: 'var(--text-primary)' }}>₡{doc.total.toLocaleString()}</span></div>
+                <div className="flex gap-2">{doc.estado === 'Borrador' && <button onClick={() => handleGenerarXML(doc.id)} className="flex-1 min-h-11 rounded-xl border px-3 text-sm font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Download className="inline w-4 h-4 mr-2" />Generar XML</button>}{(doc.estado === 'Pendiente' || doc.estado === 'Borrador') && <button onClick={() => handleEnviarHacienda(doc.id)} disabled={enviandoFE === doc.id} className="flex-1 min-h-11 rounded-xl px-3 text-sm font-bold disabled:opacity-50" style={{ background: 'var(--brand-action)', color: '#fff' }}><Send className="inline w-4 h-4 mr-2" />Enviar</button>}{doc.estado === 'Enviado' && <button onClick={async () => { await fetch('/api/facturacion/consultar-estado', { method: 'POST', headers: authHeaders, body: JSON.stringify({ documentoId: doc.id }) }); await fetchData(); }} className="flex-1 min-h-11 rounded-xl border px-3 text-sm font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><RefreshCw className="inline w-4 h-4 mr-2" />Consultar estado</button>}</div>
+              </div>)}
+              {documentosElectronicos.length === 0 && <p className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>No hay documentos electrónicos. Cree una factura para generar uno.</p>}
+            </div>
+          </section>
+        </div>
+      )}
+      {facturaSeleccionada && (
+        <div className="invoice-print-overlay fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/55 p-0 sm:p-4" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setFacturaSeleccionada(null); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="detalle-factura-titulo" className="invoice-print-view w-full sm:max-w-3xl max-h-[94dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl shadow-2xl">
+            <div className="invoice-paper">
+              <div className="invoice-paper-topline" />
+              <header className="invoice-paper-header">
+                <div className="invoice-issuer-brand"><img src="/granja-don-paco-logo.png" alt="Granja Don Paco" /><div><strong>Granja Don Paco</strong><span>Siempre frescos</span>{documentoFiscalFactura?.emisorNombre && <small>{documentoFiscalFactura.emisorNombre}</small>}{cedulaEmisorVisible && <small>Cédula: {cedulaEmisorVisible}</small>}</div></div>
+                <div className="invoice-document-number"><span>{documentoFiscalFactura?.tipoDocumento === 'Tiquete' ? 'TIQUETE ELECTRÓNICO' : 'FACTURA ELECTRÓNICA'}</span><strong id="detalle-factura-titulo">{facturaSeleccionada.consecutivo}</strong><small>Emitida {new Date(facturaSeleccionada.fecha).toLocaleString('es-CR')}</small><em className={`invoice-status invoice-status-${facturaSeleccionada.estado.toLowerCase()}`}>{facturaSeleccionada.estado}</em></div>
+                <button type="button" className="invoice-close no-print" onClick={() => setFacturaSeleccionada(null)} aria-label="Cerrar detalle"><X className="w-5 h-5" /></button>
+              </header>
+              <div className="invoice-paper-meta"><span>Representación para revisión</span><span>{documentoFiscalFactura ? `Estado: ${documentoFiscalFactura.estado}` : 'Pendiente de comprobante electrónico'}</span></div>
+              <p className="invoice-demo-notice">DEMO · Esta impresión no es un comprobante electrónico válido ni ha sido aceptada por Hacienda.</p>
+              <div className="invoice-parties">
+                <section><h4>EMISOR</h4><strong>{documentoFiscalFactura?.emisorNombre || 'Granja Don Paco'}</strong>{cedulaEmisorVisible && <span>Cédula: {cedulaEmisorVisible}</span>}{documentoFiscalFactura?.emisorCorreo && <span>{documentoFiscalFactura.emisorCorreo}</span>}</section>
+                <section><h4>FACTURAR A</h4><strong>{clienteFactura?.nombre || 'Consumidor Final'}</strong>{clienteFactura?.documento_id && <span>{clienteFactura.tipo_documento || 'Identificación'}: {clienteFactura.documento_id}</span>}{clienteFactura?.telefono && <span>Tel. {clienteFactura.telefono}</span>}{clienteFactura?.email && <span>{clienteFactura.email}</span>}{clienteFactura?.direccion && <span>{clienteFactura.direccion}{[clienteFactura.distrito, clienteFactura.canton, clienteFactura.provincia].filter(Boolean).length ? ` · ${[clienteFactura.distrito, clienteFactura.canton, clienteFactura.provincia].filter(Boolean).join(', ')}` : ''}</span>}</section>
+              </div>
+              {documentoFiscalFactura && <div className="invoice-fiscal-identifiers"><span><b>TIPO DE DOCUMENTO</b>{documentoFiscalFactura.tipoDocumento === 'Tiquete' ? 'Tiquete electrónico' : 'Factura electrónica'}</span><span><b>CONSECUTIVO</b>{consecutivoFiscalValido ? documentoFiscalFactura.consecutivo : 'Pendiente de numeración oficial'}</span><span className="invoice-key"><b>CLAVE NUMÉRICA</b>{claveFiscalValida ? documentoFiscalFactura.clave : 'Pendiente de clave oficial'}</span></div>}
+              <div className="invoice-payment-strip"><span><b>CONDICIÓN</b>{facturaSeleccionada.condicion_pago === 'Credito' ? 'Crédito' : 'Contado'}</span><span><b>MEDIO DE PAGO</b>{facturaSeleccionada.metodo_pago || 'Crédito'}</span><span><b>FECHA</b>{new Date(facturaSeleccionada.fecha).toLocaleDateString('es-CR')}</span></div>
+              <div className="invoice-lines-wrap"><table className="invoice-lines"><thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO / KG</th><th className="align-right">TOTAL</th></tr></thead><tbody>{facturaSeleccionada.detalles?.map((d, i) => <tr key={`${d.producto}-${i}`}><td>{Number(d.cantidad).toLocaleString('es-CR', { maximumFractionDigits: 2 })} kg</td><td><strong>{d.producto}</strong></td><td>{formatoCRC(d.precio_unitario)}</td><td className="align-right">{formatoCRC(d.subtotal)}</td></tr>)}</tbody></table>{!facturaSeleccionada.detalles?.length && <p className="invoice-empty-lines">No hay líneas de producto registradas en esta factura.</p>}</div>
+              <div className="invoice-bottom-grid"><div className="invoice-received"><span>RECIBIDO CONFORME</span><i /><small>Nombre y firma del cliente</small></div><div className="invoice-totals"><div><span>Subtotal</span><b>{formatoCRC(facturaSeleccionada.subtotal)}</b></div>{facturaSeleccionada.descuento > 0 && <div><span>Descuento</span><b>− {formatoCRC(facturaSeleccionada.descuento)}</b></div>}{Number(documentoFiscalFactura?.impuestos || 0) > 0 && <div><span>Impuestos</span><b>{formatoCRC(Number(documentoFiscalFactura?.impuestos))}</b></div>}<div className="invoice-grand-total"><span>TOTAL</span><strong>{formatoCRC(facturaSeleccionada.total)}</strong></div>{facturaSeleccionada.saldoPendiente != null && facturaSeleccionada.saldoPendiente > 0 && <div className="invoice-balance"><span>Saldo pendiente</span><b>{formatoCRC(facturaSeleccionada.saldoPendiente)}</b></div>}</div></div>
+              <footer className="invoice-paper-footer"><span>Gracias por su compra</span><small>Representación de demostración · Formato de referencia basado en comprobantes electrónicos 4.4</small></footer>
+            </div>
+            <div className="invoice-actions no-print">
+              <button type="button" onClick={() => setFacturaSeleccionada(null)} className="invoice-secondary-action">Cerrar</button>
+              <button type="button" onClick={handleEnviarCorreoFactura} className="invoice-secondary-action" title={clienteFactura?.email ? `Preparar correo para ${clienteFactura.email}` : 'Este cliente no tiene correo registrado'}>
+                <Send className="w-4 h-4" /> Enviar por correo
+              </button>
+              <button type="button" onClick={handleImprimirFactura} className="invoice-primary-action"><Printer className="w-4 h-4" /> Imprimir factura</button>
+            </div>
+            <p className="no-print px-4 pb-4 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
+              El correo se prepara en tu aplicación de correo para que lo revises y adjuntes el PDF impreso.
+            </p>
           </section>
         </div>
       )}

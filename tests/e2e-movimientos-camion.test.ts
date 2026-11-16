@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { requestAs } from './helpers/request-as';
 import { drizzle } from 'drizzle-orm/libsql';
 import * as schema from '../src/db/schema';
 import type { Express } from 'express';
@@ -87,7 +88,7 @@ afterAll(() => {
 
 describe('E2E — Movimientos enriquecidos con camión para el árbol día → camión → eventos', () => {
   it('asigna el camión de su guía a los movimientos vinculados', async () => {
-    const res = await request(app).get('/api/inventario/movimientos');
+    const res = await requestAs(app, '1').get('/api/inventario/movimientos');
     expect(res.status).toBe(200);
 
     const movimientoGuia = res.body.find((m: any) => m.referencia_id === guiaId);
@@ -98,7 +99,7 @@ describe('E2E — Movimientos enriquecidos con camión para el árbol día → c
   });
 
   it('deja sin camión los movimientos no vinculados a una guía', async () => {
-    const res = await request(app).get('/api/inventario/movimientos');
+    const res = await requestAs(app, '1').get('/api/inventario/movimientos');
     const interno = res.body.find((m: any) => m.tipo === 'Traslado');
     expect(interno).toBeDefined();
     expect(interno.camionNombre).toBeNull();
@@ -106,7 +107,7 @@ describe('E2E — Movimientos enriquecidos con camión para el árbol día → c
   });
 
   it('enriquece los movimientos de recepción con motivo, diferencia y cantidades', async () => {
-    const res = await request(app).get('/api/inventario/movimientos');
+    const res = await requestAs(app, '1').get('/api/inventario/movimientos');
     const perdida = res.body.find((m: any) => m.referencia_id === recepcionId);
     expect(perdida).toBeDefined();
     expect(perdida.motivoDiferencia).toBe('Cartón roto');
@@ -119,7 +120,7 @@ describe('E2E — Movimientos enriquecidos con camión para el árbol día → c
   });
 
   it('deja los campos de diferencia en null cuando el movimiento no viene de una recepción', async () => {
-    const res = await request(app).get('/api/inventario/movimientos');
+    const res = await requestAs(app, '1').get('/api/inventario/movimientos');
     const carga = res.body.find((m: any) => m.referencia_id === guiaId);
     expect(carga.motivoDiferencia).toBeNull();
     expect(carga.tipoDiferencia).toBeNull();

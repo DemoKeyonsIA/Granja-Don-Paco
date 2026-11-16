@@ -13,6 +13,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { requestAs } from './helpers/request-as';
 import { drizzle } from 'drizzle-orm/libsql';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
 import * as schema from '../src/db/schema';
@@ -60,14 +61,14 @@ afterAll(() => {
 });
 
 const resumenDeHoy = async () => {
-  const res = await request(app).get('/api/finanzas/resumen').query({ desde: HOY, hasta: HOY });
+  const res = await requestAs(app, 'adm-fase5').get('/api/finanzas/resumen').query({ desde: HOY, hasta: HOY });
   expectApi(res, 200);
   return res.body;
 };
 
 describe('el endpoint del Centro de Mando sigue sirviendo a Resumen, sin recalcular el P&L', () => {
   it('responde 200 con las cifras operativas que el bloque necesita', async () => {
-    const res = await request(app).get('/api/dashboard/enterprise');
+    const res = await requestAs(app, 'adm-fase5').get('/api/dashboard/enterprise');
     expectApi(res, 200);
     for (const clave of [
       'cartonesProducidos', 'stockBodegaCentral', 'totalAvesVivas', 'rutasActivas',
@@ -80,7 +81,7 @@ describe('el endpoint del Centro de Mando sigue sirviendo a Resumen, sin recalcu
 
   it('ingresos: ingresosHoy es el ingresosFacturados de la fuente única', async () => {
     const [dash, resumen] = await Promise.all([
-      request(app).get('/api/dashboard/enterprise'),
+      requestAs(app, 'adm-fase5').get('/api/dashboard/enterprise'),
       resumenDeHoy(),
     ]);
     expectApi(dash, 200);
@@ -89,7 +90,7 @@ describe('el endpoint del Centro de Mando sigue sirviendo a Resumen, sin recalcu
 
   it('gastos: gastosHoy es el gastos de la fuente única', async () => {
     const [dash, resumen] = await Promise.all([
-      request(app).get('/api/dashboard/enterprise'),
+      requestAs(app, 'adm-fase5').get('/api/dashboard/enterprise'),
       resumenDeHoy(),
     ]);
     expect(dash.body.gastosHoy).toBe(resumen.gastos);
@@ -97,7 +98,7 @@ describe('el endpoint del Centro de Mando sigue sirviendo a Resumen, sin recalcu
 
   it('utilidad: utilidadNeta es utilidad = ingresos − gastos, no un tercer cálculo', async () => {
     const [dash, resumen] = await Promise.all([
-      request(app).get('/api/dashboard/enterprise'),
+      requestAs(app, 'adm-fase5').get('/api/dashboard/enterprise'),
       resumenDeHoy(),
     ]);
     expect(dash.body.utilidadNeta).toBe(resumen.utilidad);
@@ -106,7 +107,7 @@ describe('el endpoint del Centro de Mando sigue sirviendo a Resumen, sin recalcu
 
   it('cartera: cuentasPorCobrar coincide, y sigue siendo el saldo real', async () => {
     const [dash, resumen] = await Promise.all([
-      request(app).get('/api/dashboard/enterprise'),
+      requestAs(app, 'adm-fase5').get('/api/dashboard/enterprise'),
       resumenDeHoy(),
     ]);
     // 80000 es la factura de crédito a medias; la pagada no cuenta.
@@ -119,7 +120,7 @@ describe('el endpoint del Centro de Mando sigue sirviendo a Resumen, sin recalcu
     // endpoint vuelve a filtrar por `estado === 'Pagada'`, esta comparación lo
     // delata sin depender de que nadie mire la pantalla.
     const [dash, resumen] = await Promise.all([
-      request(app).get('/api/dashboard/enterprise'),
+      requestAs(app, 'adm-fase5').get('/api/dashboard/enterprise'),
       resumenDeHoy(),
     ]);
     expect(dash.body.ingresosHoy).toBeGreaterThan(dash.body.ingresosCobradosHoy);
@@ -127,7 +128,7 @@ describe('el endpoint del Centro de Mando sigue sirviendo a Resumen, sin recalcu
   });
 
   it('las alertas que ahora viven en la bandeja de Resumen siguen viniendo de acá', async () => {
-    const res = await request(app).get('/api/dashboard/enterprise');
+    const res = await requestAs(app, 'adm-fase5').get('/api/dashboard/enterprise');
     expectApi(res, 200);
     for (const a of res.body.alertas) {
       expect(typeof a.tipo, 'tipo').toBe('string');

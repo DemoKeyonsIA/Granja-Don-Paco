@@ -39,6 +39,9 @@ beforeAll(async () => {
   await testDb.insert(schema.clientes).values({
     id: CLIENTE, nombre: 'Cliente Cartera', condicion_pago: 'Credito', limite_credito: 900000,
   });
+  await testDb.insert(schema.productosCatalogo).values({
+    id: 'p-huevos', nombre: 'Huevos', unidad: 'cartones', precioBase: 10, categoria: 'Huevos', estado: 'Activo', fechaCreacion: dias(0),
+  });
 
   // Una factura a 30 días emitida hace 40: vence hace 10 → 10 días de
   // atraso. Una segunda que vence hace 20 → 20 de atraso. Y una que vence hoy.

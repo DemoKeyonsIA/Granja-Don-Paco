@@ -26,6 +26,9 @@ export const clientes = sqliteTable('clientes', {
   telefono: text('telefono'),
   email: text('email'),
   direccion: text('direccion'),
+  provincia: text('provincia'),
+  canton: text('canton'),
+  distrito: text('distrito'),
   latitud: real('latitud'),
   longitud: real('longitud'),
   ruta: text('ruta'),
@@ -48,6 +51,8 @@ export const rutas = sqliteTable('rutas', {
   id: text('id').primaryKey(),
   nombre: text('nombre').notNull(),
   vendedor_asignado: text('vendedor_asignado'),
+  vendedores: text('vendedores'),
+  camion_id: text('camion_id').references(() => camiones.id),
   cliente_ids: text('cliente_ids'),
   dias_frecuencia: text('dias_frecuencia'),
   kilometraje_aprox: real('kilometraje_aprox'),
@@ -77,7 +82,12 @@ export const guias_despacho = sqliteTable('guias_despacho', {
   horaCarga: text('hora_carga'),
   responsableCarga: text('responsable_carga'),
   responsableTransporte: text('responsable_transporte'),
-  totalCartones: integer('total_cartones').notNull().default(0),
+  vendedorId: text('vendedor_id').references(() => users.id),
+  clientesIds: text('clientes_ids'),
+  /** Etiquetas reservadas como colchón extra, con producto y cantidad capturados al cargar. */
+  colchonExtraJson: text('colchon_extra_json'),
+  totalCartones: real('total_cartones').notNull().default(0), // cantidad almacenada en kg para guías nuevas
+  totalKg: real('total_kg'), // null en guías históricas; peso neto confirmado de cargas nuevas
   pesoSalida: real('peso_salida'),
   pesoLlegada: real('peso_llegada'),
   estado: text('estado').notNull().default('Preparada'), // Preparada, Cargada, EnRuta, Cerrada, Anulada
@@ -92,7 +102,8 @@ export const guias_despacho_detalle = sqliteTable('guias_despacho_detalle', {
   guiaId: text('guia_id').notNull().references(() => guias_despacho.id),
   etiquetaId: text('etiqueta_id').references(() => etiquetas.id),
   producto: text('producto').notNull(),
-  cartones: integer('cartones').notNull(),
+  cartones: real('cartones').notNull(), // cantidad en kg; nombre legado de columna
+  cantidadKg: real('cantidad_kg'), // null en detalles históricos
   pesoAnden: real('peso_anden'),
   estadoSalida: text('estado_salida').default('checked'),
 });
@@ -119,7 +130,9 @@ export const ventas_ruta = sqliteTable('ventas_ruta', {
   clienteId: text('cliente_id').references(() => clientes.id),
   etiquetaId: text('etiqueta_id').references(() => etiquetas.id),
   producto: text('producto').notNull(),
-  cartones: integer('cartones').notNull(),
+  cartones: real('cartones').notNull(), // nombre histórico de columna; a partir de F7 almacena kg
+  unidad: text('unidad').notNull().default('kg'),
+  cantidadInventario: real('cantidad_inventario'),
   precioUnitario: real('precio_unitario').notNull(),
   subtotal: real('subtotal').notNull(),
   descuento: real('descuento').notNull().default(0),
@@ -127,7 +140,34 @@ export const ventas_ruta = sqliteTable('ventas_ruta', {
   cobro: text('cobro').notNull().default('Efectivo'), // Efectivo, Credito
   estado: text('estado').notNull().default('Emitida'), // Emitida, Anulada
   facturaId: text('factura_id'),
+  resolucionPrecioJson: text('resolucion_precio_json'),
   imprimido: integer('imprimido', { mode: 'boolean' }).notNull().default(false),
+  anuladoEn: text('anulado_en'),
+  anuladoPor: text('anulado_por'),
+});
+
+/** Tiquetes de ruta en kg. La tabla histórica ventas_ruta conserva cartones. */
+export const ventas_ruta_kg = sqliteTable('ventas_ruta_kg', {
+  id: text('id').primaryKey(),
+  tiqueteConsecutivo: text('tiquete_consecutivo').notNull().unique(),
+  camionId: text('camion_id').notNull().references(() => camiones.id),
+  guiaId: text('guia_id').notNull().references(() => guias_despacho.id),
+  vendedorId: text('vendedor_id').notNull().references(() => users.id),
+  fechaHora: text('fecha_hora').notNull(),
+  clienteId: text('cliente_id').references(() => clientes.id),
+  etiquetaId: text('etiqueta_id').references(() => etiquetas.id),
+  producto: text('producto').notNull(),
+  cantidadKg: real('cantidad_kg').notNull(),
+  cantidadInventario: real('cantidad_inventario').notNull(),
+  unidadInventario: text('unidad_inventario').notNull(),
+  precioKg: real('precio_kg').notNull(),
+  subtotal: real('subtotal').notNull(),
+  descuento: real('descuento').notNull().default(0),
+  total: real('total').notNull(),
+  cobro: text('cobro').notNull().default('Efectivo'),
+  estado: text('estado').notNull().default('Emitida'),
+  facturaId: text('factura_id'),
+  resolucionPrecioJson: text('resolucion_precio_json'),
   anuladoEn: text('anulado_en'),
   anuladoPor: text('anulado_por'),
 });
@@ -140,21 +180,46 @@ export const retornos_camion = sqliteTable('retornos_camion', {
   fecha: text('fecha').notNull(),
   responsable: text('responsable').notNull(),
   producto: text('producto').notNull(),
-  cartones: integer('cartones').notNull(),
+  cartones: real('cartones').notNull(), // cantidad en unidad declarada en etiquetas_json
+  unidad: text('unidad').notNull().default('cartones'),
+  cantidadAceptada: real('cantidad_aceptada'),
   etiquetasJson: text('etiquetas_json'), // JSON array de [{etiquetaId, codigoUnico, producto, cartones}]
   peso: real('peso'),
-  estado: text('estado').notNull().default('Registrado'), // Registrado, Recibido, Cerrado
+  estado: text('estado').notNull().default('Registrado'), // Registrado | PendienteBodega | AceptadoBodega | RechazadoBodega | Recibido | Cerrado
+  aceptadoPor: text('aceptado_por'),
+  aceptadoEn: text('aceptado_en'),
+  condicion: text('condicion'),
+  tipo: text('tipo').default('sobrante'), // parcial | completo | sobrante
 });
 
 export const inventario = sqliteTable('inventario', {
   id: text('id').primaryKey(),
   producto: text('producto').notNull(),
-  cantidad: integer('cantidad').notNull(),
+  cantidad: real('cantidad').notNull(),
   unidad: text('unidad').notNull(),
   ubicacion: text('ubicacion').notNull(),
   lote: text('lote'),
   fecha_caducidad: text('fecha_caducidad'),
   ultima_actualizacion: text('ultima_actualizacion').notNull(),
+});
+
+/** Conteo físico en cuarentena separado del stock disponible y del saldo libro. */
+export const inventario_cuarentena = sqliteTable('inventario_cuarentena', {
+  id: text('id').primaryKey(),
+  aprobacionId: text('aprobacion_id').notNull().references(() => aprobaciones.id),
+  guiaId: text('guia_id').notNull().references(() => guias_despacho.id),
+  producto: text('producto').notNull(),
+  cantidadSistema: real('cantidad_sistema').notNull(),
+  cantidad: real('cantidad').notNull(),
+  unidad: text('unidad').notNull(),
+  estado: text('estado').notNull().default('PendienteAprobacion'),
+  creadoPor: text('creado_por').notNull(),
+  creadoEn: text('creado_en').notNull(),
+  liberado: real('liberado').notNull().default(0),
+  liberadoPor: text('liberado_por'),
+  liberadoEn: text('liberado_en'),
+  motivoResolucion: text('motivo_resolucion'),
+  etiquetasReemplazoJson: text('etiquetas_reemplazo_json'),
 });
 
 export const facturas = sqliteTable('facturas', {
@@ -184,9 +249,10 @@ export const detallesFactura = sqliteTable('detalles_factura', {
   id: text('id').primaryKey(),
   facturaId: text('factura_id').notNull().references(() => facturas.id),
   producto: text('producto').notNull(),
-  cantidad: integer('cantidad').notNull(),
+  cantidad: real('cantidad').notNull(),
   precio_unitario: real('precio_unitario').notNull(),
   subtotal: real('subtotal').notNull(),
+  resolucionPrecioJson: text('resolucion_precio_json'),
 });
 
 /**
@@ -205,6 +271,8 @@ export const pagos = sqliteTable('pagos', {
   /** Usuario que registró el pago. Sin FK: el registro de pagos es append-only. */
   usuarioId: text('usuario_id'),
   nota: text('nota'),
+  /** Llave para ignorar reintentos de red del mismo cobro. */
+  idempotencyKey: text('idempotency_key'),
 });
 
 export const gastos = sqliteTable('gastos', {
@@ -214,6 +282,40 @@ export const gastos = sqliteTable('gastos', {
   monto: real('monto').notNull(),
   descripcion: text('descripcion').notNull(),
   usuarioId: text('usuario_id').notNull().references(() => users.id),
+  idempotencyKey: text('idempotency_key'),
+  guiaId: text('guia_id').references(() => guias_despacho.id),
+  medioPago: text('medio_pago').notNull().default('Efectivo'),
+});
+
+/** Cierre monetario de cada guía. Conserva el valor esperado, el conteo físico
+ * del efectivo y la diferencia para que el cierre de ruta sea auditable. */
+export const cierres_caja_ruta = sqliteTable('cierres_caja_ruta', {
+  id: text('id').primaryKey(),
+  guiaId: text('guia_id').notNull().unique().references(() => guias_despacho.id),
+  vendedorId: text('vendedor_id').notNull(),
+  fecha: text('fecha').notNull(),
+  efectivoEsperado: real('efectivo_esperado').notNull().default(0),
+  gastosEfectivo: real('gastos_efectivo').notNull().default(0),
+  efectivoContado: real('efectivo_contado'),
+  creditoDocumentado: real('credito_documentado').notNull().default(0),
+  diferencia: real('diferencia'),
+  estado: text('estado').notNull().default('PendienteConteo'),
+  aprobacionId: text('aprobacion_id'),
+  creadoEn: text('creado_en').notNull(),
+});
+
+export const depositos_caja = sqliteTable('depositos_caja', {
+  id: text('id').primaryKey(),
+  cierreId: text('cierre_id').notNull().unique().references(() => cierres_caja_ruta.id),
+  montoEsperado: real('monto_esperado').notNull(),
+  montoDepositado: real('monto_depositado').notNull(),
+  referencia: text('referencia').notNull(),
+  comprobante: text('comprobante'),
+  registradoPor: text('registrado_por').notNull(),
+  fecha: text('fecha').notNull(),
+  estado: text('estado').notNull().default('Conciliado'),
+  aprobacionId: text('aprobacion_id'),
+  idempotencyKey: text('idempotency_key'),
 });
 
 export const granjas = sqliteTable('granjas', {
@@ -259,7 +361,8 @@ export const mantenimientos = sqliteTable('mantenimientos', {
 export const movimientosInventario = sqliteTable('movimientos_inventario', {
   id: text('id').primaryKey(),
   producto: text('producto').notNull(),
-  cantidad: integer('cantidad').notNull(),
+  cantidad: real('cantidad').notNull(),
+  unidad: text('unidad').notNull().default('kg'),
   tipo: text('tipo').notNull(), // 'Entrada Producción' o 'Traslado' o 'Venta' o 'Ajuste'
   origen: text('origen').notNull(),
   destino: text('destino').notNull(),
@@ -306,10 +409,25 @@ export const recepciones = sqliteTable('recepciones', {
   cantidadRecibida: integer('cantidad_recibida').notNull(),
   diferencia: integer('diferencia').default(0),
   pesoBruto: real('peso_bruto'),
+  cantidadKgEsperada: real('cantidad_kg_esperada'),
+  cantidadKgRecibida: real('cantidad_kg_recibida'),
+  diferenciaKg: real('diferencia_kg'),
   motivoDiferencia: text('motivo_diferencia'),
-  tipoDiferencia: text('tipo_diferencia'), // 'desperdicio' | 'alerta' (posible robo)
+  tipoDiferencia: text('tipo_diferencia'), // 'desperdicio' | 'alerta' (diferencia por investigar)
   responsableRecepcion: text('responsable_recepcion'),
   estado: text('estado').notNull(), // Conforme, ConDiferencia
+});
+
+// Borradores de recepción para permitir pausar y retomar el conteo sin alterar
+// inventario; el stock solo cambia al confirmar la recepción final.
+export const bodega_recepcion_borradores = sqliteTable('bodega_recepcion_borradores', {
+  id: text('id').primaryKey(),
+  tipo: text('tipo').notNull(),
+  referenciasJson: text('referencias_json').notNull(),
+  datosJson: text('datos_json').notNull().default('{}'),
+  iniciadoPor: text('iniciado_por'),
+  iniciadoEn: text('iniciado_en').notNull(),
+  actualizadoEn: text('actualizado_en').notNull(),
 });
 
 export const incidentes = sqliteTable('incidentes', {
@@ -338,6 +456,8 @@ export const guias_remision = sqliteTable('guias_remision', {
   fecha: text('fecha').notNull(),
   producto: text('producto').notNull(),
   cartonesEsperados: integer('cartones_esperados').notNull(),
+  cantidadKgEsperada: real('cantidad_kg_esperada'),
+  unidad: text('unidad').notNull().default('cartones'),
   lote: text('lote'),
   responsable: text('responsable').notNull(),
   transporte: text('transporte'),
@@ -360,9 +480,14 @@ export const etiquetas = sqliteTable('etiquetas', {
   id: text('id').primaryKey(),
   codigoUnico: text('codigo_unico').notNull().unique(),
   producto: text('producto').notNull(),
-  cantidad: integer('cantidad').notNull(),
+  cantidad: real('cantidad').notNull(),
+  unidad: text('unidad').notNull().default('cartones'),
   pesoBruto: real('peso_bruto'),
   pesoNeto: real('peso_neto'),
+  saldoKg: real('saldo_kg'), // saldo medido bajo custodia; null en etiquetas históricas
+  pesoOrigen: text('peso_origen'), // Manual por ahora; reservado para integración de báscula
+  pesoRegistradoPor: text('peso_registrado_por'),
+  pesoRegistradoEn: text('peso_registrado_en'),
   fechaProduccion: text('fecha_produccion'),
   fechaEmpaque: text('fecha_empaque'),
   fechaVencimiento: text('fecha_vencimiento'),
@@ -418,6 +543,8 @@ export const facturas_electronicas = sqliteTable('facturas_electronicas', {
   notasCreditoId: text('notas_credito_id'),
   ambiente: text('ambiente').default('Pruebas'), // Pruebas, Produccion
   proveedor: text('proveedor'), // Facel, FacturaYA, FACBOX, HaciendaDirect, etc.
+  idempotencyKey: text('idempotency_key'),
+  idempotencyPayload: text('idempotency_payload'),
 });
 
 export const pesos_por_punto = sqliteTable('pesos_por_punto', {
@@ -531,6 +658,9 @@ export const desperdicios = sqliteTable('desperdicios', {
   etiquetaId: text('etiqueta_id'),
   lote: text('lote'),
   cantidad: integer('cantidad').notNull(),
+  unidad: text('unidad').notNull().default('cartones'),
+  factorKgPorCarton: real('factor_kg_por_carton'),
+  cantidadCartones: real('cantidad_cartones'),
   peso: real('peso'),
   motivo: text('motivo').notNull(), // Quebrado Granja, Quebrado Bodega, Quebrado Camión, Rechazo Cliente, Vencido, Sucio, Diferencia Peso, Ajuste Administrativo
   responsable: text('responsable').notNull(),
@@ -564,6 +694,8 @@ export const precios_detalle = sqliteTable('precios_detalle', {
   listaId: text('lista_id').notNull().references(() => listas_precios.id),
   producto: text('producto').notNull(),
   precioUnitario: real('precio_unitario').notNull(),
+  precioMinimo: real('precio_minimo'),
+  precioMaximo: real('precio_maximo'),
   descuentoMaximo: real('descuento_maximo').default(0),
   unidad: text('unidad').default('cartones'),
 });
@@ -613,8 +745,9 @@ export const productosCatalogo = sqliteTable('productos_catalogo', {
   id: text('id').primaryKey(),
   nombre: text('nombre').notNull(),
   descripcion: text('descripcion').notNull().default(''),
-  unidad: text('unidad').notNull().default('cartones'),
-  precioBase: real('precio_base').notNull().default(0),
+    unidad: text('unidad').notNull().default('kg'),
+    kgPorCarton: real('kg_por_carton').notNull().default(0),
+    precioBase: real('precio_base').notNull().default(0),
   categoria: text('categoria').notNull().default('Huevos'),
   estado: text('estado').notNull().default('Activo'),
   fechaCreacion: text('fecha_creacion').notNull(),
@@ -630,6 +763,8 @@ export const precioExcepcionesCliente = sqliteTable('precio_excepciones_cliente'
   justificacion: text('justificacion').notNull().default(''),
   aprobadoPor: text('aprobado_por').notNull().default(''),
   fechaCreacion: text('fecha_creacion').notNull(),
+  fechaInicio: text('fecha_inicio'),
+  fechaFin: text('fecha_fin'),
   estado: text('estado').notNull().default('Activa'),
 });
 
@@ -643,7 +778,7 @@ export const officeAccounts = sqliteTable('office_accounts', {
   userId: text('user_id').notNull().references(() => users.id),
   email: text('email').notNull(),
   etiqueta: text('etiqueta').notNull(),          // Gerencia, Proveedores, Contabilidad, Ventas
-  color: text('color').default('#3D7A4A'),
+  color: text('color').default('#1E40AF'),
   provider: text('provider').notNull().default('local'), // local | google
   scope: text('scope').default(''),
   estado: text('estado').notNull().default('Conectada'), // Conectada | Desconectada | Error

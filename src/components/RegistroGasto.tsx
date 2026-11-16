@@ -9,11 +9,12 @@
  * Al guardar no se toca el resumen: la pantalla que lo muestra lo vuelve a
  * pedir, así que no hay estado que invalidar desde acá.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DollarSign, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { User } from '../types';
 import { cn } from '../lib/utils';
+import { loadSession } from '../lib/session';
 
 const CATEGORIAS = ['Diésel', 'Viáticos', 'Mantenimiento', 'Insumos', 'Planilla', 'Otros'] as const;
 
@@ -27,7 +28,15 @@ export default function RegistroGasto({
   const [categoria, setCategoria] = useState<string>('');
   const [monto, setMonto] = useState('');
   const [descripcion, setDescripcion] = useState('');
+  const [guiaId, setGuiaId] = useState('');
+  const [medioPago, setMedioPago] = useState('Efectivo');
+  const [guiasActivas, setGuiasActivas] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/logistica/guias-activas').then(async res => res.ok ? res.json() : []).then(data => setGuiasActivas(Array.isArray(data) ? data : [])).catch(() => setGuiasActivas([]));
+  }, []);
 
   const completo = Boolean(categoria && Number(monto) > 0 && descripcion.trim());
 
@@ -36,9 +45,12 @@ export default function RegistroGasto({
     if (!completo || isSubmitting) return;
     setIsSubmitting(true);
     try {
+      const token = loadSession()?.token;
+      const key = idempotencyKey || crypto.randomUUID();
+      if (!idempotencyKey) setIdempotencyKey(key);
       const res = await fetch('/api/gastos', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key, 'x-user-id': currentUser.id, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           id: crypto.randomUUID(),
           fecha: new Date().toISOString(),
@@ -46,6 +58,8 @@ export default function RegistroGasto({
           monto: Number(monto),
           descripcion: descripcion.trim(),
           usuarioId: currentUser.id,
+          guiaId: guiaId || null,
+          medioPago,
         }),
       });
       if (!res.ok) throw new Error(`No se pudo registrar el gasto (${res.status})`);
@@ -97,6 +111,21 @@ export default function RegistroGasto({
               className="w-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-blue-500"
               placeholder="Ej. 15000"
             />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="gasto-medio-pago" className="text-sm font-bold text-neutral-700 dark:text-neutral-300">¿Cómo se pagó?</label>
+            <select id="gasto-medio-pago" value={medioPago} onChange={e => setMedioPago(e.target.value)} className="w-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-sm">
+              <option value="Efectivo">Efectivo</option><option value="Transferencia">Transferencia</option><option value="Tarjeta">Tarjeta</option><option value="Otro">Otro</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="gasto-guia" className="text-sm font-bold text-neutral-700 dark:text-neutral-300">Ruta o jornada (opcional)</label>
+            <select id="gasto-guia" value={guiaId} onChange={e => setGuiaId(e.target.value)} className="w-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-sm">
+              <option value="">Gasto general</option>
+              {guiasActivas.map((g: any) => <option key={g.id} value={g.id}>{g.consecutivo} · {g.camionNombre || 'Camión'}</option>)}
+            </select>
           </div>
 
           <div className="space-y-2">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Plus, ChevronRight, ChevronDown, Warehouse, Heart, Egg, Package, AlertTriangle, Wrench, Calendar, Trash2, Edit, X, MapPin, Users, TrendingUp, Clock, Activity, Target, ArrowLeft, Check, CheckCircle2, ShieldCheck, PackageCheck } from 'lucide-react';
+import { Building2, Plus, ChevronRight, ChevronDown, Warehouse, Heart, Egg, AlertTriangle, Wrench, Calendar, Trash2, Edit, X, MapPin, Users, TrendingUp, Clock, Activity, Target, ArrowLeft, Check, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { User } from '../types';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -7,8 +7,10 @@ import Breadcrumb from './Breadcrumb';
 import WizardProgress from './WizardProgress';
 import { BloqueCarga, Spinner } from './Spinner';
 import { TarjetaKpi } from './TarjetaKpi';
+import { loadSession, sessionHeaders } from '../lib/session';
 
 interface Props { currentUser: User; }
+const activeSessionHeaders = (json = false) => sessionHeaders(loadSession()?.user.id || '', json);
 
 interface Granja {
   id: string; nombre: string; ubicacion: string; tipo_produccion?: string; encargadoId: string; estado?: string;
@@ -45,7 +47,7 @@ interface GranjaDetalle {
 }
 
 type View = 'lista' | 'crear' | 'detalle';
-type DetailTab = 'resumen' | 'galerones' | 'produccion' | 'lotes' | 'mantenimientos';
+type DetailTab = 'resumen' | 'galerones';
 
 export default function Granjas({ currentUser }: Props) {
   const [view, setView] = useState<View>('lista');
@@ -56,23 +58,15 @@ export default function Granjas({ currentUser }: Props) {
   const [detailTab, setDetailTab] = useState<DetailTab>('resumen');
   const [loading, setLoading] = useState(false);
 
-  const [showRecoleccion, setShowRecoleccion] = useState(false);
-  const [recolGranjaId, setRecolGranjaId] = useState('');
-  const [recolGaleron, setRecolGaleron] = useState('');
-  const [recolCantidades, setRecolCantidades] = useState<Record<string, number>>({});
-  const [savingRecoleccion, setSavingRecoleccion] = useState(false);
-  const [productosCatalogo, setProductosCatalogo] = useState<{ id: string; nombre: string; unidad: string; categoria: string; estado: string }[]>([]);
-
   const cargar = async () => {
     setLoading(true);
     try {
-      const [rG, rGl, rL, rCat] = await Promise.all([
-        fetch('/api/granjas'), fetch('/api/galerones'), fetch('/api/lotes'), fetch('/api/productos-catalogo')
+      const [rG, rGl, rL] = await Promise.all([
+        fetch('/api/granjas', { headers: sessionHeaders(currentUser.id) }), fetch('/api/galerones', { headers: sessionHeaders(currentUser.id) }), fetch('/api/lotes', { headers: sessionHeaders(currentUser.id) })
       ]);
       if (rG.ok) setGranjas(await rG.json());
       if (rGl.ok) setGalerones(await rGl.json());
       if (rL.ok) setLotes(await rL.json());
-      if (rCat.ok) setProductosCatalogo(await rCat.json());
     } catch { toast.error('No se pudieron cargar las granjas.'); }
     setLoading(false);
   };
@@ -80,7 +74,7 @@ export default function Granjas({ currentUser }: Props) {
   const cargarDetalle = async (granjaId: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/granjas/${granjaId}/detalle`);
+      const res = await fetch(`/api/granjas/${granjaId}/detalle`, { headers: sessionHeaders(currentUser.id) });
       if (res.ok) {
         setSelectedGranja(await res.json());
         setView('detalle');
@@ -92,34 +86,13 @@ export default function Granjas({ currentUser }: Props) {
     setLoading(false);
   };
 
-  const registrarRecoleccion = async () => {
-    if (!recolGaleron) { toast.error('Selecciona un galerón'); return; }
-    if (!productosConCantidad.length) { toast.error('Ingresa al menos una cantidad'); return; }
-    setSavingRecoleccion(true);
-    try {
-      const detalles = productosConCantidad.map(p => ({ producto: p.nombre, cantidad: recolCantidades[p.id] || 0 }));
-      const res = await fetch('/api/produccion/recoleccion', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        // `granjaId` acota la búsqueda del galerón: el nombre no es único entre
-        // granjas y sin esto una granja con el mismo nombre de galerón que otra
-        // registraba la recolección en el galerón de la otra.
-        body: JSON.stringify({ galeron: recolGaleron, granjaId: recolGranjaId || undefined, detalles })
-      });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error registrando recolección'); }
-      toast.success('Recolección registrada. Inventario actualizado en Granja.');
-      setRecolGranjaId(''); setRecolGaleron(''); setRecolCantidades({}); setShowRecoleccion(false);
-      cargar();
-    } catch (e: any) { toast.error(e.message); }
-    finally { setSavingRecoleccion(false); };
-  };
-
   useEffect(() => { cargar(); }, []);
 
-  if (view === 'crear') return <CrearGranjaWizard onBack={() => { setView('lista'); cargar(); }} />;
+  if (view === 'crear') return <CrearGranjaWizard currentUser={currentUser} onBack={() => { setView('lista'); cargar(); }} />;
   if (view === 'detalle' && selectedGranja) return (
     <GranjaDetalleView
       data={selectedGranja} tab={detailTab} setTab={setDetailTab}
-      onBack={() => { setView('lista'); setSelectedGranja(null); }}
+      onBack={() => { setView('lista'); setSelectedGranja(null); cargar(); }}
       onRefresh={() => cargarDetalle(selectedGranja.granja.id)} currentUser={currentUser} />
   );
 
@@ -128,7 +101,6 @@ export default function Granjas({ currentUser }: Props) {
   const totalGalerones = galerones.filter(g => g.estado !== 'Archivado').length;
   const totalLotesActivos = lotes.filter(l => l.estado === 'Activo').length;
   const totalAves = galerones.reduce((a, g) => a + (g.aves_en_produccion || 0), 0);
-  const productosConCantidad = productosCatalogo.filter(p => (recolCantidades[p.id] || 0) > 0);
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6 animate-in fade-in pb-20">
@@ -146,11 +118,6 @@ export default function Granjas({ currentUser }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-3">
-        <button onClick={() => setShowRecoleccion(!showRecoleccion)}
-          className={cn('flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]',
-            showRecoleccion ? 'bg-white text-emerald-700 border border-emerald-200' : 'bg-emerald-600 text-white')}>
-          <PackageCheck className="w-5 h-5" /> {showRecoleccion ? 'Cerrar Recolección' : 'Ingresar Recolección'}
-        </button>
         <button onClick={() => setView('crear')}
           className="flex items-center gap-2 px-5 py-3 rounded-xl text-white text-sm font-bold shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
           style={{ background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-primary-light))' }}>
@@ -158,50 +125,6 @@ export default function Granjas({ currentUser }: Props) {
         </button>
         </div>
       </div>
-
-      {/* Recolección rápida */}
-      {showRecoleccion && (
-        <div className="mb-2 bg-emerald-50/60 dark:bg-emerald-950/30 border-2 border-emerald-200 dark:border-emerald-900 rounded-2xl p-6 space-y-5 animate-in fade-in">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900 text-emerald-600 dark:text-emerald-400 flex items-center justify-center"><Egg className="w-5 h-5" /></div>
-            <div>
-              <h4 className="font-bold text-neutral-800 dark:text-white">Ingreso de Recolección</h4>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">Los productos se sumarán al Inventario en Granja (Disponible para Traslado)</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-neutral-600 dark:text-neutral-400 uppercase">Granja de Origen</label>
-              <select value={recolGranjaId} onChange={e => { setRecolGranjaId(e.target.value); setRecolGaleron(''); }} className="w-full bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none">
-                <option value="">Todas las granjas</option>
-                {granjasActivas.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-neutral-600 dark:text-neutral-400 uppercase">Galerón de Origen *</label>
-              <select value={recolGaleron} onChange={e => setRecolGaleron(e.target.value)} className="w-full bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none">
-                <option value="">Seleccione un galerón</option>
-                {galerones.filter(g => g.estado !== 'Archivado' && (!recolGranjaId || g.granjaId === recolGranjaId)).map(g => <option key={g.id} value={g.nombre}>{g.nombre}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {productosCatalogo.filter(p => p.estado === 'Activo').map(p => (
-              <div key={p.id} className="space-y-1">
-                <label className="text-xs font-bold text-neutral-600 dark:text-neutral-400 uppercase">{p.nombre} ({p.unidad})</label>
-                <input type="number" min="0" value={recolCantidades[p.id] || ''} onChange={e => setRecolCantidades(prev => ({ ...prev, [p.id]: Number(e.target.value) || 0 }))}
-                  className="w-full bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none" placeholder="0" />
-              </div>
-            ))}
-          </div>
-          <div className="flex justify-end">
-            <button onClick={registrarRecoleccion} disabled={savingRecoleccion || !productosConCantidad.length || !recolGaleron}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-sm disabled:opacity-50 flex items-center transition-colors">
-              {savingRecoleccion ? <Spinner className="mr-2" /> : <PackageCheck className="w-4 h-4 mr-2" />}Registrar Recolección
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Summary KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -246,7 +169,7 @@ export default function Granjas({ currentUser }: Props) {
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-bold text-stone-800 dark:text-white truncate">{granja.nombre}</h3>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0"
-                        style={{ background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--brand-primary-dark)' }}>
+                        style={{ background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)', color: 'var(--text-link)' }}>
                         {granja.estado || 'Activa'}
                       </span>
                     </div>
@@ -266,7 +189,7 @@ export default function Granjas({ currentUser }: Props) {
                 <div className="mt-3 w-full bg-stone-100 dark:bg-neutral-700 rounded-full h-1.5">
                   <div className="h-1.5 rounded-full transition-all" style={{
                     width: `${Math.min(ocupacion, 100)}%`,
-                    background: ocupacion > 90 ? '#c2554a' : 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-light))'
+                    background: ocupacion > 90 ? 'var(--brand-danger)' : 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-light))'
                   }} />
                 </div>
               </button>
@@ -279,7 +202,7 @@ export default function Granjas({ currentUser }: Props) {
 }
 
 // ==================== CREAR GRANJA WIZARD ====================
-function CrearGranjaWizard({ onBack }: { onBack: () => void }) {
+function CrearGranjaWizard({ onBack, currentUser }: { onBack: () => void; currentUser: User }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({ nombre: '', ubicacion: '', tipo_produccion: [] as string[] });
   const [galeronesForm, setGaleronesForm] = useState<Array<{ nombre: string; capacidad_maxima: string; estado: string }>>([
@@ -303,7 +226,7 @@ function CrearGranjaWizard({ onBack }: { onBack: () => void }) {
     try {
       const res = await fetch('/api/granjas/wizard', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify({
           nombre: form.nombre, ubicacion: form.ubicacion,
           tipo_produccion: form.tipo_produccion.join(', '),
@@ -373,7 +296,7 @@ function CrearGranjaWizard({ onBack }: { onBack: () => void }) {
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-stone-800 dark:text-white">Galerones Iniciales</h3>
             <button onClick={addGaleron} className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold"
-              style={{ color: 'var(--brand-primary)', background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)' }}>
+              style={{ color: 'var(--text-link)', background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)' }}>
               <Plus className="w-3.5 h-3.5" /> Agregar
             </button>
           </div>
@@ -421,7 +344,7 @@ function CrearGranjaWizard({ onBack }: { onBack: () => void }) {
                 <div className="flex gap-1 mt-2">
                   {form.tipo_produccion.map(t => (
                     <span key={t} className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                      style={{ background: 'color-mix(in srgb, var(--brand-primary) 12%, transparent)', color: 'var(--brand-primary)' }}>{t}</span>
+                      style={{ background: 'color-mix(in srgb, var(--brand-primary) 12%, transparent)', color: 'var(--text-primary)' }}>{t}</span>
                   ))}
                 </div>
               )}
@@ -463,12 +386,30 @@ interface DetalleProps {
 
 function GranjaDetalleView({ data, tab, setTab, onBack, onRefresh, currentUser }: DetalleProps) {
   const { granja, galerones, resumen } = data;
+  const [editOpen, setEditOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ nombre: granja.nombre, ubicacion: granja.ubicacion || '', tipo_produccion: granja.tipo_produccion || '', encargadoId: granja.encargadoId || '' });
+  const guardarGranja = async () => {
+    if (!form.nombre.trim()) { toast.error('El nombre es obligatorio'); return; }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/granjas/${granja.id}`, { method: 'PUT', headers: sessionHeaders(currentUser.id, true), body: JSON.stringify(form) });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'No se pudo guardar la granja'); }
+      toast.success('Granja actualizada'); setEditOpen(false); onRefresh();
+    } catch (e: any) { toast.error(e.message); }
+    setSaving(false);
+  };
+  const archivarGranja = async () => {
+    if (!window.confirm(`¿Archivar ${granja.nombre}? Se conservarán sus lotes y movimientos históricos.`)) return;
+    try {
+      const res = await fetch(`/api/granjas/${granja.id}`, { method: 'PUT', headers: sessionHeaders(currentUser.id, true), body: JSON.stringify({ estado: 'Archivado' }) });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'No se pudo archivar la granja'); }
+      toast.success('Granja archivada'); onBack();
+    } catch (e: any) { toast.error(e.message); }
+  };
   const tabs: Array<{ id: DetailTab; label: string; icon: React.ComponentType<{className?: string}> }> = [
     { id: 'resumen', label: 'Resumen', icon: Target },
     { id: 'galerones', label: 'Galerones', icon: Warehouse },
-    { id: 'produccion', label: 'Producción', icon: Egg },
-    { id: 'lotes', label: 'Lotes', icon: Heart },
-    { id: 'mantenimientos', label: 'Mantenimientos', icon: Wrench },
   ];
 
   return (
@@ -491,27 +432,40 @@ function GranjaDetalleView({ data, tab, setTab, onBack, onRefresh, currentUser }
             </p>
           </div>
         </div>
+        {currentUser.role === 'Admin' && <div className="flex gap-2">
+          {granja.estado === 'Archivado' ? <span className="px-3 py-2 rounded-xl text-sm font-bold bg-neutral-100 text-neutral-600">Archivada</span> : <>
+            <button onClick={() => { setForm({ nombre: granja.nombre, ubicacion: granja.ubicacion || '', tipo_produccion: granja.tipo_produccion || '', encargadoId: granja.encargadoId || '' }); setEditOpen(true); }} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-neutral-200 dark:border-neutral-600 text-sm font-bold text-neutral-700 dark:text-neutral-200"><Edit className="w-4 h-4"/>Editar</button>
+            <button onClick={archivarGranja} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-red-200 text-sm font-bold text-red-600"><Trash2 className="w-4 h-4"/>Archivar</button>
+          </>}
+        </div>}
       </div>
 
+      {editOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white dark:bg-neutral-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4">
+        <div className="flex justify-between items-center"><h3 className="font-bold text-lg text-neutral-900 dark:text-white">Editar granja</h3><button onClick={() => setEditOpen(false)}><X className="w-5 h-5"/></button></div>
+        <label className="block text-xs font-bold text-neutral-500">Nombre<input value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sm"/></label>
+        <label className="block text-xs font-bold text-neutral-500">Ubicación<input value={form.ubicacion} onChange={e => setForm(f => ({ ...f, ubicacion: e.target.value }))} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sm"/></label>
+        <label className="block text-xs font-bold text-neutral-500">Tipo de producción<input value={form.tipo_produccion} onChange={e => setForm(f => ({ ...f, tipo_produccion: e.target.value }))} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sm"/></label>
+        <div className="flex justify-end gap-2"><button onClick={() => setEditOpen(false)} className="px-4 py-2 rounded-xl text-sm font-bold">Cancelar</button><button disabled={saving} onClick={guardarGranja} className="px-5 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-50" style={{background:'var(--brand-primary)'}}>{saving ? 'Guardando…' : 'Guardar cambios'}</button></div>
+      </div></div>}
+
       {/* Resumen KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Galerones" valor={String(resumen.totalGalerones)} icono={Warehouse} tono="marca-info" />
         <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Aves" valor={resumen.avesTotal.toLocaleString()} icono={Heart} tono="marca-acento" />
         <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Ocupación" valor={`${resumen.ocupacion}%`} icono={TrendingUp} tono={resumen.ocupacion > 90 ? 'marca-acento' : 'marca'} />
-        <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Cartones Hoy" valor={String(resumen.cartonesHoy)} icono={Package} tono="marca-info" />
-          <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Alertas" valor={String(resumen.vacunasVencidas + resumen.ordenesVencidas)} icono={AlertTriangle} tono={resumen.vacunasVencidas + resumen.ordenesVencidas > 0 ? 'marca-acento' : 'marca'} />
+        <TarjetaKpi iconoPosicion="arriba" etiquetaPosicion="abajo" superficie="tono" etiqueta="Alertas" valor={String(resumen.vacunasVencidas + resumen.ordenesVencidas)} icono={AlertTriangle} tono={resumen.vacunasVencidas + resumen.ordenesVencidas > 0 ? 'marca-acento' : 'marca'} />
       </div>
 
       {/* Occupancy bar */}
       <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 p-4">
         <div className="flex justify-between text-xs mb-2">
           <span className="font-bold text-neutral-600 dark:text-neutral-400">Ocupación de Galerones</span>
-          <span className="font-bold" style={{ color: 'var(--brand-primary)' }}>{resumen.avesTotal.toLocaleString()} / {resumen.capacidadTotal.toLocaleString()} aves</span>
+          <span className="font-bold" style={{ color: 'var(--text-primary)' }}>{resumen.avesTotal.toLocaleString()} / {resumen.capacidadTotal.toLocaleString()} aves</span>
         </div>
         <div className="w-full bg-neutral-100 dark:bg-neutral-700 rounded-full h-3">
           <div className="h-3 rounded-full transition-all" style={{
             width: `${Math.min(resumen.ocupacion, 100)}%`,
-            background: resumen.ocupacion > 90 ? '#ef4444' : `linear-gradient(90deg, var(--brand-primary), var(--brand-primary-light))`
+            background: resumen.ocupacion > 90 ? 'var(--brand-danger)' : `linear-gradient(90deg, var(--brand-primary), var(--brand-primary-light))`
           }} />
         </div>
       </div>
@@ -535,9 +489,6 @@ function GranjaDetalleView({ data, tab, setTab, onBack, onRefresh, currentUser }
       <div className="animate-in fade-in">
         {tab === 'resumen' && <ResumenTab galerones={galerones} resumen={resumen} />}
         {tab === 'galerones' && <GaleronesTab galerones={galerones} granjaId={granja.id} onRefresh={onRefresh} />}
-        {tab === 'produccion' && <ProduccionTab granjaId={granja.id} galerones={galerones} />}
-        {tab === 'lotes' && <LotesTab galerones={galerones} onRefresh={onRefresh} />}
-        {tab === 'mantenimientos' && <MantenimientosTab galerones={galerones} granjaId={granja.id} onRefresh={onRefresh} />}
       </div>
     </div>
   );
@@ -545,19 +496,6 @@ function GranjaDetalleView({ data, tab, setTab, onBack, onRefresh, currentUser }
 
 // ==================== RESUMEN TAB ====================
 function ResumenTab({ galerones, resumen }: { galerones: GaleronDetalle[]; resumen: GranjaDetalle['resumen'] }) {
-  const produccionPorProducto: Record<string, number> = {};
-  galerones.forEach(gl => {
-    gl.produccionHistorial.forEach(p => {
-      const key = p.tipo;
-      produccionPorProducto[key] = (produccionPorProducto[key] || 0) + p.cantidad;
-    });
-  });
-  const produccionEntries = Object.entries(produccionPorProducto).sort((a, b) => b[1] - a[1]);
-
-  const totalEsperado = galerones.reduce((a, g) => a + g.produccion_diaria_esperada, 0);
-  const totalReal = resumen.cartonesHoy;
-  const eficiencia = totalEsperado > 0 ? Math.round((totalReal / totalEsperado) * 100) : 0;
-
   const ordenesVencidasList: Array<{ galeron: string; tipo: string; fecha: string }> = [];
   galerones.forEach(gl => {
     gl.mantenimientos.filter(m => m.estado === 'Pendiente' && m.fecha_programada < new Date().toISOString().split('T')[0])
@@ -572,32 +510,6 @@ function ResumenTab({ galerones, resumen }: { galerones: GaleronDetalle[]; resum
 
   return (
     <div className="space-y-6">
-      {/* Efficiency KPI */}
-      <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-neutral-900 dark:text-white text-sm">Eficiencia del Día</h3>
-          <span className={cn("text-xs font-bold px-2.5 py-1 rounded-full", eficiencia >= 90 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : eficiencia >= 70 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400')}>
-            {eficiencia}%
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p className="text-lg font-black text-neutral-900 dark:text-white">{totalEsperado.toLocaleString()}</p>
-            <p className="text-[10px] font-bold text-neutral-500 uppercase">Esperado</p>
-          </div>
-          <div>
-            <p className="text-lg font-black" style={{ color: 'var(--brand-primary)' }}>{totalReal.toLocaleString()}</p>
-            <p className="text-[10px] font-bold text-neutral-500 uppercase">Real</p>
-          </div>
-          <div>
-            <p className={cn("text-lg font-black", totalReal > totalEsperado ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
-              {totalReal > totalEsperado ? '+' : ''}{(totalReal - totalEsperado).toLocaleString()}
-            </p>
-            <p className="text-[10px] font-bold text-neutral-500 uppercase">Diferencia</p>
-          </div>
-        </div>
-      </div>
-
       {/* Alerts */}
       {(resumen.vacunasVencidas > 0 || ordenesVencidasList.length > 0) && (
         <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl border border-red-200 dark:border-red-800 p-5">
@@ -637,30 +549,6 @@ function ResumenTab({ galerones, resumen }: { galerones: GaleronDetalle[]; resum
           })}
         </div>
       </div>
-
-      {/* Producción por Producto */}
-      {produccionEntries.length > 0 && (
-        <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 p-5">
-          <h3 className="font-bold text-neutral-900 dark:text-white mb-4 text-sm">Producción por Producto (período visible)</h3>
-          <div className="space-y-3">
-            {produccionEntries.map(([producto, cantidad]) => {
-              const maxProd = produccionEntries[0][1];
-              const pct = maxProd > 0 ? (cantidad / maxProd) * 100 : 0;
-              return (
-                <div key={producto}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="font-bold text-neutral-700 dark:text-neutral-300">{producto}</span>
-                    <span className="font-bold" style={{ color: 'var(--brand-primary)' }}>{cantidad.toLocaleString()}</span>
-                  </div>
-                  <div className="w-full bg-neutral-100 dark:bg-neutral-700 rounded-full h-2">
-                    <div className="h-2 rounded-full" style={{ width: `${pct}%`, background: 'linear-gradient(90deg, var(--brand-primary), var(--brand-primary-light))' }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Galerones Summary with cartones per galerón */}
       <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
@@ -715,7 +603,7 @@ function GaleronesTab({ galerones, granjaId, onRefresh }: { galerones: GaleronDe
     setSaving(true);
     try {
       const res = await fetch(`/api/galerones/${editingGaleron.id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        method: 'PUT', headers: activeSessionHeaders(true),
         body: JSON.stringify({
           nombre: editForm.nombre, capacidad_maxima: Number(editForm.capacidad_maxima), estado: editForm.estado,
           aves_en_produccion: Number(editForm.aves_en_produccion), tipo_galeron: editForm.tipo_galeron,
@@ -733,7 +621,7 @@ function GaleronesTab({ galerones, granjaId, onRefresh }: { galerones: GaleronDe
     setSaving(true);
     try {
       const res = await fetch('/api/galerones', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: activeSessionHeaders(true),
         body: JSON.stringify({
           granjaId, nombre: createForm.nombre, capacidad_maxima: Number(createForm.capacidad_maxima),
           aves_en_produccion: Number(createForm.aves_en_produccion), tipo_galeron: createForm.tipo_galeron,
@@ -753,7 +641,7 @@ function GaleronesTab({ galerones, granjaId, onRefresh }: { galerones: GaleronDe
   const deleteGaleron = async (gl: GaleronDetalle) => {
     if (!confirm(`¿Archivar "${gl.nombre}"?`)) return;
     try {
-      const res = await fetch(`/api/galerones/${gl.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/galerones/${gl.id}`, { method: 'DELETE', headers: activeSessionHeaders() });
       if (res.ok) { toast.success('Galerón archivado'); onRefresh(); }
       else toast.error('Error al archivar');
     } catch { toast.error('Error de conexión'); }
@@ -776,7 +664,7 @@ function GaleronesTab({ galerones, granjaId, onRefresh }: { galerones: GaleronDe
         <h3 className="font-bold text-neutral-900 dark:text-white text-sm">Galerones ({galerones.length})</h3>
         <button onClick={() => { setShowCreate(!showCreate); setEditingGaleron(null); }}
           className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold"
-          style={{ color: 'var(--brand-primary)', background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)' }}>
+          style={{ color: 'var(--text-link)', background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)' }}>
           <Plus className="w-3.5 h-3.5" /> Nuevo Galerón
         </button>
       </div>
@@ -876,6 +764,7 @@ function GaleronesTab({ galerones, granjaId, onRefresh }: { galerones: GaleronDe
               <TarjetaKpi tamanoValor="md" etiqueta="Lotes Activos" valor={String(lotesActivos)} tono="alerta" />
                 </div>
                 {gl.notas && <p className="text-xs italic" style={{ color: 'var(--text-muted)' }}>Notas: {gl.notas}</p>}
+                <LoteDelGaleron galeron={gl} onRefresh={onRefresh} />
                 <div className="flex gap-2 pt-1">
                   <button onClick={() => startEdit(gl)} className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>
                     <Edit className="w-3.5 h-3.5" /> Editar
@@ -959,6 +848,159 @@ function GaleronesTab({ galerones, granjaId, onRefresh }: { galerones: GaleronDe
   );
 }
 
+// ==================== LOTE DEL GALERON ====================
+// El lote se declara acá y no en una pantalla aparte: un lote *es* el grupo de
+// gallinas que hay dentro de un galerón. Separarlo obligaba a saltar a otra pestaña
+// para relacionar las dos cosas, y el galerón se quedaba sin lote visible aunque
+// tuviera miles de aves.
+function LoteDelGaleron({ galeron, onRefresh }: { galeron: GaleronDetalle; onRefresh: () => void }) {
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const avesDelGaleron = galeron.aves_en_produccion || 0;
+  const [form, setForm] = useState({
+    fecha_ingreso: new Date().toISOString().split('T')[0],
+    cantidad_inicial: String(avesDelGaleron || ''),
+    linea_genetica: '',
+  });
+
+  const loteActivo = galeron.lotes.find(l => l.estado === 'Activo');
+  const lotesCerrados = galeron.lotes.filter(l => l.estado !== 'Activo');
+
+  const abrirForm = () => {
+    setForm({
+      fecha_ingreso: new Date().toISOString().split('T')[0],
+      // Se precarga con las aves del galerón: en la mayoría de los casos el lote
+      // se crea junto con las gallinas, así que conviene que venga lo más listo posible.
+      cantidad_inicial: String(avesDelGaleron || ''),
+      linea_genetica: '',
+    });
+    setShowForm(true);
+  };
+
+  const crear = async () => {
+    if (!form.linea_genetica.trim()) { toast.error('Indica la línea genética'); return; }
+    if (!form.cantidad_inicial || Number(form.cantidad_inicial) <= 0) { toast.error('Indica cuántas aves tiene el lote'); return; }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/lotes', {
+        method: 'POST',
+        headers: activeSessionHeaders(true),
+        body: JSON.stringify({
+          galeronId: galeron.id,
+          fecha_ingreso: form.fecha_ingreso,
+          cantidad_inicial: Number(form.cantidad_inicial),
+          linea_genetica: form.linea_genetica.trim(),
+          // El endpoint exige el campo; un lote nuevo siempre nace activo.
+          estado: 'Activo',
+        }),
+      });
+      if (res.ok) { toast.success('Lote asignado al galerón'); setShowForm(false); onRefresh(); }
+      else toast.error('No se pudo crear el lote');
+    } catch { toast.error('Error de conexión'); }
+    setSaving(false);
+  };
+
+  const finalizar = async (id: string) => {
+    if (!confirm('¿Finalizar este lote? Quedará en el historial del galerón.')) return;
+    try {
+      const res = await fetch(`/api/lotes/${id}`, { method: 'DELETE', headers: activeSessionHeaders() });
+      if (res.ok) { toast.success('Lote finalizado'); onRefresh(); }
+      else toast.error('No se pudo finalizar');
+    } catch { toast.error('Error de conexión'); }
+  };
+
+  return (
+    <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="font-bold text-sm text-neutral-900 dark:text-white flex items-center gap-2">
+          <Egg className="w-4 h-4" style={{ color: 'var(--brand-secondary)' }} /> Lote de este galerón
+        </h4>
+        {!loteActivo && !showForm && (
+          <button onClick={abrirForm}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold"
+            style={{ color: 'var(--text-link)', background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)' }}>
+            <Plus className="w-3.5 h-3.5" /> Asignar lote
+          </button>
+        )}
+      </div>
+
+      {loteActivo ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm text-neutral-900 dark:text-white">{loteActivo.linea_genetica}</p>
+              <p className="text-[11px] text-neutral-500">
+                {loteActivo.cantidad_inicial.toLocaleString()} aves · Ingreso {loteActivo.fecha_ingreso}
+              </p>
+            </div>
+            <button onClick={() => finalizar(loteActivo.id)}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 hover:bg-red-100">
+              Finalizar
+            </button>
+          </div>
+          {avesDelGaleron > 0 && loteActivo.cantidad_inicial !== avesDelGaleron && (
+            <p className="text-[11px] px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-400">
+              El galerón registra {avesDelGaleron.toLocaleString()} aves y el lote {loteActivo.cantidad_inicial.toLocaleString()}. Conviene cuadrarlos.
+            </p>
+          )}
+        </div>
+      ) : showForm ? (
+        <div className="space-y-3 animate-in fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-neutral-500 mb-1">Línea Genética *</label>
+              <input value={form.linea_genetica} onChange={e => setForm(f => ({ ...f, linea_genetica: e.target.value }))}
+                placeholder="Ej: Hy-Line W36, Lohmann Brown"
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sm text-neutral-900 dark:text-white" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-neutral-500 mb-1">Fecha de Ingreso *</label>
+              <input type="date" value={form.fecha_ingreso} onChange={e => setForm(f => ({ ...f, fecha_ingreso: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sm text-neutral-900 dark:text-white" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-neutral-500 mb-1">Aves en el Lote *</label>
+              <input type="number" value={form.cantidad_inicial} onChange={e => setForm(f => ({ ...f, cantidad_inicial: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sm text-neutral-900 dark:text-white" />
+              <p className="text-[11px] text-neutral-500 mt-1">Sugerido según las {avesDelGaleron.toLocaleString()} aves del galerón.</p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl text-sm font-bold text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700">Cancelar</button>
+            <button onClick={crear} disabled={saving}
+              className="flex items-center gap-1 px-5 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-50"
+              style={{ background: 'var(--brand-primary)' }}>
+              {saving && <Spinner tamano="xs" />} Crear Lote
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="py-5 text-center">
+          <p className="text-sm text-neutral-500">
+            Este galerón {avesDelGaleron > 0 ? `tiene ${avesDelGaleron.toLocaleString()} aves` : 'no tiene aves'} pero ningún lote asignado.
+          </p>
+        </div>
+      )}
+
+      {lotesCerrados.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700">
+          <p className="text-[10px] font-bold text-neutral-500 uppercase mb-1.5">Lotes anteriores ({lotesCerrados.length})</p>
+          <div className="space-y-1">
+            {lotesCerrados.map(l => (
+              <div key={l.id} className="flex items-center gap-2 text-[11px] text-neutral-500">
+                <div className="w-1.5 h-1.5 rounded-full bg-neutral-400 shrink-0" />
+                <span className="font-medium text-neutral-600 dark:text-neutral-400">{l.linea_genetica}</span>
+                <span>· {l.cantidad_inicial.toLocaleString()} aves · {l.fecha_ingreso} · {l.estado}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ==================== PRODUCCION TAB ====================
 function ProduccionTab({ granjaId, galerones }: { granjaId: string; galerones: GaleronDetalle[] }) {
   const [historial, setHistorial] = useState<any[]>([]);
@@ -974,7 +1016,7 @@ function ProduccionTab({ granjaId, galerones }: { granjaId: string; galerones: G
   const [fechaHasta, setFechaHasta] = useState(new Date().toISOString().split('T')[0]);
 
   const cargarHistorial = async () => {
-    const res = await fetch(`/api/produccion/historial?granjaId=${granjaId}&desde=${fechaDesde}&hasta=${fechaHasta}`);
+    const res = await fetch(`/api/produccion/historial?granjaId=${granjaId}&desde=${fechaDesde}&hasta=${fechaHasta}`, { headers: activeSessionHeaders() });
     if (res.ok) setHistorial(await res.json());
   };
 
@@ -989,13 +1031,13 @@ function ProduccionTab({ granjaId, galerones }: { granjaId: string; galerones: G
       const galeron = galerones.find(g => g.id === galeronSel);
       if (!galeron) return;
       const detalles = [
-        { tamano: 'Grandes', cantidad: grandes },
-        { tamano: 'Medianos', cantidad: medianos },
-        { tamano: 'Pequeños', cantidad: pequenos },
+        { tamano: 'Grandes', cantidadKg: grandes, unidad: 'kg' },
+        { tamano: 'Medianos', cantidadKg: medianos, unidad: 'kg' },
+        { tamano: 'Pequeños', cantidadKg: pequenos, unidad: 'kg' },
         { tamano: 'Gallinaza', cantidad: gallinaza },
-      ].filter(d => d.cantidad > 0);
+      ].filter(d => Number(d.cantidadKg ?? d.cantidad) > 0);
       const res = await fetch('/api/produccion/recoleccion', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: activeSessionHeaders(true),
         // Ya se tiene el galerón por id, así que se manda el id en vez de dejar que
         // el servidor lo busque por nombre: el nombre se repite entre granjas.
         // `granjaId` es el de la granja abierta en pantalla, no una propiedad del
@@ -1051,14 +1093,14 @@ function ProduccionTab({ granjaId, galerones }: { granjaId: string; galerones: G
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: 'Grandes', value: grandes, set: setGrandes, icon: '🥚' },
-            { label: 'Medianos', value: medianos, set: setMedianos, icon: '🫧' },
-            { label: 'Pequeños', value: pequenos, set: setPequenos, icon: '•' },
+            { label: 'Grandes (kg)', value: grandes, set: setGrandes, icon: '🥚' },
+            { label: 'Medianos (kg)', value: medianos, set: setMedianos, icon: '🫧' },
+            { label: 'Pequeños (kg)', value: pequenos, set: setPequenos, icon: '•' },
             { label: 'Gallinaza (sacos)', value: gallinaza, set: setGallinaza, icon: '📦' },
           ].map(item => (
             <div key={item.label}>
               <label className="block text-xs font-bold text-neutral-500 mb-1">{item.label}</label>
-              <input type="number" value={item.value || ''} onChange={e => item.set(Number(e.target.value) || 0)}
+              <input type="number" step="0.01" value={item.value || ''} onChange={e => item.set(Number(e.target.value) || 0)}
                 placeholder="0" min="0"
                 className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sm text-neutral-900 dark:text-white text-center font-bold text-lg" />
             </div>
@@ -1089,7 +1131,7 @@ function ProduccionTab({ granjaId, galerones }: { granjaId: string; galerones: G
       {/* Daily Production Chart */}
       {chartData.length > 0 && (
         <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 p-6">
-          <h3 className="font-bold text-neutral-900 dark:text-white mb-4">Producción Diaria (cartones)</h3>
+          <h3 className="font-bold text-neutral-900 dark:text-white mb-4">Producción Diaria (kg)</h3>
           <div className="flex items-end gap-1.5 h-32">
             {chartData.map(([fecha, cantidad], i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-1 min-w-0">
@@ -1170,7 +1212,7 @@ function MantenimientosTab({ galerones, granjaId, onRefresh }: { galerones: Gale
     setSaving(true);
     try {
       const res = await fetch('/api/mantenimientos', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: activeSessionHeaders(true),
         body: JSON.stringify({ galeronId: galeronSel, fecha: form.fecha, tipo: form.tipo, descripcion: form.descripcion, estado: 'Pendiente' })
       });
       if (res.ok) {
@@ -1184,7 +1226,7 @@ function MantenimientosTab({ galerones, granjaId, onRefresh }: { galerones: Gale
 
   const completarMant = async (id: string) => {
     try {
-      const res = await fetch(`/api/mantenimientos/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado: 'Completado' }) });
+      const res = await fetch(`/api/mantenimientos/${id}`, { method: 'PUT', headers: activeSessionHeaders(true), body: JSON.stringify({ estado: 'Completado' }) });
       if (res.ok) { toast.success('Mantenimiento completado'); onRefresh(); }
     } catch { toast.error('Error'); }
   };
@@ -1197,7 +1239,7 @@ function MantenimientosTab({ galerones, granjaId, onRefresh }: { galerones: Gale
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-bold text-neutral-900 dark:text-white text-sm">Historial de Mantenimientos</h3>
-        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold" style={{ color: 'var(--brand-primary)', background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)' }}>
+        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold" style={{ color: 'var(--text-link)', background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)' }}>
           <Plus className="w-3.5 h-3.5" /> Nuevo Mantenimiento
         </button>
       </div>
@@ -1275,114 +1317,6 @@ function MantenimientosTab({ galerones, granjaId, onRefresh }: { galerones: Gale
           ))}
           {completados.length === 0 && pendientes.length === 0 && (
             <div className="py-8 text-center text-neutral-400 text-sm">No hay mantenimientos registrados</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ==================== LOTES TAB ====================
-function LotesTab({ galerones, onRefresh }: { galerones: GaleronDetalle[]; onRefresh: () => void }) {
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ galeronId: '', fecha_ingreso: new Date().toISOString().split('T')[0], cantidad_inicial: '', linea_genetica: '', estado: 'Activo' });
-  const [saving, setSaving] = useState(false);
-
-  const allLotes = galerones.flatMap(g => g.lotes.map(l => ({ ...l, galeronNombre: g.nombre })));
-
-  const handleCreate = async () => {
-    if (!form.galeronId || !form.cantidad_inicial || !form.linea_genetica) { toast.error('Completa los campos requeridos'); return; }
-    setSaving(true);
-    try {
-      const res = await fetch('/api/lotes', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, cantidad_inicial: Number(form.cantidad_inicial) })
-      });
-      if (res.ok) { toast.success('Lote creado'); setShowForm(false); setForm({ galeronId: '', fecha_ingreso: new Date().toISOString().split('T')[0], cantidad_inicial: '', linea_genetica: '', estado: 'Activo' }); onRefresh(); }
-      else toast.error('Error al crear lote');
-    } catch { toast.error('Error de conexión'); }
-    setSaving(false);
-  };
-
-  const finalizarLote = async (id: string) => {
-    try {
-      const res = await fetch(`/api/lotes/${id}`, { method: 'DELETE' });
-      if (res.ok) { toast.success('Lote finalizado'); onRefresh(); }
-    } catch { toast.error('Error'); }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-neutral-900 dark:text-white">Lotes de Aves</h3>
-        <button onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-bold"
-          style={{ color: 'var(--brand-primary)', background: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)' }}>
-          <Plus className="w-3.5 h-3.5" /> Nuevo Lote
-        </button>
-      </div>
-
-      {showForm && (
-        <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 p-5 space-y-3 animate-in fade-in">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-neutral-500 mb-1">Galerón *</label>
-              <select value={form.galeronId} onChange={e => setForm(f => ({ ...f, galeronId: e.target.value }))}
-                className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sm text-neutral-900 dark:text-white">
-                <option value="">Seleccionar...</option>
-                {galerones.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-neutral-500 mb-1">Fecha de Ingreso *</label>
-              <input type="date" value={form.fecha_ingreso} onChange={e => setForm(f => ({ ...f, fecha_ingreso: e.target.value }))}
-                className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sm text-neutral-900 dark:text-white" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-neutral-500 mb-1">Cantidad de Aves *</label>
-              <input type="number" value={form.cantidad_inicial} onChange={e => setForm(f => ({ ...f, cantidad_inicial: e.target.value }))}
-                placeholder="Ej: 5000" className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sm text-neutral-900 dark:text-white" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-neutral-500 mb-1">Línea Genética *</label>
-              <input value={form.linea_genetica} onChange={e => setForm(f => ({ ...f, linea_genetica: e.target.value }))}
-                placeholder="Ej: Hy-Line W36, Lohmann Brown" className="w-full px-3 py-2.5 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-sm text-neutral-900 dark:text-white" />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl text-sm font-bold text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700">Cancelar</button>
-            <button onClick={handleCreate} disabled={saving}
-              className="flex items-center gap-1 px-5 py-2 rounded-xl text-white text-sm font-bold disabled:opacity-50"
-              style={{ background: 'var(--brand-primary)' }}>
-              {saving && <Spinner tamano="xs" />} Crear Lote
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-        <div className="divide-y divide-neutral-100 dark:divide-neutral-700">
-          {allLotes.map(l => (
-            <div key={l.id} className="px-5 py-4 flex items-center gap-4 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
-              <div className={cn("w-3 h-3 rounded-full shrink-0", l.estado === 'Activo' ? "bg-emerald-500" : "bg-neutral-400")} />
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm text-neutral-900 dark:text-white">{l.linea_genetica}</p>
-                <p className="text-xs text-neutral-500">{l.galeronNombre} · {l.cantidad_inicial.toLocaleString()} aves · Ingreso: {l.fecha_ingreso}</p>
-              </div>
-              <span className={cn("text-[10px] font-bold px-2.5 py-1 rounded-full uppercase",
-                l.estado === 'Activo' ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-neutral-100 text-neutral-500")}>
-                {l.estado}
-              </span>
-              {l.estado === 'Activo' && (
-                <button onClick={() => finalizarLote(l.id)}
-                  className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-400 text-xs font-bold">
-                  Finalizar
-                </button>
-              )}
-            </div>
-          ))}
-          {allLotes.length === 0 && (
-            <div className="py-8 text-center text-neutral-400 text-sm">No hay lotes registrados</div>
           )}
         </div>
       </div>

@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boceto — Flujo Ruta → Guía de Despacho: la UI que lo hace evidente</title>
+<style>
+  :root { --bg:#eef1f4; --card:#fff; --line:#d7dce2; --ink:#1a2332; --ink2:#5b6675; --ink3:#98a1ae;
+          --brand:#2f6f4f; --brand-tint:#e8f2ec; --amber:#e67e22; --green:#27ae60; --red:#c0392b; --blue:#2980b9; }
+  * { box-sizing:border-box; }
+  body { font-family:'Segoe UI',system-ui,Arial,sans-serif; background:var(--bg); color:var(--ink); margin:0; padding:28px; line-height:1.5; }
+  .wrap { max-width:1280px; margin:0 auto; }
+  .back { display:inline-block; font-size:12px; color:var(--ink2); text-decoration:none; margin-bottom:10px; font-weight:600; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--ink2); font-size:13px; margin-bottom:20px; max-width:1000px; }
+  .sub b { color:var(--ink); }
+  h2 { font-size:15px; margin:32px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--line); }
+  h2 .tag { font-size:11px; background:var(--brand); color:#fff; border-radius:10px; padding:2px 8px; margin-left:8px; font-weight:600; }
+  h2 .tag.alt { background:var(--amber); } h2 .tag.b { background:#2980b9; } h2 .tag.r { background:var(--red); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card p, .card li { font-size:13px; color:var(--ink2); }
+  .card ul, .card ol { margin:6px 0 0 18px; padding:0; }
+  .card li b { color:var(--ink); }
+  .grid { display:grid; gap:14px; } .cols2{grid-template-columns:1fr 1fr;}
+  @media (max-width:860px){.cols2{grid-template-columns:1fr;}}
+  .note { font-size:12.5px; color:var(--ink2); border-left:3px solid var(--amber); background:#fdf3e5; border-radius:0 8px 8px 0; padding:8px 12px; margin-top:12px; }
+  table.bt { border-collapse:collapse; width:100%; font-size:12.5px; }
+  table.bt th, table.bt td { border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }
+  table.bt th { background:#f4f6f8; font-size:11px; text-transform:uppercase; letter-spacing:.03em; }
+  code { background:#eef1f4; border-radius:4px; padding:1px 6px; font-size:12px; }
+  .cap { font-size:11.5px; color:var(--ink2); margin:10px 2px 0; }
+  .cap b { color:var(--ink); }
+  .caption { font-size:11.5px; color:var(--ink2); margin-top:8px; }
+  .caption b { color:var(--ink); }
+  .good { color:var(--green); font-weight:700; } .bad { color:var(--red); font-weight:700; }
+
+  /* ===== capa de la APP real (tokens de index.css + clases .gcrm) ===== */
+  .app { display:flex; background:#F7F8FA; border:1px solid #E2E6EA; border-radius:14px; overflow:hidden; box-shadow:0 14px 34px rgba(15,25,35,.12); margin-top:8px; }
+  .side { width:196px; flex:none; background:#0F1923; display:flex; flex-direction:column; }
+  .side .logo { display:flex; gap:10px; align-items:center; padding:18px 16px 16px; }
+  .side .logo .egg { width:34px; height:34px; border-radius:10px; background:#3D7A4A; display:flex; align-items:center; justify-content:center; font-size:16px; box-shadow:0 2px 8px rgba(0,0,0,.3); }
+  .side .logo b { display:block; font-size:16px; font-weight:800; line-height:1; color:#fff; }
+  .side .logo span { display:block; font-size:11px; font-weight:700; color:#D4A017; }
+  .side .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.12em; color:#7C8A99; padding:0 16px 8px; }
+  .side .nav { display:flex; align-items:center; gap:9px; padding:8px 16px; font-size:12px; font-weight:600; color:#A9B6C4; white-space:nowrap; }
+  .side .nav.on { background:rgba(61,122,74,.15); color:#4E9A5E; }
+  .side .nav.dim { opacity:.42; }
+  .side .nav .ic { width:16px; text-align:center; }
+  .side .user { margin-top:auto; padding:12px 14px; border-top:1px solid rgba(255,255,255,.08); display:flex; gap:9px; align-items:center; }
+  .side .user .av { width:30px; height:30px; border-radius:8px; background:#3D7A4A; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; }
+  .side .user b { color:#fff; font-size:11.5px; display:block; }
+  .side .user span { color:#7C8A99; font-size:10px; }
+  .top { height:46px; background:#fff; border-bottom:1px solid #E2E6EA; display:flex; align-items:center; gap:10px; padding:0 12px; flex:none; }
+  .top .search { width:230px; height:30px; background:#F1F3F5; border:1px solid #E2E6EA; border-radius:8px; display:flex; align-items:center; gap:7px; padding:0 10px; font-size:11.5px; color:#8C95A0; white-space:nowrap; }
+  .top .sp { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .top .nuevo { background:#3D7A4A; color:#fff; font-size:11.5px; font-weight:600; border-radius:8px; padding:7px 12px; box-shadow:0 2px 10px rgba(61,122,74,.35); }
+  .top .moon { color:#5F6B7A; font-size:14px; }
+  .top .est { width:24px; height:24px; border-radius:8px; background:#3D7A4A; color:#fff; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; }
+  .body { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .crumb { padding:14px 20px 0; font-size:11.5px; color:#8C95A0; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .crumb b { color:#1A1D21; font-weight:500; }
+  .content { padding:12px 20px 20px; }
+  .tabs { display:flex; gap:20px; border-bottom:1px solid #E2E6EA; overflow:hidden; }
+  .tabs button { padding:9px 0 11px; font-size:13px; font-weight:600; color:#8C95A0; border-bottom:2px solid transparent; white-space:nowrap; }
+  .tabs button.on { color:#3D7A4A; border-color:#3D7A4A; }
+  .tabsrow2 { display:flex; gap:16px; border-bottom:1px solid #F1F3F5; margin-top:2px; overflow-x:auto; }
+  .tabsrow2 button { padding:7px 0 8px; font-size:11.5px; font-weight:600; color:#8C95A0; border-bottom:2px solid transparent; white-space:nowrap; }
+  .tabsrow2 button.on { color:#2D5C38; border-color:#B8860B; }
+  .tabsrow2 .rowlabel { margin-right:2px; font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:#B0B7BF; align-self:center; padding-right:10px; border-right:1px solid #E2E6EA; }
+  .viewhead { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-top:16px; }
+  .viewhead h1 { font-size:20px; font-weight:800; letter-spacing:-.02em; margin:0; }
+  .viewhead .sub { font-size:11.5px; color:#8C95A0; margin-top:2px; }
+  .btn { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:9px; border:1px solid #E2E6EA; background:#fff; font-size:11.5px; font-weight:700; color:#5F6B7A; }
+  .btn.brand { background:#3D7A4A; border-color:#3D7A4A; color:#fff; }
+  .btn.gold { background:#B8860B; border-color:#B8860B; color:#fff; }
+  .btn.sm { height:24px; padding:0 9px; font-size:10.5px; border-radius:7px; }
+  .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:14px 0 0; }
+  .kpi { background:#fff; border:1px solid #E2E6EA; border-radius:14px; padding:12px 13px; box-shadow:0 1px 2px rgba(15,23,42,.05); }
+  .kpi .l { font-size:9.5px; color:#8C95A0; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+  .kpi .v { font-size:20px; font-weight:800; margin:3px 0 2px; letter-spacing:-.02em; }
+  .kpi .d { font-size:10px; color:#5F6B7A; }
+  .panel { background:#fff; border:1px solid #E2E6EA; border-radius:14px; box-shadow:0 1px 2px rgba(15,23,42,.05); overflow:hidden; margin-bottom:12px; }
+  .panel-head { display:flex; align-items:center; gap:10px; padding:11px 14px; border-bottom:1px solid #E2E6EA; }
+  .panel-title { font-weight:800; font-size:12.5px; }
+  .panel-head small { color:#8C95A0; font-size:10.5px; font-weight:400; }
+  .panel-head .tools { margin-left:auto; display:flex; gap:7px; align-items:center; }
+  table.t { width:100%; border-collapse:collapse; }
+  table.t th { text-align:left; font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; color:#8C95A0; padding:9px 14px; border-bottom:1px solid #E2E6EA; background:#F8FAFC; font-weight:700; }
+  table.t td { padding:9px 14px; border-bottom:1px solid #F1F5F9; font-size:11.5px; }
+  table.t tr:last-child td { border-bottom:0; }
+  table.t td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  table.t tr.on { background:#F0FDF4; box-shadow:inset 3px 0 0 #3D7A4A; }
+  .chip { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; border-radius:999px; font-size:10px; font-weight:700; border:1px solid #E2E6EA; background:#F1F3F5; color:#5F6B7A; white-space:nowrap; }
+  .chip.green { background:#D1FAE5; color:#065F46; border-color:#A7F3D0; }
+  .chip.amber { background:#FEF3C7; color:#B45309; border-color:#FDE68A; }
+  .chip.red { background:#FEE2E2; color:#B91C1C; border-color:#FECACA; }
+  .chip.blue { background:#DBEAFE; color:#1D4ED8; border-color:#BFDBFE; }
+  .chip.gold { background:#FBF0D3; color:#8A6508; border-color:#F0DFAF; }
+  .chip.gray { color:#8C95A0; }
+  .attn { border:1px solid #E2E6EA; border-left:3px solid #3D7A4A; border-radius:12px; background:#fff; padding:10px 13px; font-size:11.5px; box-shadow:0 1px 2px rgba(15,23,42,.05); }
+  .attn.warn { border-left-color:#D97706; } .attn.crit { border-left-color:#DC2626; }
+  .attn b { color:#1A1D21; } .attn .a { color:#8C95A0; font-size:10.5px; display:block; margin-top:2px; }
+  .twin { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; align-items:start; }
+  @media (max-width:1000px){ .side{display:none;} .kpis{grid-template-columns:repeat(2,1fr);} .twin{grid-template-columns:1fr;} }
+
+  /* ===== nuevas piezas de UI propuestas ===== */
+  .proc { display:flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:9px 12px; margin-top:12px; flex-wrap:wrap; }
+  .proc .pt { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:var(--ink3); margin-right:4px; }
+  .proc .ps { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:var(--ink2); background:#F1F3F5; border:1px solid #E2E6EA; border-radius:999px; padding:4px 10px; }
+  .proc .ps.done { background:var(--brand-tint); border-color:#BFD9C6; color:#1F5137; }
+  .proc .ps.done .ic { color:var(--brand); }
+  .proc .ps.here { background:#FBEFD9; border-color:#EBD08F; color:#7A5608; }
+  .proc .arr { color:var(--ink3); font-size:12px; font-weight:800; }
+  .rn { display:flex; align-items:center; gap:6px; }
+  .steps { counter-reset:st; }
+  .step { border:1px solid #E2E6EA; border-left:3px solid #B8860B; border-radius:12px; background:#fff; margin-top:12px; overflow:hidden; box-shadow:0 1px 2px rgba(15,23,42,.05); }
+  .step-h { display:flex; align-items:center; gap:10px; padding:11px 14px; }
+  .step-h .n { width:22px; height:22px; border-radius:50%; background:#B8860B; color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; flex:none; }
+  .step-h b { font-size:12.5px; }
+  .step-h small { color:#8C95A0; font-size:10.5px; }
+  .step-h .src { margin-left:auto; font-size:9.5px; font-weight:700; color:var(--brand); background:var(--brand-tint); padding:2px 8px; border-radius:999px; border:1px solid #BFD9C6; }
+  .step-b { padding:12px 14px; border-top:1px solid #F1F5F9; }
+  .frow { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+  .fld label { display:block; font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:#8C95A0; margin-bottom:4px; }
+  .fld .ctl, .fld input, .fld select { width:100%; height:30px; border:1px solid #E2E6EA; border-radius:8px; background:#fff; font-size:11.5px; padding:0 9px; color:#1A1D21; }
+  .fld input.dim, .fld .ctl.dim { background:#F1F3F5; color:#5F6B7A; border-style:dashed; }
+  .fld .hint { font-size:9.5px; color:#8C95A0; margin-top:3px; }
+  .fld .hint.src { color:var(--brand); font-weight:700; }
+  .rutacard { border:1px solid #BFD9C6; border-radius:12px; background:var(--brand-tint); padding:11px 13px; margin-top:10px; }
+  .rutacard .rt { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:#1F5137; display:flex; align-items:center; gap:6px; }
+  .rutacard .rg { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:8px; }
+  .rutacard .rg div .l { font-size:9px; color:#4E7A5C; font-weight:700; }
+  .rutacard .rg div .v { font-size:12px; font-weight:800; color:#12331F; }
+  .rutacard .foot { font-size:9.5px; color:#4E7A5C; margin-top:8px; }
+  .crg { display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; padding:2px 0; }
+  .crg .gp { font-size:9.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#8C95A0; grid-column:1/-1; margin:4px 0 0; border-top:1px dashed #E2E6EA; padding-top:6px; }
+  .cchi { display:flex; align-items:center; gap:8px; font-size:11.5px; padding:4px 6px; border:1px solid #E2E6EA; border-radius:9px; background:#fff; }
+  .cchi.off { background:#FAFAFA; color:#98A1AE; }
+  .cchi input { accent-color:#3D7A4A; }
+  .cchi .cnt { margin-left:auto; font-size:9.5px; color:#8C95A0; font-weight:700; }
+  .sum { display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:4px 0 8px; }
+  .zone { border:1px solid #E2E6EA; border-radius:12px; padding:11px 13px; margin-top:10px; }
+  .zone .zt { font-size:11.5px; font-weight:800; display:flex; align-items:center; gap:6px; margin-bottom:8px; }
+  .zone .zt small { font-weight:400; color:#8C95A0; font-size:10px; }
+  .days { display:flex; gap:6px; flex-wrap:wrap; }
+  .days .d { width:26px; height:26px; border-radius:7px; border:1px solid #E2E6EA; background:#fff; font-size:10px; font-weight:700; color:#5F6B7A; display:flex; align-items:center; justify-content:center; }
+  .days .d.on { background:#3D7A4A; border-color:#3D7A4A; color:#fff; }
+  .callout { display:flex; gap:10px; align-items:flex-start; margin-top:10px; }
+  .callout .c { width:20px; height:20px; border-radius:50%; background:#B8860B; color:#fff; font-size:11px; font-weight:800; flex:none; display:flex; align-items:center; justify-content:center; margin-top:1px; }
+  .callout .ct { font-size:11.5px; color:var(--ink2); }
+  .callout .ct b { color:var(--ink); }
+  .connect { display:flex; gap:7px; align-items:center; border:1px dashed #B8860B; background:#FBF3DF; border-radius:12px; padding:8px 12px; font-size:11.5px; color:#7A5608; margin-top:10px; }
+  .connect b { color:#4A3404; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<a class="back" href="./index.html">&larr; Volver a Bocetos</a>
+<h1>Boceto — El flujo Ruta &rarr; Gu&iacute;a de Despacho que se entiende de una ojeada</h1>
+<div class="sub">La ruta se define una vez (clientes, cami&oacute;n, vendedor, d&iacute;as) y la gu&iacute;a de despacho la hereda. Ese encadenado ya existe en el c&oacute;digo, pero en la UI es invisible: el form de la gu&iacute;a pide cami&oacute;n, ruta, vendedor y clientes como si fueran datos sueltos, y el form de ruta guarda los clientes sin decir que son los que despu&eacute;s se cargan en la gu&iacute;a. Este boceto muestra <b>c&oacute;mo se ver&iacute;a en el app</b> si el proceso fuera el protagonista.</div>
+
+<h2>1. El problema <span class="tag">qu&eacute; se toca</span></h2>
+<div class="grid cols2">
+  <div class="card">
+    <b>En la Gu&iacute;a de Despacho (hoy):</b>
+    <ul>
+      <li>Los campos <b>Cam&iacute;on, Ruta, Vendedor y Clientes a visitar</b> se ven como 4 decisiones independientes, cada una con su selector.</li>
+      <li>La l&oacute;gica <code>preseleccionarDeRuta()</code> ya precarga vendedor y clientes, pero el usuario <b>no ve que eso vino de la ruta</b>: parece magia. No se muestra ni el vendedor ni los clientes que la ruta aporta hasta abrir cada selector.</li>
+      <li>No hay idea de orden: no se ve que primero se define un recorrido y despu&eacute;s se emite el viaje.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <b>En Flota y Rutas (hoy):</b>
+    <ul>
+      <li>El form de ruta mezcla todo en una grilla: nombre, vendedor, frecuencias, km, cami&oacute;n y clientes de golpe.</li>
+      <li>No se dice <b>qu&eacute; hace cada parte</b>: “datos del recorrido” vs. “clientes que se visitan” (y que despu&eacute;s la gu&iacute;a precarga).</li>
+      <li>Elegir clientes no muestra de qu&eacute; zona son ni avisa si ya est&aacute;n en otra ruta.</li>
+    </ul>
+    <p class="cap"><b>Meta de la UI:</b> que “primero se dise&ntilde;a la ruta, despu&eacute;s se emite el viaje con esa ruta” se lea solo mirando las pantallas.</p>
+  </div>
+</div>
+
+<h2>2. El encadenado de datos <span class="tag b">c&oacute;mo se conecta</span></h2>
+<table class="bt">
+  <tr><th>Se define en la Ruta <code>POST /api/rutas</code></th><th>La Gu&iacute;a de Despacho lo hereda</th><th>C&oacute;mo se ve en la UI propuesta</th></tr>
+  <tr><td><b>camion_id</b> (y <code>ruta_defecto</code> del cami&oacute;n)</td><td>Cam&iacute;on, y la ruta se autocompleta al elegir cami&oacute;n</td><td>Paso 1 · debajo del selector, tag <span class="chip green">heredado de la ruta</span></td></tr>
+  <tr><td><b>vendedor_asignado</b> / <b>vendedores</b></td><td>Vendedor del viaje</td><td>Paso 1 · selector precargado con aviso «de la ruta San Jos&eacute; Norte»</td></tr>
+  <tr><td><b>cliente_ids</b></td><td>Clientes a visitar, en orden geogr&aacute;fico</td><td>Paso 3 · checklist precargado con contador y aviso de origen</td></tr>
+  <tr><td><b>dias_frecuencia</b></td><td>Sugerencia de fecha de salida del viaje</td><td>Paso 1 · fecha sugerida: «hoy (mi&eacute;rcoles) coincide con L-V»</td></tr>
+</table>
+
+<h2>3. Storyboard — c&oacute;mo se ver&iacute;a en el app <span class="tag alt">UI final</span></h2>
+<p class="cap" style="margin:0 0 4px">Las dos pantallas del grupo Despacho con el flujo a la vista. Se agreg&oacute; una franja de proceso arriba y el form de la gu&iacute;a se orden&oacute; en 4 pasos numerados; el form de ruta separa «recorrido» de «clientes».</p>
+
+<!-- ============================================================ -->
+<!-- PANTALLA A: DESPACHO › GUÍAS DE DESPACHO (form en 4 pasos) -->
+<!-- ============================================================ -->
+<div class="app">
+  <div class="side">
+    <div class="logo"><div class="egg">🥚</div><div><b>Granja</b><span>Don Paco</span></div></div>
+    <div class="lbl">M&oacute;dulos</div>
+    <div class="nav"><span class="ic">$$</span> Finanzas</div>
+    <div class="nav on"><span class="ic">📦</span> Operaciones y Bodegas</div>
+    <div class="nav"><span class="ic">👥</span> Clientes</div>
+    <div class="nav dim"><span class="ic">🏭</span> Productos</div>
+    <div class="lbl" style="padding-top:18px">Office</div>
+    <div class="user"><div class="av">AD</div><div><b>Administrador</b><span>Admin · Granja Principal</span></div></div>
+  </div>
+  <div class="body">
+    <div class="top">
+      <div class="search">🔍&nbsp; “guia” · “camion” · “ruta” &rarr; Despacho&hellip;</div>
+      <div class="sp"><span class="moon">🌙</span><span class="nuevo">+ Nuevo</span><div class="est">AD</div></div>
+    </div>
+    <div class="crumb">Operaciones y Bodegas <span>&gt;</span> Despacho <span>&gt;</span> <b>Gu&iacute;as de Despacho</b></div>
+    <div class="content">
+      <div class="tabs">
+        <button>Resumen</button><button>Granja</button><button>Bodega</button><button class="on">Despacho</button><button>Ventas</button>
+      </div>
+      <div class="tabsrow2">
+        <span class="rowlabel">Despacho</span>
+        <button class="on">Gu&iacute;as de Despacho</button><button>Flota y Rutas</button><button>Etiquetas</button><button>Pesos</button>
+      </div>
+
+      <!-- franja de proceso (nueva) -->
+      <div class="proc">
+        <span class="pt">Proceso</span>
+        <span class="ps done"><span class="ic">🗺</span> Ruta definida</span><span class="arr">&rarr;</span>
+        <span class="ps here"><span class="ic">📋</span> Gu&iacute;a de Despacho</span><span class="arr">&rarr;</span>
+        <span class="ps"><span class="ic">🛒</span> En ruta · caja</span><span class="arr">&rarr;</span>
+        <span class="ps"><span class="ic">✅</span> Cierre y cuadre</span>
+      </div>
+
+      <div class="viewhead">
+        <div><h1>Gu&iacute;as de Despacho</h1><div class="sub">El viaje de hoy · 14 etiquetas EnBodega listas (28 ct) · rutas configuradas en Flota y Rutas</div></div>
+        <div style="display:flex;gap:8px"><button class="btn">🗺 Nueva Ruta en Flota y Rutas</button><button class="btn brand">+ Emitir Gu&iacute;a de Despacho</button></div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi"><div class="l">Etiquetas EnBodega</div><div class="v">14</div><div class="d">28 ct · listas para cargar</div></div>
+        <div class="kpi"><div class="l">Gu&iacute;as activas</div><div class="v">1</div><div class="d">GD-20261008-2 por cargar</div></div>
+        <div class="kpi"><div class="l">En ruta hoy</div><div class="v">60</div><div class="d">ct cargados</div></div>
+        <div class="kpi"><div class="l">Vendido hoy</div><div class="v">—</div><div class="d">a&uacute;n sin ventas</div></div>
+      </div>
+
+      <!-- FORM EMITIR GUÍA EN 4 PASOS -->
+      <div class="steps">
+        <div class="step">
+          <div class="step-h"><span class="n">1</span><b>Cam&iacute;on y ruta</b><small>qui&eacute;n sale y con qu&eacute; recorrido</small></div>
+          <div class="step-b">
+            <div class="frow">
+              <div class="fld"><label>Cami&oacute;n *</label>
+                <select><option disabled selected>Cami&oacute;n Ruta 10 (CR-10 · 100 cap.)</option></select>
+                <div class="hint">Al elegir cami&oacute;n se completa la ruta por defecto.</div>
+              </div>
+              <div class="fld"><label>Ruta</label>
+                <select><option selected>San Jos&eacute; Norte</option><option>Alajuela Sur</option><option>Sin ruta espec&iacute;fica</option></select>
+                <div class="hint src">✓ De la ruta vienen vendedor, clientes y d&iacute;as.</div>
+              </div>
+              <div class="fld"><label>Fecha de salida sugerida</label>
+                <input value="Hoy · mi&eacute;rcoles — coincide con L-V" readonly class="dim">
+                <div class="hint">Seg&uacute;n <code>dias_frecuencia</code> de la ruta.</div>
+              </div>
+            </div>
+            <div class="rutacard">
+              <div class="rt">🗺 Ruta heredada — San Jos&eacute; Norte <span class="chip green">configurada en Flota y Rutas</span></div>
+              <div class="rg">
+                <div><div class="l">Vendedor</div><div class="v">Mar&iacute;a</div></div>
+                <div><div class="l">Cami&oacute;n</div><div class="v">Ruta 10 · 100 ct</div></div>
+                <div><div class="l">D&iacute;as</div><div class="v">L-V</div></div>
+                <div><div class="l">Clientes a visitar</div><div class="v">12</div></div>
+              </div>
+              <div class="foot">45 km aprox. · estos datos se precargan en los pasos que siguen; pod&eacute;s ajustarlos ac&aacute;.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-h"><span class="n">2</span><b>Carga del cami&oacute;n</b><small>etiquetas EnBodega y peso de salida · 14 listas (28 ct)</small></div>
+          <div class="step-b">
+            <div class="sum">
+              <span class="chip green">Huevos - Grande · 30 ct ×2</span>
+              <span class="chip">Huevos - Mediano · 20 ct</span>
+              <span class="chip">Gallinaza · 10 sacos</span>
+              <span class="chip blue">Cargar todas</span>
+            </div>
+            <div class="frow">
+              <div class="fld"><label>Peso de salida (kg)</label><input placeholder="Ej: 2 400" readonly class="dim"></div>
+              <div class="fld"><label>Total cargado</label><select><option selected>80 ct (3 etiquetas)</option></select></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-h"><span class="n">3</span><b>Clientes a visitar</b><small>12 precargados de la ruta, en orden geogr&aacute;fico</small>
+            <span class="src">de la ruta San Jos&eacute; Norte</span></div>
+          <div class="step-b">
+            <div class="sum">
+              <span class="chip green">12 clientes de la ruta</span>
+              <span class="chip gray">Cambiar: ver todos los clientes</span>
+            </div>
+            <div class="crg">
+              <div class="gp">San Jos&eacute; › Escaz&uacute; · 2</div>
+              <div class="cchi"><input type="checkbox" checked> Super El Colono <span class="cnt">60 ct</span></div>
+              <div class="cchi"><input type="checkbox" checked> Ferreter&iacute;a San Rafael <span class="cnt">20 ct</span></div>
+              <div class="gp">San Jos&eacute; › Desamparados · 1</div>
+              <div class="cchi"><input type="checkbox" checked> Pulper&iacute;a La Amiga <span class="cnt">30 ct</span></div>
+              <div class="cchi off"><input type="checkbox"> Restaurante La Casona <span class="cnt">Alajuela · 80 km</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-h"><span class="n">4</span><b>Revisar y emitir</b><small>resumen del viaje antes de crearlo</small></div>
+          <div class="step-b">
+            <div class="sum">
+              <div class="card" style="flex:1; min-width:260px; padding:11px 13px; box-shadow:none;">
+                <div class="rg" style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; max-width:560px;">
+                  <div><div class="l" style="font-size:9px; color:#8C95A0;">Cami&oacute;n</div><div class="v" style="font-size:12px; font-weight:800;">Ruta 10 · 100 ct</div></div>
+                  <div><div class="l">Ruta</div><div class="v" style="font-size:12px; font-weight:800;">San Jos&eacute; Norte</div></div>
+                  <div><div class="l">Vendedor</div><div class="v">Mar&iacute;a</div></div>
+                  <div><div class="l">Carga</div><div class="v">80 ct</div></div>
+                  <div><div class="l">Clientes</div><div class="v">11</div></div>
+                  <div><div class="l">Fecha</div><div class="v">hoy</div></div>
+                </div>
+              </div>
+              <button class="btn brand" style="height:34px;">Emitir Gu&iacute;a de Despacho</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RESULTADO: la guía emitida con su ruta -->
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-head"><span class="panel-title">Gu&iacute;as de despacho</span><small>ciclo de hoy</small>
+          <span class="tools"><span class="chip amber">1 EnRuta</span><button class="btn sm">Refrescar</button></span></div>
+        <table class="t">
+          <tr><th>Gu&iacute;a</th><th>Cami&oacute;n</th><th>Ruta</th><th>Cargado</th><th>Avance</th><th>Estado</th><th>Acciones</th></tr>
+          <tr class="on">
+            <td class="num"><b>GD-20261008-3</b></td>
+            <td>Ruta 10</td>
+            <td><span class="chip green">San Jos&eacute; Norte</span></td>
+            <td class="num">80 ct</td><td class="num">0%</td>
+            <td><span class="chip blue">Por cargar</span></td>
+            <td><b style="color:#3D7A4A">Ver detalle + timeline &rarr;</b></td>
+          </tr>
+          <tr><td class="num">GD-20261008-2</td><td>Ruta 9</td><td><span class="chip">Alajuela Sur</span></td><td class="num">60 ct</td><td class="num">20%</td><td><span class="chip amber">EnRuta</span></td><td><b style="color:#3D7A4A">Ver detalle &rarr;</b></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="callout"><div class="c">1</div><div class="ct">Al elegir <b>cami&oacute;n</b> se autocompleta la <b>ruta</b> (por <code>ruta_defecto</code>); al elegir la ruta aparece la tarjeta verde que muestra <b>qu&eacute; hereda el viaje</b>. Ya no hay campos que “se llenan solos” sin explicaci&oacute;n: el origen se declara (<span class="chip green">heredado de la ruta</span>).</div></div>
+<div class="callout"><div class="c">2</div><div class="ct">El paso 3 <b>precarga los clientes de la ruta</b> en orden geogr&aacute;fico (agrupados por provincia &rarr; cant&oacute;n) y permite cambiarlos a “ver todos los clientes”. El contador y el aviso de origen muestran que eso no se escribe a mano: se hereda.</div></div>
+<div class="callout"><div class="c">3</div><div class="ct">El <b>paso 4</b> sintetiza el viaje (cami&oacute;n · ruta · vendedor · carga · clientes · fecha) antes de emitir, y la gu&iacute;a creada queda en la tabla <b>con el chip de su ruta</b>.</div></div>
+
+<!-- ============================================================ -->
+<!-- PANTALLA B: DESPACHO › FLOTA Y RUTAS (forms por zonas) -->
+<!-- ============================================================ -->
+<div class="app">
+  <div class="side">
+    <div class="logo"><div class="egg">🥚</div><div><b>Granja</b><span>Don Paco</span></div></div>
+    <div class="lbl">M&oacute;dulos</div>
+    <div class="nav"><span class="ic">$$</span> Finanzas</div>
+    <div class="nav on"><span class="ic">📦</span> Operaciones y Bodegas</div>
+    <div class="nav"><span class="ic">👥</span> Clientes</div>
+    <div class="nav dim"><span class="ic">🏭</span> Productos</div>
+    <div class="lbl" style="padding-top:18px">Office</div>
+    <div class="user"><div class="av">AD</div><div><b>Administrador</b><span>Admin · Granja Principal</span></div></div>
+  </div>
+  <div class="body">
+    <div class="top">
+      <div class="search">🔍&nbsp; “guia” · “camion” · “ruta” &rarr; Despacho&hellip;</div>
+      <div class="sp"><span class="moon">🌙</span><span class="nuevo">+ Nuevo</span><div class="est">AD</div></div>
+    </div>
+    <div class="crumb">Operaciones y Bodegas <span>&gt;</span> Despacho <span>&gt;</span> <b>Flota y Rutas</b></div>
+    <div class="content">
+      <div class="tabs">
+        <button>Resumen</button><button>Granja</button><button>Bodega</button><button class="on">Despacho</button><button>Ventas</button>
+      </div>
+      <div class="tabsrow2">
+        <span class="rowlabel">Despacho</span>
+        <button>Gu&iacute;as de Despacho</button><button class="on">Flota y Rutas</button><button>Etiquetas</button><button>Pesos</button>
+      </div>
+
+      <div class="proc">
+        <span class="pt">Proceso</span>
+        <span class="ps here"><span class="ic">🗺</span> Ruta definida</span><span class="arr">&rarr;</span>
+        <span class="ps"><span class="ic">📋</span> Gu&iacute;a de Despacho</span><span class="arr">&rarr;</span>
+        <span class="ps"><span class="ic">🛒</span> En ruta · caja</span><span class="arr">&rarr;</span>
+        <span class="ps"><span class="ic">✅</span> Cierre y cuadre</span>
+      </div>
+
+      <div class="viewhead">
+        <div><h1>Flota y Rutas</h1><div class="sub">Qui&eacute;nes salen y con qu&eacute; recorrido · lo que defin&iacute;s ac&aacute; lo precarga la Gu&iacute;a de Despacho</div></div>
+        <div style="display:flex;gap:8px"><button class="btn">+ Cami&oacute;n</button><button class="btn gold">+ Nueva Ruta</button></div>
+      </div>
+
+      <div class="twin">
+        <!-- PANEL CAMIONES -->
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Camiones</span><small>3 registrados · 1 con gu&iacute;a activa</small></div>
+          <table class="t">
+            <tr><th>Nombre</th><th>Placa</th><th>Ruta</th><th>Capacidad</th><th></th></tr>
+            <tr><td><b>Ruta 10</b></td><td>CR-10</td><td><span class="chip green">San Jos&eacute; Norte</span></td><td class="num">100 ct</td><td style="color:#3D7A4A">Editar</td></tr>
+            <tr><td>Ruta 9</td><td>CR-9X</td><td><span class="chip green">Alajuela Sur</span></td><td class="num">100 ct</td><td style="color:#3D7A4A">Editar</td></tr>
+            <tr><td>Cami&oacute;n Jhon</td><td>ABC-123</td><td><span class="chip gray">Sin ruta</span></td><td class="num">500 ct</td><td style="color:#3D7A4A">Editar</td></tr>
+          </table>
+          <div class="zone">
+            <div class="zt">+ Alta / edici&oacute;n de cami&oacute;n <small>la ruta por defecto es la que la gu&iacute;a autocompleta</small></div>
+            <div class="frow">
+              <div class="fld"><label>Nombre</label><input value="Ruta 10" readonly class="dim"></div>
+              <div class="fld"><label>Placa</label><input value="CR-10" readonly class="dim"></div>
+              <div class="fld"><label>Capacidad</label><input value="100 ct" readonly class="dim"></div>
+              <div class="fld"><label>Ruta por defecto</label>
+                <select><option selected>San Jos&eacute; Norte</option><option>Alajuela Sur</option><option>Sin ruta</option></select></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PANEL RUTAS -->
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Rutas</span><small>el recorrido · vendedores · clientes que visita</small></div>
+          <table class="t">
+            <tr><th>Ruta</th><th>Cam&iacute;on</th><th>Vendedor</th><th>Clientes</th><th></th></tr>
+            <tr><td><b>San Jos&eacute; Norte</b></td><td>Ruta 10</td><td>Mar&iacute;a</td><td class="num">12</td><td style="color:#3D7A4A">Editar</td></tr>
+            <tr><td>Alajuela Sur</td><td>Ruta 9</td><td>Carlos</td><td class="num">9</td><td style="color:#3D7A4A">Editar</td></tr>
+          </table>
+          <div class="zone">
+            <div class="zt">+ Nueva ruta <small>lo que ac&aacute; se guarda es lo que la gu&iacute;a precarga</small></div>
+
+            <div class="zone" style="background:#F8FAFC; border-style:dashed;">
+              <div class="zt">📐 Datos del recorrido</div>
+              <div class="frow">
+                <div class="fld"><label>Nombre de la ruta *</label><input placeholder="Ej: San Jos&eacute; Norte"></div>
+                <div class="fld"><label>Cami&oacute;n</label><select><option>Ruta 10 (100 ct)</option><option>Ruta 9 (100 ct)</option></select></div>
+                <div class="fld"><label>Vendedor *</label><select><option>Mar&iacute;a</option><option>Carlos</option><option>Comercial Central</option></select></div>
+              </div>
+              <div class="frow" style="margin-top:10px">
+                <div class="fld"><label>D&iacute;as de frecuencia</label>
+                  <div class="days"><span class="d on">L</span><span class="d on">M</span><span class="d on">M</span><span class="d on">J</span><span class="d on">V</span><span class="d">S</span><span class="d">D</span></div>
+                </div>
+                <div class="fld"><label>Km aprox.</label><input value="45" readonly class="dim" style="width:120px"></div>
+              </div>
+            </div>
+
+            <div class="zone" style="background:#FBF3DF; border-color:#EBD08F;">
+              <div class="zt">📍 Clientes a visitar <span class="chip gold">12 seleccionados</span><small style="margin-left:auto">&rarr; se precargan en la Gu&iacute;a de Despacho</small></div>
+              <div class="crg" style="grid-template-columns:1fr;">
+                <div class="gp">San Jos&eacute; › Escaz&uacute; · 2</div>
+                <div class="cchi"><input type="checkbox" checked> Super El Colono <span class="cnt">60 ct</span></div>
+                <div class="cchi"><input type="checkbox" checked> Ferreter&iacute;a San Rafael <span class="cnt">20 ct</span></div>
+                <div class="gp">Cartago › Para&iacute;so · 1</div>
+                <div class="cchi off"><input type="checkbox"> Restaurante La Casona <span class="cnt">⚠ ya est&aacute; en Alajuela Sur</span></div>
+                <div class="cchi"><input type="checkbox" checked> Abastecedor La Angostura <span class="cnt">25 ct</span></div>
+              </div>
+              <div class="card" style="margin-top:10px; padding:8px 10px; background:#fff; border:1px dashed #B8860B; box-shadow:none;">
+                <b style="font-size:11px;">C&oacute;mo se conecta:</b>
+                <span style="font-size:10.5px; color:#5F6B7A;"> elegir esta ruta en la Gu&iacute;a de Despacho precarga vendedor, cami&oacute;n, los d&iacute;as y estos 12 clientes en orden geogr&aacute;fico.</span>
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; margin-top:12px; gap:8px">
+              <button class="btn">Cancelar</button><button class="btn gold">Guardar ruta</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="callout"><div class="c">4</div><div class="ct">El form de ruta separa <b>datos del recorrido</b> (nombre, cami&oacute;n, vendedor, d&iacute;as, km) de <b>clientes a visitar</b>, con contador y agrupaci&oacute;n geogr&aacute;fica; avisa si un cliente ya est&aacute; en otra ruta.</div></div>
+<div class="callout"><div class="c">5</div><div class="ct">La tarjeta ámbar dice <b>qu&eacute; va a hacer el sistema con esto</b>: la gu&iacute;a precargar&aacute; vendedor, cami&oacute;n, d&iacute;as y clientes. “Definir ruta” y “emitir viaje” quedan conectados en la pantalla, no solo en la base de datos.</div></div>
+
+<h2>4. Cambios de UI, mapeados al c&oacute;digo <span class="tag">para implementar</span></h2>
+<table class="bt">
+  <tr><th>#</th><th>Cambio</th><th>D&oacute;nde</th><th>Qu&eacute; agrega</th></tr>
+  <tr><td>1</td><td>Franja de proceso arriba de las dos vistas</td><td><code>Despacho.tsx</code> y <code>FlotaRutas.tsx</code></td><td>4 pastillas: Ruta definida &rarr; Gu&iacute;a &rarr; En ruta &rarr; Cierre; la del paso actual resaltada.</td></tr>
+  <tr><td>2</td><td>Form de la gu&iacute;a en 4 pasos numerados</td><td><code>Despacho.tsx</code> (crear gu&iacute;a)</td><td>Separadores con n&uacute;mero y subt&iacute;tulo; sin l&oacute;gica nueva, solo estructura visual.</td></tr>
+  <tr><td>3</td><td>Tarjeta «Ruta heredada»</td><td><code>Despacho.tsx</code></td><td>Al elegir ruta muestra vendedor, cami&oacute;n, d&iacute;as y N clientes que la ruta aporta (<code>preseleccionarDeRuta</code> ya los calcula).</td></tr>
+  <tr><td>4</td><td>Etiquetas de origen en campos autocompletados</td><td><code>Despacho.tsx</code></td><td>«de la ruta X» bajo vendedor/clientes; «del cami&oacute;n» bajo ruta autocompletada.</td></tr>
+  <tr><td>5</td><td>Clientes agrupados por geograf&iacute;a con contador</td><td><code>Despacho.tsx</code> (paso 3)</td><td>Reusa <code>clientesOrdenadosGeo</code> y <code>clientesPorProvincia</code> ya existentes; agrega el «12 clientes de la ruta / ver todos».</td></tr>
+  <tr><td>6</td><td>Fecha sugerida seg&uacute;n <code>dias_frecuencia</code></td><td><code>Despacho.tsx</code></td><td>Si hoy coincide con un d&iacute;a de la ruta sugiere «hoy»; si no, el pr&oacute;ximo d&iacute;a.</td></tr>
+  <tr><td>7</td><td>Form de ruta en dos zonas</td><td><code>FlotaRutas.tsx</code></td><td>«Datos del recorrido» (nombre, cami&oacute;n, vendedor, d&iacute;as, km) y «Clientes a visitar» (checklist geogr&aacute;fico + contador + aviso de otra ruta + tarjeta de conexi&oacute;n).</td></tr>
+  <tr><td>8</td><td>Chip de ruta en la tabla de gu&iacute;as</td><td><code>Despacho.tsx</code> (lista GD-)</td><td>Columna/etiqueta «Ruta» con el nombre heredado, para ver de un vistazo la cadena.</td></tr>
+</table>
+
+<h2>5. Alcance <span class="tag r">referencia, sin tocar c&oacute;digo</span></h2>
+<div class="card">
+  <p>Todos los cambios son <b>CSS/estructura + textos</b>, salvo la fecha sugerida (l&oacute;gica de 10 l&iacute;neas sobre <code>dias_frecuencia</code>) y el contador/agrupaci&oacute;n de clientes (reusa funciones que ya existen en <code>Despacho.tsx</code>). No cambia el contrato de <code>POST /api/rutas</code> ni <code>POST /api/logistica/guias</code>: los datos que se muestran como «heredados» ya viajan en el body guardado hoy.</p>
+  <p>Orden recomendado: primero <b>7+8</b> (Flota y Rutas y el chip de ruta, para que exista qué heredar a la vista), luego <b>2+3+4</b> (pasos, tarjeta y or&iacute;genes en la gu&iacute;a), luego <b>1+5+6</b> (franja, geograf&iacute;a y fecha).</p>
+</div>
+
+<div class="note"><b>Decisi&oacute;n a tomar con el due&ntilde;o:</b> los 4 pasos del form de la gu&iacute;a pueden mostrarse <b>siempre visibles y apilados</b> (como hoy, solo que numerados — <i>recomendado ac&aacute;</i>) o colapsarse como un wizard de a-uno-por-vez. El boceto muestra la versi&oacute;n apilada: no esconde campos ni obliga a clicks extra, y es la que reusa el form actual casi entero.</div>
+
+</div>
+</body>
+</html>

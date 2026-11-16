@@ -1,52 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { Tag, Plus, Search, QrCode, Check, X, Package, MapPin, Clock, CheckCircle, XCircle, Printer } from 'lucide-react';
+import { Tag, Search, QrCode, MapPin, Printer } from 'lucide-react';
 import { Etiqueta, User } from '../types';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
-import { Spinner } from './Spinner';
+import { sessionHeaders } from '../lib/session';
 
 interface EtiquetasProps {
   currentUser: User;
 }
 
+/**
+ * Etiquetas — trazabilidad y registro del peso neto medido por Bodega/Despacho.
+ *
+ * La Fase 12 le quitó la generación ad-hoc y los botones de mover estado: las
+ * etiquetas QR se generan en Bodega (Entradas › Alistamiento, `DespachoAdmin`)
+ * y su estado lo mueve el flujo real (carga en guía, venta en ruta). El peso
+ * neto se registra manualmente ahora; el mismo contrato admite origen Báscula.
+ */
 export default function Etiquetas({ currentUser }: EtiquetasProps) {
   const [etiquetas, setEtiquetas] = useState<Etiqueta[]>([]);
-  const [isCreating, setIsCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [catalogo, setCatalogo] = useState<{id:string;nombre:string}[]>([]);
-  const [tiposCarton, setTiposCarton] = useState<{id:string;nombre:string;unidades:number;estado:string}[]>([]);
-
-  // Form state
-  const [producto, setProducto] = useState('Huevos - Grande');
-  const [cantidad, setCantidad] = useState(30);
-  const [tipoCarton, setTipoCarton] = useState('');
-  const [pesoBruto, setPesoBruto] = useState(18);
-  const [pesoNeto, setPesoNeto] = useState(16.5);
-  const [granjaOrigen, setGranjaOrigen] = useState('Granja Principal');
-  const [galeronOrigen, setGaleronOrigen] = useState('');
-  const [clasificacion, setClasificacion] = useState('Grado A');
-  const [lote, setLote] = useState('');
-  const [ubicacion, setUbicacion] = useState('Granja');
-  const [cantidadEtiquetas, setCantidadEtiquetas] = useState(1);
 
   // Scan state
   const [scanCode, setScanCode] = useState('');
   const [scanResult, setScanResult] = useState<any>(null);
+  const [pesajeEtiqueta, setPesajeEtiqueta] = useState<Etiqueta | null>(null);
+  const [pesoKg, setPesoKg] = useState('');
+  const [guardandoPeso, setGuardandoPeso] = useState(false);
 
   const fetchEtiquetas = async () => {
     try {
-      const [res, cRes, tRes] = await Promise.all([fetch('/api/etiquetas'), fetch('/api/productos-catalogo'), fetch('/api/tipos-carton')]);
+      const res = await fetch('/api/etiquetas', { headers: sessionHeaders(currentUser.id) });
       if (res.ok) setEtiquetas(await res.json());
-      if (cRes.ok) setCatalogo(await cRes.json());
-      if (tRes.ok) {
-        const tipos = await tRes.json();
-        setTiposCarton(tipos);
-        if (!tipos.length) { setTipoCarton(''); return; }
-        const activo = tipos.find((t: any) => t.estado === 'Activo') || tipos[0];
-        setTipoCarton(activo.id);
-        setCantidad(Number(activo.unidades) || 30);
-      }
     } catch (err) { toast.error('Error al cargar etiquetas.'); }
   };
 
@@ -85,58 +70,32 @@ export default function Etiquetas({ currentUser }: EtiquetasProps) {
     printWindow.document.close();
   };
 
-  const handleGenerar = async () => {
-    if (cantidadEtiquetas === 1) {
-      setLoading(true);
-      try {
-        const res = await fetch('/api/etiquetas/generar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ producto, cantidad, pesoBruto, pesoNeto, granjaOrigen, galeronOrigen, clasificacion, lote, ubicacion, tipoCarton })
-        });
-        if (res.ok) { await fetchEtiquetas(); setIsCreating(false); toast.success('Etiqueta generada.'); }
-        else { const data = await res.json(); toast.error(`Error: ${data.error}`); }
-      } catch (err: any) { toast.error(`Error: ${err.message}`); }
-      setLoading(false);
-    } else {
-      // Generate batch
-      setLoading(true);
-      try {
-        const batch = Array.from({ length: cantidadEtiquetas }, () => ({
-producto, cantidad, pesoBruto, pesoNeto, granjaOrigen, galeronOrigen, clasificacion, lote, ubicacion, tipoCarton
-        }));
-        const res = await fetch('/api/etiquetas/generar-lote', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ etiquetas: batch })
-        });
-        if (res.ok) { await fetchEtiquetas(); setIsCreating(false); toast.success(`${cantidadEtiquetas} etiquetas generadas.`); }
-      } catch (err: any) { toast.error(`Error: ${err.message}`); }
-      setLoading(false);
-    }
-  };
-
   const handleEscanear = async () => {
     if (!scanCode.trim()) return;
     try {
-      const res = await fetch(`/api/etiquetas/trazabilidad/${encodeURIComponent(scanCode.trim())}`);
+      const res = await fetch(`/api/etiquetas/trazabilidad/${encodeURIComponent(scanCode.trim())}`, { headers: sessionHeaders(currentUser.id) });
       if (res.ok) { setScanResult(await res.json()); }
       else { setScanResult(null); toast.error('Etiqueta no encontrada.'); }
     } catch (err: any) { toast.error(`Error: ${err.message}`); }
   };
 
-  const handleActualizarEstado = async (codigo: string, nuevoEstado: string) => {
+  const guardarPeso = async () => {
+    if (!pesajeEtiqueta) return;
+    const peso = Number(pesoKg);
+    if (!Number.isFinite(peso) || peso <= 0) return toast.error('Escriba el peso neto en kg.');
+    setGuardandoPeso(true);
     try {
-      await fetch('/api/etiquetas/escanear', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codigoUnico: codigo, nuevoEstado, ubicacion: nuevoEstado === 'EnBodega' ? 'Bodega Central' : nuevoEstado === 'Cargada' ? 'Camión Ruta 1' : undefined })
+      const res = await fetch(`/api/etiquetas/${pesajeEtiqueta.id}/peso-neto`, {
+        method: 'POST', headers: sessionHeaders(currentUser.id, true),
+        body: JSON.stringify({ pesoKg: peso, origen: 'Manual' }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo guardar el pesaje');
+      toast.success(`Peso registrado: ${peso.toFixed(2)} kg`);
+      setPesajeEtiqueta(null); setPesoKg('');
       await fetchEtiquetas();
-      if (scanResult?.etiqueta?.codigoUnico === codigo) {
-        handleEscanear(); // Refresh scan result
-      }
-    } catch (err: any) { toast.error(`Error: ${err.message}`); }
+    } catch (error: any) { toast.error(error.message); }
+    finally { setGuardandoPeso(false); }
   };
 
   const getEstadoColor = (estado: string) => {
@@ -166,14 +125,7 @@ producto, cantidad, pesoBruto, pesoNeto, granjaOrigen, galeronOrigen, clasificac
             <Tag className="w-6 h-6 mr-2 text-purple-600" />
             Etiquetas y Trazabilidad
           </h2>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">Generar, escanear y rastrear etiquetas de cartones.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setIsCreating(!isCreating)}
-            className={cn("flex items-center justify-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm",
-              isCreating ? "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200" : "bg-purple-600 text-white hover:bg-purple-700")}>
-            {isCreating ? <><X className="w-5 h-5 mr-2" /> Cancelar</> : <><Plus className="w-5 h-5 mr-2" /> Nueva Etiqueta</>}
-          </button>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">Registre el peso neto real en kg, rastree las etiquetas y consulte su recorrido. La generación ocurre en Bodega › Entradas › Alistamiento.</p>
         </div>
       </div>
 
@@ -185,8 +137,7 @@ producto, cantidad, pesoBruto, pesoNeto, granjaOrigen, galeronOrigen, clasificac
             placeholder="Escanear o escribir código de etiqueta..."
             className="flex-1 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-2.5 text-sm focus:border-purple-500 outline-none text-neutral-800 dark:text-white placeholder:text-neutral-400"
             onKeyDown={e => e.key === 'Enter' && handleEscanear()} />
-          <button onClick={handleEscanear}
-            className="px-4 py-2.5 bg-purple-600 text-white rounded-xl font-bold text-sm hover:bg-purple-700 transition-colors">
+          <button onClick={handleEscanear} className="btn-primary">
             Buscar
           </button>
         </div>
@@ -200,120 +151,26 @@ producto, cantidad, pesoBruto, pesoNeto, granjaOrigen, galeronOrigen, clasificac
               </div>
               <div><span className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Ubicación</span><p className="font-medium text-neutral-700 dark:text-neutral-300">{scanResult.etiqueta.ubicacionActual}</p></div>
               <div><span className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Peso Neto</span><p className="font-bold text-neutral-800 dark:text-white">{scanResult.etiqueta.pesoNeto ? `${scanResult.etiqueta.pesoNeto} kg` : 'N/A'}</p></div>
+              {scanResult.etiqueta.pesoNeto && <div><span className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Registro del peso</span><p className="font-medium text-neutral-700 dark:text-neutral-300">{scanResult.etiqueta.pesoOrigen || 'Manual'} · {scanResult.etiqueta.pesoRegistradoEn ? new Date(scanResult.etiqueta.pesoRegistradoEn).toLocaleString() : 'fecha anterior'}</p></div>}
               <div><span className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Granja</span><p className="font-medium text-neutral-700 dark:text-neutral-300">{scanResult.etiqueta.granjaOrigen || 'N/A'}</p></div>
               <div><span className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Clasificación</span><p className="font-medium text-neutral-700 dark:text-neutral-300">{scanResult.etiqueta.clasificacion || 'N/A'}</p></div>
               <div><span className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Lote</span><p className="font-medium text-neutral-700 dark:text-neutral-300">{scanResult.etiqueta.lote || 'N/A'}</p></div>
             </div>
-            <div className="mt-3 flex gap-2">
-              {scanResult.etiqueta.estado === 'Generada' && (
-                <button onClick={() => handleActualizarEstado(scanResult.etiqueta.codigoUnico, 'EnBodega')}
-                  className="px-3 py-1.5 text-white rounded-lg text-xs font-bold" style={{ background: 'var(--brand-secondary)' }}>Mover a Bodega</button>
-              )}
-              {scanResult.etiqueta.estado === 'EnBodega' && (
-                <button onClick={() => handleActualizarEstado(scanResult.etiqueta.codigoUnico, 'Cargada')}
-                  className="px-3 py-1.5 bg-purple-500 text-white rounded-lg text-xs font-bold hover:bg-purple-600">Cargar a Camión</button>
-              )}
-              {scanResult.etiqueta.estado === 'Cargada' && (
-                <button onClick={() => handleActualizarEstado(scanResult.etiqueta.codigoUnico, 'Entregada')}
-                  className="px-3 py-1.5 text-white rounded-lg text-xs font-bold" style={{ background: 'var(--brand-primary)' }}>Marcar Entregada</button>
-              )}
-            </div>
+            <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">La trazabilidad se mueve con el flujo real (carga en guía, venta en ruta) — no hay pasos manuales.</p>
           </div>
         )}
       </div>
 
-      {/* Create Form */}
-      {isCreating && (
-        <div className="bg-neutral-50 dark:bg-neutral-900 p-4 md:p-6 rounded-3xl animate-in slide-in-from-top-4 border border-neutral-200 dark:border-neutral-700">
-          <h3 className="font-bold text-lg text-neutral-800 dark:text-white mb-4">Generar Nueva Etiqueta</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Producto</label>
-              <select value={producto} onChange={e => setProducto(e.target.value)}
-                className="w-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm focus:border-purple-500 outline-none text-neutral-800 dark:text-white">
-                {catalogo.length > 0 ? catalogo.map(p => <option key={p.id}>{p.nombre}</option>) : (
-                  <>
-                    <option>Huevos - Grande</option>
-                    <option>Huevos - Mediano</option>
-                    <option>Huevos - Pequeño</option>
-                    <option>Gallinaza</option>
-                  </>
-                )}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Tipo de cartón</label>
-              <select value={tipoCarton} onChange={e => {
-                const t = tiposCarton.find(x => x.id === e.target.value);
-                setTipoCarton(e.target.value);
-                if (t) setCantidad(Number(t.unidades) || cantidad);
-              }}
-                className="w-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm focus:border-purple-500 outline-none text-neutral-800 dark:text-white">
-                {tiposCarton.filter(t => t.estado === 'Activo').map(t => <option key={t.id} value={t.id}>{t.nombre} ({t.unidades} uds)</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Cantidad (unidades)</label>
-              <input type="number" min="1" value={cantidad} onChange={e => setCantidad(Number(e.target.value))}
-                className="w-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm focus:border-purple-500 outline-none text-neutral-800 dark:text-white" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Clasificación</label>
-              <select value={clasificacion} onChange={e => setClasificacion(e.target.value)}
-                className="w-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm focus:border-purple-500 outline-none text-neutral-800 dark:text-white">
-                <option>Grado A</option>
-                <option>Grado B</option>
-                <option>Grado C</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Peso Bruto (kg)</label>
-              <input type="number" step="0.1" value={pesoBruto} onChange={e => setPesoBruto(Number(e.target.value))}
-                className="w-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm focus:border-purple-500 outline-none text-neutral-800 dark:text-white" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Peso Neto (kg)</label>
-              <input type="number" step="0.1" value={pesoNeto} onChange={e => setPesoNeto(Number(e.target.value))}
-                className="w-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm focus:border-purple-500 outline-none text-neutral-800 dark:text-white" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Ubicación Inicial</label>
-              <select value={ubicacion} onChange={e => setUbicacion(e.target.value)}
-                className="w-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm focus:border-purple-500 outline-none text-neutral-800 dark:text-white">
-                <option>Granja</option>
-                <option>Bodega Central</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Granja Origen</label>
-              <input type="text" value={granjaOrigen} onChange={e => setGranjaOrigen(e.target.value)}
-                className="w-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm focus:border-purple-500 outline-none text-neutral-800 dark:text-white" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Galerón Origen</label>
-              <input type="text" value={galeronOrigen} onChange={e => setGaleronOrigen(e.target.value)}
-                className="w-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm focus:border-purple-500 outline-none text-neutral-800 dark:text-white placeholder:text-neutral-400" placeholder="Opcional" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Lote</label>
-              <input type="text" value={lote} onChange={e => setLote(e.target.value)}
-                className="w-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm focus:border-purple-500 outline-none text-neutral-800 dark:text-white placeholder:text-neutral-400" placeholder="Opcional" />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Cantidad de Etiquetas</label>
-              <input type="number" min="1" max="100" value={cantidadEtiquetas} onChange={e => setCantidadEtiquetas(Number(e.target.value))}
-                className="w-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm focus:border-purple-500 outline-none text-neutral-800 dark:text-white" />
-            </div>
-          </div>
-          <div className="mt-4 flex justify-end">
-            <button onClick={handleGenerar} disabled={loading}
-              className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-bold text-sm hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center">
-                {loading ? <Spinner className="mr-2" /> : <Tag className="w-4 h-4 mr-2" />}
-              Generar {cantidadEtiquetas > 1 ? `${cantidadEtiquetas} Etiquetas` : 'Etiqueta'}
-            </button>
-          </div>
+      {pesajeEtiqueta && <div className="fixed inset-0 z-50 bg-black/40 p-4 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="pesaje-title">
+        <div className="w-full max-w-md rounded-2xl bg-white dark:bg-neutral-800 p-5 shadow-xl space-y-4">
+          <div><h3 id="pesaje-title" className="text-lg font-bold text-neutral-900 dark:text-white">Registrar peso neto</h3><p className="text-sm text-neutral-500">{pesajeEtiqueta.codigoUnico} · {pesajeEtiqueta.producto}</p></div>
+          <label className="block text-sm font-semibold text-neutral-700 dark:text-neutral-200">Peso neto medido (kg)
+            <input autoFocus type="number" min="0.01" step="0.01" value={pesoKg} onChange={e => setPesoKg(e.target.value)} onKeyDown={e => e.key === 'Enter' && guardarPeso()} className="mt-1 w-full rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 px-3 py-3 text-lg" placeholder="Ej. 29.50" />
+          </label>
+          <p className="text-xs text-neutral-500">Ingrese el valor mostrado por la báscula. El registro queda asociado al usuario y la hora.</p>
+          <div className="flex justify-end gap-2"><button onClick={() => setPesajeEtiqueta(null)} className="rounded-xl px-4 py-2 text-sm font-semibold text-neutral-600">Cancelar</button><button disabled={guardandoPeso} onClick={guardarPeso} className="btn-primary">{guardandoPeso ? 'Guardando…' : 'Guardar pesaje'}</button></div>
         </div>
-      )}
+      </div>}
 
       {/* List */}
       <div className="bg-white dark:bg-neutral-800 rounded-3xl shadow-sm border border-neutral-200 dark:border-neutral-700 overflow-hidden">
@@ -351,6 +208,7 @@ producto, cantidad, pesoBruto, pesoNeto, granjaOrigen, galeronOrigen, clasificac
                   </td>
                   <td className="px-6 py-4 text-neutral-500 dark:text-neutral-400 text-xs">{eq.fechaProduccion ? new Date(eq.fechaProduccion).toLocaleDateString() : '—'}</td>
                   <td className="px-6 py-4">
+                    {['Generada', 'EnBodega'].includes(eq.estado) && <button onClick={() => { setPesajeEtiqueta(eq); setPesoKg(eq.pesoNeto ? String(eq.pesoNeto) : ''); }} className="mr-2 rounded-lg bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100" title="Registrar peso neto">{eq.pesoNeto ? 'Actualizar kg' : 'Pesar'}</button>}
                     <button onClick={() => handlePrint(eq)} className="p-1.5 text-neutral-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-neutral-700 rounded-lg transition-colors" title="Imprimir etiqueta">
                       <Printer className="w-4 h-4" />
                     </button>

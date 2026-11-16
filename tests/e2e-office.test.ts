@@ -17,6 +17,7 @@ const ADMIN = 'adm-1';
 const SOCIO = 'soc-1';
 const COMERCIAL = 'com-1';
 const CAMIONERO = 'cam-1';
+const BODEGUERO = 'bod-1';
 
 const como = (id: string, req: request.Test) => req.set('x-user-id', id);
 
@@ -26,6 +27,7 @@ async function crearUsuarios(db: any) {
     { id: SOCIO, name: 'Socio', email: 'socio@gdp.cr', role: 'Socio' },
     { id: COMERCIAL, name: 'Comercial', email: 'comercial@gdp.cr', role: 'Comercial' },
     { id: CAMIONERO, name: 'Camionero', email: 'camionero@gdp.cr', role: 'Camionero' },
+    { id: BODEGUERO, name: 'Bodeguero', email: 'bodeguero@gdp.cr', role: 'Bodeguero' },
   ]);
 }
 
@@ -85,9 +87,11 @@ describe('E2E — Office (correo + documentos + vinculaciones)', () => {
     expectApi(comPost, 403, 'comercial no conecta');
   });
 
-  it('un rol sin office:view queda fuera', async () => {
-    const res = await como(CAMIONERO, request(app).get('/api/office/cuentas'));
+  it('Bodeguero no accede a Office; Comercial (incluido el perfil Camionero legado) sí puede leer', async () => {
+    const res = await como(BODEGUERO, request(app).get('/api/office/cuentas'));
     expectApi(res, 403);
+    const camionero = await como(CAMIONERO, request(app).get('/api/office/cuentas'));
+    expectApi(camionero, 200);
   });
 
   it('Admin crea una regla automática; no-admin no', async () => {

@@ -4,6 +4,7 @@ import { PesoPorPunto, User } from '../types';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { Spinner } from './Spinner';
+import { sessionHeaders } from '../lib/session';
 
 interface PesosProps {
   currentUser: User;
@@ -18,6 +19,10 @@ export default function Pesos({ currentUser }: PesosProps) {
   const [loading, setLoading] = useState(false);
   const [catalogo, setCatalogo] = useState<{id:string;nombre:string;unidad:string}[]>([]);
 
+  // Referencia (Guía de Despacho): liga el registro de peso a la guía para trazabilidad
+  const [guias, setGuias] = useState<any[]>([]);
+  const [referenciaId, setReferenciaId] = useState<string>('');
+
   // Form state
   const [tipoReferencia, setTipoReferencia] = useState<string>('Traslado');
   const [producto, setProducto] = useState('Huevos - Grande');
@@ -31,18 +36,28 @@ export default function Pesos({ currentUser }: PesosProps) {
 
   const fetchPesos = async () => {
     try {
-      const [pesosRes, concRes, cRes] = await Promise.all([
+      const [pesosRes, concRes, cRes, guiasRes] = await Promise.all([
         fetch('/api/pesos'),
         fetch('/api/pesos/conciliacion'),
-        fetch('/api/productos-catalogo')
+        fetch('/api/productos-catalogo', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/logistica/guias')
       ]);
       if (pesosRes.ok) setPesos(await pesosRes.json());
       if (concRes.ok) setConciliacion(await concRes.json());
       if (cRes.ok) setCatalogo(await cRes.json());
+      if (guiasRes.ok) setGuias(await guiasRes.json());
     } catch (err) { toast.error('Error al cargar registros de peso.'); }
   };
 
   useEffect(() => { fetchPesos(); }, []);
+
+  const handleSeleccionarGuia = (id: string) => {
+    setReferenciaId(id);
+    const guia = guias.find(g => g.id === id);
+    if (guia && Number(guia.pesoSalida) > 0) {
+      setPesoEsperado(Number(guia.pesoSalida));
+    }
+  };
 
   const handleRegistrar = async () => {
     setLoading(true);
@@ -52,6 +67,7 @@ export default function Pesos({ currentUser }: PesosProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tipoReferencia, producto, cantidadUnidades, unidad, pesoEsperado, pesoReal,
+          referenciaId: referenciaId || undefined,
           basculaUtilizada: basculaUtilizada || undefined,
           responsable: currentUser.name,
           ubicacion, observaciones: observaciones || undefined
@@ -158,6 +174,21 @@ export default function Pesos({ currentUser }: PesosProps) {
                 <option value="Venta">Entrega a Cliente</option>
                 <option value="Retorno">Retorno a Bodega</option>
               </select>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Referencia (Guía de Despacho)</label>
+              <select value={referenciaId} onChange={e => handleSeleccionarGuia(e.target.value)}
+                className="w-full mt-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-sm focus:border-amber-500 outline-none text-neutral-800 dark:text-white">
+                <option value="">— Sin referencia —</option>
+                {guias.filter(g => g.estado !== 'Cerrada' && g.estado !== 'Anulada').map(g => (
+                  <option key={g.id} value={g.id}>
+                    GD-{String(g.consecutivo || g.id).slice(0, 8)} · {g.camionNombre || '—'} · {g.totalCartones ?? 0} ct
+                  </option>
+                ))}
+              </select>
+              {referenciaId && Number(guias.find(g => g.id === referenciaId)?.pesoSalida) > 0 && (
+                <p className="text-[11px] text-neutral-400 mt-1">Peso de salida precargado como esperado.</p>
+              )}
             </div>
             <div>
               <label className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase">Producto</label>

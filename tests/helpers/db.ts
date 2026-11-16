@@ -2,6 +2,7 @@ import { afterAll } from 'vitest';
 import { createClient } from '@libsql/client';
 import fs from 'fs';
 import { CREATE_TABLES } from '../../src/db/ddl';
+import { aplicarIndicesDeConsulta } from '../../src/db/query-indexes';
 
 /**
  * Los seeds de los tests insertan filas en cualquier orden, mientras que el
@@ -40,6 +41,7 @@ export async function ejecutarDdl(client: any): Promise<void> {
   for (const sql of CREATE_TABLES) {
     await client.execute(sql);
   }
+  await aplicarIndicesDeConsulta(client);
 }
 
 /**

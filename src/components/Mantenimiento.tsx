@@ -3,6 +3,7 @@ import { Wrench, Plus, AlertTriangle, CheckCircle, Clock, Calendar, DollarSign, 
 import { ActivoMantenimiento, OrdenMantenimiento, User } from '../types';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { sessionHeaders } from '../lib/session';
 
 interface Props { currentUser: User; }
 
@@ -13,6 +14,7 @@ export default function Mantenimiento({ currentUser }: Props) {
   const [granjas, setGranjas] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isCreatingActivo, setIsCreatingActivo] = useState(false);
+  const [editingActivoId, setEditingActivoId] = useState<string | null>(null);
   const [isCreatingOrden, setIsCreatingOrden] = useState(false);
   const [subTab, setSubTab] = useState<'activos' | 'ordenes' | 'alertas' | 'costos'>('activos');
 
@@ -23,8 +25,8 @@ export default function Mantenimiento({ currentUser }: Props) {
     setLoading(true);
     try {
       const [aRes, oRes, alRes, gRes] = await Promise.all([
-        fetch('/api/activos'), fetch('/api/ordenes-mantenimiento'),
-        fetch('/api/ordenes-mantenimiento/alertas'), fetch('/api/granjas')
+        fetch('/api/activos', { headers: sessionHeaders(currentUser.id) }), fetch('/api/ordenes-mantenimiento', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/ordenes-mantenimiento/alertas', { headers: sessionHeaders(currentUser.id) }), fetch('/api/granjas', { headers: sessionHeaders(currentUser.id) })
       ]);
       setActivos(await aRes.json());
       setOrdenes(await oRes.json());
@@ -40,17 +42,34 @@ export default function Mantenimiento({ currentUser }: Props) {
     if (!formActivo.nombre || !formActivo.tipo) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/activos', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(editingActivoId ? `/api/activos/${editingActivoId}` : '/api/activos', {
+        method: editingActivoId ? 'PUT' : 'POST', headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify(formActivo)
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error al crear el activo'); }
-      toast.success('Activo creado');
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'No se pudo guardar el activo'); }
+      toast.success(editingActivoId ? 'Activo actualizado' : 'Activo creado');
       setIsCreatingActivo(false);
+      setEditingActivoId(null);
       setFormActivo({ nombre: '', tipo: 'Galerón', granjaId: '', ubicacion: '', responsable: '' });
       cargar();
     } catch (e: any) { toast.error(e.message); }
     setLoading(false);
+  };
+
+  const editarActivo = (activo: ActivoMantenimiento) => {
+    setFormActivo({ nombre: activo.nombre, tipo: activo.tipo, granjaId: (activo as any).granjaId || '', ubicacion: activo.ubicacion || '', responsable: activo.responsable || '' });
+    setEditingActivoId(activo.id);
+    setIsCreatingActivo(true);
+  };
+
+  const archivarActivo = async (activo: ActivoMantenimiento) => {
+    if (!window.confirm(`¿Archivar ${activo.nombre}? Se conservará su historial de mantenimiento.`)) return;
+    try {
+      const res = await fetch(`/api/activos/${activo.id}`, { method: 'PUT', headers: sessionHeaders(currentUser.id, true), body: JSON.stringify({ estado: 'Inactivo' }) });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'No se pudo archivar el activo'); }
+      toast.success('Activo archivado');
+      cargar();
+    } catch (e: any) { toast.error(e.message); }
   };
 
   const crearOrden = async () => {
@@ -58,7 +77,7 @@ export default function Mantenimiento({ currentUser }: Props) {
     setLoading(true);
     try {
       const res = await fetch('/api/ordenes-mantenimiento', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify(formOrden)
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error al crear la orden'); }
@@ -73,7 +92,7 @@ export default function Mantenimiento({ currentUser }: Props) {
   const completarOrden = async (id: string) => {
     try {
       const res = await fetch(`/api/ordenes-mantenimiento/${id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        method: 'PUT', headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify({ estado: 'Completado', fechaEjecutada: new Date().toISOString() })
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error al completar la orden'); }
@@ -97,12 +116,12 @@ export default function Mantenimiento({ currentUser }: Props) {
         </div>
         <div className="flex space-x-2">
           <button onClick={cargar} className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-400"><RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} /></button>
-          <button onClick={() => setIsCreatingActivo(true)} className="flex items-center space-x-2 text-white px-4 py-2 rounded-lg text-sm font-bold" style={{ background: 'var(--brand-primary)' }}>
+          {currentUser.role === 'Admin' && <button onClick={() => { setEditingActivoId(null); setFormActivo({ nombre: '', tipo: 'Galerón', granjaId: '', ubicacion: '', responsable: '' }); setIsCreatingActivo(true); }} className="flex items-center space-x-2 text-white px-4 py-2 rounded-lg text-sm font-bold" style={{ background: 'var(--brand-primary)' }}>
             <Plus className="w-4 h-4" /><span>Activo</span>
-          </button>
-          <button onClick={() => setIsCreatingOrden(true)} className="flex items-center space-x-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 dark:hover:bg-indigo-500">
+          </button>}
+          {currentUser.role === 'Admin' && <button onClick={() => setIsCreatingOrden(true)} className="flex items-center space-x-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 dark:hover:bg-indigo-500">
             <Plus className="w-4 h-4" /><span>Orden</span>
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -133,7 +152,7 @@ export default function Mantenimiento({ currentUser }: Props) {
         <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700">
-              <tr><th className="px-4 py-3 text-left font-bold text-neutral-600 dark:text-neutral-400">Nombre</th><th className="px-4 py-3 text-left font-bold text-neutral-600 dark:text-neutral-400">Tipo</th><th className="px-4 py-3 text-left font-bold text-neutral-600 dark:text-neutral-400">Ubicación</th><th className="px-4 py-3 text-left font-bold text-neutral-600 dark:text-neutral-400">Estado</th></tr>
+              <tr><th className="px-4 py-3 text-left font-bold text-neutral-600 dark:text-neutral-400">Nombre</th><th className="px-4 py-3 text-left font-bold text-neutral-600 dark:text-neutral-400">Tipo</th><th className="px-4 py-3 text-left font-bold text-neutral-600 dark:text-neutral-400">Ubicación</th><th className="px-4 py-3 text-left font-bold text-neutral-600 dark:text-neutral-400">Estado</th>{currentUser.role === 'Admin' && <th className="px-4 py-3 text-right font-bold text-neutral-600 dark:text-neutral-400">Acciones</th>}</tr>
             </thead>
             <tbody>
               {activos.map(a => (
@@ -143,6 +162,7 @@ export default function Mantenimiento({ currentUser }: Props) {
                   <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">{a.ubicacion || '—'}</td>
                   <td className="px-4 py-3"><span className={cn("px-2 py-1 rounded-full text-xs font-bold",
                     a.estado === 'Operativo' ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300")}>{a.estado}</span></td>
+                  {currentUser.role === 'Admin' && <td className="px-4 py-3 text-right whitespace-nowrap">{a.estado !== 'Inactivo' && <><button onClick={() => editarActivo(a)} className="text-blue-600 dark:text-blue-400 font-bold mr-3">Editar</button><button onClick={() => archivarActivo(a)} className="text-red-600 dark:text-red-400 font-bold">Archivar</button></>}</td>}
                 </tr>
               ))}
             </tbody>
@@ -187,7 +207,7 @@ export default function Mantenimiento({ currentUser }: Props) {
             <div key={o.id} className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-xl p-4 flex items-center space-x-3">
               <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0" />
               <div className="flex-1"><p className="font-bold text-red-800 dark:text-red-300">{o.tipo} — Vencido</p><p className="text-sm text-red-600 dark:text-red-400">Programado: {o.fechaProgramada}</p></div>
-              <button onClick={() => completarOrden(o.id)} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-700 dark:hover:bg-green-500">Completar</button>
+              <button onClick={() => completarOrden(o.id)} className="btn-primary btn-sm">Completar</button>
             </div>
           ))}
           {alertas?.proximas?.map((o: any) => (
@@ -229,7 +249,7 @@ export default function Mantenimiento({ currentUser }: Props) {
       {isCreatingActivo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white dark:bg-neutral-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-lg text-neutral-900 dark:text-white">Nuevo Activo</h3><button onClick={() => setIsCreatingActivo(false)}><X className="w-5 h-5 text-neutral-500 dark:text-neutral-400" /></button></div>
+            <div className="flex justify-between items-center mb-4"><h3 className="font-bold text-lg text-neutral-900 dark:text-white">{editingActivoId ? 'Editar Activo' : 'Nuevo Activo'}</h3><button onClick={() => { setIsCreatingActivo(false); setEditingActivoId(null); }}><X className="w-5 h-5 text-neutral-500 dark:text-neutral-400" /></button></div>
             <div className="space-y-3">
               <div><label className="block text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-1">Nombre *</label>
                 <input value={formActivo.nombre} onChange={e => setFormActivo({ ...formActivo, nombre: e.target.value })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white" /></div>
@@ -237,9 +257,15 @@ export default function Mantenimiento({ currentUser }: Props) {
                 <select value={formActivo.tipo} onChange={e => setFormActivo({ ...formActivo, tipo: e.target.value })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white">
                   {['Galerón', 'Silo', 'Sistema Agua', 'Eléctrico', 'Ventilación', 'Cerca', 'Equipo Recolect', 'Vehículo', 'Herramienta', 'Báscula', 'Estante', 'Andén'].map(t => <option key={t}>{t}</option>)}
                 </select></div>
+              <div><label className="block text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-1">Granja</label>
+                <select value={formActivo.granjaId} onChange={e => setFormActivo({ ...formActivo, granjaId: e.target.value })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white">
+                  <option value="">Sin asignar</option>{granjas.filter(g => g.estado !== 'Archivado').map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+                </select></div>
+              <div><label className="block text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-1">Ubicación</label>
+                <input value={formActivo.ubicacion} onChange={e => setFormActivo({ ...formActivo, ubicacion: e.target.value })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white" /></div>
               <div><label className="block text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-1">Responsable</label>
                 <input value={formActivo.responsable} onChange={e => setFormActivo({ ...formActivo, responsable: e.target.value })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white" /></div>
-              <button onClick={crearActivo} className="w-full text-white py-2.5 rounded-lg font-bold" style={{ background: 'var(--brand-primary)' }}>Crear Activo</button>
+              <button onClick={crearActivo} className="w-full text-white py-2.5 rounded-lg font-bold" style={{ background: 'var(--brand-primary)' }}>{editingActivoId ? 'Guardar cambios' : 'Crear Activo'}</button>
             </div>
           </div>
         </div>

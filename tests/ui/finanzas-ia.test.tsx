@@ -13,14 +13,14 @@
  * cambia, el test debe romperse.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, cleanup, within } from '@testing-library/react';
+import { render, screen, cleanup, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Role, User } from '../../src/types';
 
 const MODULOS_APLICACION = [
   'Login', 'Clientes', 'Cobranza', 'Granjas', 'Etiquetas', 'Pesos',
   'SaludAvicola', 'Alimento', 'Mantenimiento', 'Precios',
-  'Admin', 'Office', 'Logistica', 'CajaRuta', 'TableroRutas',
+  'Admin', 'Office', 'Logistica', 'CajaRuta', 'TableroRutas', 'Despacho',
   'operaciones', 'operaciones/BodegaAdmin',
   'DespachoMovil', 'BodegaMovil', 'CamioneroMovil', 'IncidentesMovil',
   // Facturacion y Reportes NO se sustituyen: son las pantallas que esta fase
@@ -163,6 +163,7 @@ const abrirModulo = async (nombre: string) => {
   const user = userEvent.setup();
   const botones = within(document.querySelector('aside')!).getAllByRole('button', { name: nombre });
   await user.click(botones[0]);
+  await waitFor(() => expect(screen.queryByTestId('module-loading')).toBeNull());
 };
 
 const tabs = (banda?: string): { id: string; etiqueta: string; activo: boolean }[] =>
@@ -194,6 +195,7 @@ const tabActiva = () => {
 const irATab = async (id: string) => {
   const user = userEvent.setup();
   await user.click(document.querySelector(`[data-tab-id="${id}"]`)!);
+  await waitFor(() => expect(screen.queryByTestId('module-loading')).toBeNull());
 };
 
 beforeEach(() => {
@@ -231,10 +233,10 @@ describe('matriz de tabs por rol', () => {
     expect(tabActiva()).toBe('resumen');
   });
 
-  it('Comercial ve Documentos + Analítica y aterriza en Documentos', async () => {
+  it('Comercial ve solo Documentos y aterriza ahí, sin acceso a Analítica', async () => {
     renderComo('Comercial');
     await abrirModulo('Finanzas');
-    expect(tabs('primario').map(t => t.id)).toEqual(['documentos', 'analitica']);
+    expect(tabs('primario').map(t => t.id)).toEqual(['documentos']);
     expect(tabActiva()).toBe('documentos');
   });
 
@@ -256,7 +258,6 @@ describe('el tab resaltado siempre corresponde al contenido renderizado', () => 
     { rol: 'Admin', tab: 'cobranza', contenido: () => !!screen.queryByTestId('stub-modulo'), descripcion: 'Cobranza' },
     { rol: 'Socio', tab: 'resumen', contenido: () => !!screen.queryByTestId('finanzas-resumen'), descripcion: 'Resumen de Socio' },
     { rol: 'Socio', tab: 'analitica', contenido: () => screen.queryByText('Reportes') !== null, descripcion: 'Analítica de Socio' },
-    { rol: 'Comercial', tab: 'analitica', contenido: () => screen.queryByText('Reportes') !== null, descripcion: 'Analítica de Comercial' },
   ];
 
   for (const c of casos) {
@@ -328,8 +329,8 @@ describe('Resumen', () => {
     await abrirModulo('Finanzas');
     const nodos = within(screen.getByTestId('finanzas-ciclo')).getAllByRole('listitem');
     expect(nodos).toHaveLength(6);
-    expect(nodos[0].textContent).toContain('ventas ruta');
-    expect(nodos[5].textContent).toContain('resultado');
+    expect(nodos[0].textContent).toContain('Vendido en ruta');
+    expect(nodos[5].textContent).toMatch(/resultado/i);
   });
 
   it('la bandeja Requiere atención avisa de la cartera vencida', async () => {
@@ -468,12 +469,12 @@ describe('Analítica', () => {
     expect(urls.some(u => u.includes('/api/reportes/flujo-caja'))).toBe(true);
   });
 
-  it('un Comercial ve Analítica con la misma sub-fila', async () => {
+  it('Comercial no puede abrir Analítica ni ver reportes financieros', async () => {
     renderComo('Comercial');
     await abrirModulo('Finanzas');
-    await irATab('analitica');
-    expect(tabs('secundario')).toHaveLength(6);
-    expect(tabActiva()).toBe('analitica');
+    expect(tabs('primario').map(t => t.id)).toEqual(['documentos']);
+    expect(tabs('secundario')).toHaveLength(0);
+    expect(screen.queryByText('Reportes')).toBeNull();
   });
 });
 
@@ -522,11 +523,14 @@ describe('Registro de gastos como acción del + Nuevo', () => {
   });
 });
 
-describe('Logística ya no es una segunda puerta a la facturación', () => {
-  it('ningún rol ve el tab facturacion en Logística', async () => {
-    for (const rol of ['Admin', 'Comercial'] as Role[]) {
+describe('el módulo Logística ya no es una segunda puerta a la facturación', () => {
+  it('ningún rol ve el tab facturación duplicado dentro del hub de Operaciones', async () => {
+    // Fase 8: Logística desapareció como módulo. La única ruta a facturar es
+    // Finanzas → Documentos, así que ni los grupos que absorbieron su día a día
+    // (Despacho y Ventas en el hub) pueden ofrecer un tab de facturación.
+    for (const [rol, modulo] of [['Admin', 'Operaciones y Bodegas'], ['Comercial', 'Mi Ruta']] as [Role, string][]) {
       renderComo(rol);
-      await abrirModulo('Logística');
+      await abrirModulo(modulo);
       expect(idsDeTabs()).not.toContain('facturacion');
       cleanup();
     }

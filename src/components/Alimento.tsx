@@ -3,6 +3,7 @@ import { Wheat, Plus, AlertTriangle, CheckCircle, Droplets, TrendingDown, Refres
 import { InventarioAlimento, ConsumoAlimento, User } from '../types';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { sessionHeaders } from '../lib/session';
 
 interface Props { currentUser: User; }
 
@@ -11,6 +12,7 @@ export default function Alimento({ currentUser }: Props) {
   const [consumos, setConsumos] = useState<ConsumoAlimento[]>([]);
   const [alertas, setAlertas] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isConsumo, setIsConsumo] = useState(false);
   const [subTab, setSubTab] = useState<'inventario' | 'consumo' | 'alertas'>('inventario');
@@ -25,14 +27,22 @@ export default function Alimento({ currentUser }: Props) {
 
   const cargar = async () => {
     setLoading(true);
+    setLoadError('');
     try {
+      const headers = sessionHeaders(currentUser.id);
       const [iRes, cRes, aRes] = await Promise.all([
-        fetch('/api/alimento'), fetch('/api/alimento/consumo'), fetch('/api/alimento/alertas')
+        fetch('/api/alimento', { headers }), fetch('/api/alimento/consumo', { headers }), fetch('/api/alimento/alertas', { headers })
       ]);
-      setInventario(await iRes.json());
-      setConsumos(await cRes.json());
-      setAlertas(await aRes.json());
-    } catch { toast.error('No se pudieron cargar los datos de alimento.'); }
+      const responses = [iRes, cRes, aRes];
+      const failed = responses.find(r => !r.ok);
+      if (failed) throw new Error(failed.status === 401 || failed.status === 403
+        ? 'No tienes acceso al control de alimento con este perfil.'
+        : `No se pudo cargar alimento (${failed.status}).`);
+      const [inventarioData, consumosData, alertasData] = await Promise.all(responses.map(r => r.json()));
+      setInventario(Array.isArray(inventarioData) ? inventarioData : []);
+      setConsumos(Array.isArray(consumosData) ? consumosData : []);
+      setAlertas(alertasData && typeof alertasData === 'object' ? alertasData : {});
+    } catch (e: any) { const message = e?.message || 'No se pudieron cargar los datos de alimento.'; setLoadError(message); toast.error(message); }
     setLoading(false);
   };
 
@@ -43,7 +53,7 @@ export default function Alimento({ currentUser }: Props) {
     setLoading(true);
     try {
       const res = await fetch('/api/alimento', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify(formInv)
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error al registrar ingreso'); }
@@ -60,7 +70,7 @@ export default function Alimento({ currentUser }: Props) {
     setLoading(true);
     try {
       const res = await fetch('/api/alimento/consumo', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify(formCons)
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error al registrar consumo'); }
@@ -76,6 +86,7 @@ export default function Alimento({ currentUser }: Props) {
 
   return (
     <div className="space-y-6">
+      {loadError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 text-sm" style={{ borderColor: 'var(--brand-danger)', background: 'var(--status-danger-soft)', color: 'var(--text-primary)' }}><span>{loadError}</span><button onClick={cargar} className="font-bold underline">Reintentar</button></div>}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className="p-2 rounded-xl" style={{ background: 'color-mix(in srgb, var(--brand-secondary) 10%, transparent)' }}><Wheat className="w-6 h-6" style={{ color: 'var(--brand-secondary)' }} /></div>

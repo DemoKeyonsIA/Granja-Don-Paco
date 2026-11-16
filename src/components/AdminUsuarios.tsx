@@ -3,6 +3,7 @@ import { User as UserIcon, Plus, Edit2, Trash2, Search, Check, X, ShieldCheck, K
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { User } from '../types';
+import { sessionHeaders } from '../lib/session';
 
 interface Props { currentUser: User; }
 
@@ -17,15 +18,10 @@ interface Usuario {
 
 const ROLE_LABELS: Record<string, string> = {
   Admin: 'Admin',
-  Gerente: 'Gerente',
   Socio: 'Socio',
-  Vendedor: 'Vendedor',
-  Facturador: 'Facturador',
   Comercial: 'Comercial',
   Despachador: 'Encargado de Galerón',
   Bodeguero: 'Bodeguero',
-  Camionero: 'Camionero',
-  EncargadoGranja: 'Encargado de Granja',
 };
 
 const ROLES = Object.keys(ROLE_LABELS);
@@ -38,7 +34,7 @@ export default function AdminUsuarios({ currentUser }: Props) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', role: 'Bodeguero', roles: [] as string[], password: '', activo: true });
+  const [form, setForm] = useState({ name: '', email: '', role: 'Comercial', roles: [] as string[], password: '', activo: true });
   const [editForm, setEditForm] = useState({ name: '', email: '', role: '', roles: [] as string[], password: '', activo: true });
   const [confirmUser, setConfirmUser] = useState<Usuario | null>(null);
   const [bajaProcesando, setBajaProcesando] = useState(false);
@@ -46,7 +42,7 @@ export default function AdminUsuarios({ currentUser }: Props) {
   const cargar = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/users');
+      const res = await fetch('/api/users', { headers: sessionHeaders(currentUser.id) });
       if (res.ok) setUsuarios(await res.json());
     } catch { toast.error('No se pudieron cargar los usuarios.'); }
     setLoading(false);
@@ -65,7 +61,7 @@ export default function AdminUsuarios({ currentUser }: Props) {
     if (!form.name.trim() || !form.email.trim()) return toast.error('Nombre y email son requeridos');
     const res = await fetch('/api/users', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: sessionHeaders(currentUser.id, true),
       body: JSON.stringify({
         name: form.name.trim(),
         email: form.email.trim(),
@@ -79,7 +75,7 @@ export default function AdminUsuarios({ currentUser }: Props) {
     if (!res.ok) return toast.error(data.error || 'No se pudo crear el usuario');
     toast.success('Usuario creado');
     setIsAdding(false);
-    setForm({ name: '', email: '', role: 'Bodeguero', roles: [], password: '', activo: true });
+    setForm({ name: '', email: '', role: 'Comercial', roles: [], password: '', activo: true });
     cargar();
   };
 
@@ -91,7 +87,7 @@ export default function AdminUsuarios({ currentUser }: Props) {
   const guardar = async (u: Usuario) => {
     const res = await fetch(`/api/users/${u.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: sessionHeaders(currentUser.id, true),
       body: JSON.stringify({
         name: editForm.name.trim(),
         email: editForm.email.trim(),
@@ -113,7 +109,7 @@ export default function AdminUsuarios({ currentUser }: Props) {
     try {
       const res = await fetch(`/api/users/${u.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify({ activo: false }),
       });
       const data = await res.json();
@@ -127,7 +123,7 @@ export default function AdminUsuarios({ currentUser }: Props) {
   const eliminar = async (u: Usuario) => {
     setBajaProcesando(true);
     try {
-      const res = await fetch(`/api/users/${u.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/users/${u.id}`, { method: 'DELETE', headers: sessionHeaders(currentUser.id) });
       const data = await res.json();
       if (!res.ok) return toast.error(data.error || 'No se pudo eliminar el usuario');
       toast.success('Usuario eliminado');
@@ -167,7 +163,7 @@ export default function AdminUsuarios({ currentUser }: Props) {
       {isAdding && (
         <div className="bg-white dark:bg-neutral-800 border-2 border-emerald-400 rounded-xl p-4 space-y-3">
           <h3 className="font-bold text-emerald-700 dark:text-emerald-400">Nuevo Usuario</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Nombre *" className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
             <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="Email *" className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
             <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600">
@@ -177,7 +173,7 @@ export default function AdminUsuarios({ currentUser }: Props) {
               <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
               <input value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="Contraseña (default 1234)" className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
             </div>
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <p className="text-[10px] font-bold uppercase tracking-wide text-neutral-400 mb-1">Roles adicionales</p>
               <div className="flex flex-wrap gap-2">
                 {ROLES.map(r =>
@@ -191,7 +187,7 @@ export default function AdminUsuarios({ currentUser }: Props) {
                 )}
               </div>
             </div>
-            <label className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300 col-span-2">
+            <label className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300 sm:col-span-2">
               <input type="checkbox" checked={form.activo} onChange={e => setForm({ ...form, activo: e.target.checked })} className="w-4 h-4" />
               Cuenta activa
             </label>
@@ -207,13 +203,13 @@ export default function AdminUsuarios({ currentUser }: Props) {
         </div>
       )}
 
-      <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+      <div className="admin-table-scroll bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700">
         {loading ? (
           <div className="p-8 text-center text-neutral-400">Cargando...</div>
         ) : filtered.length === 0 ? (
           <div className="p-8 text-center text-neutral-400">No hay usuarios</div>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="bg-neutral-50 dark:bg-neutral-750 border-b dark:border-neutral-700">
                 <th className="text-left px-4 py-3 font-bold text-neutral-600 dark:text-neutral-300">Nombre</th>
@@ -323,10 +319,10 @@ export default function AdminUsuarios({ currentUser }: Props) {
               <button onClick={() => setConfirmUser(null)} disabled={bajaProcesando} className="p-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-400"><X className="w-4 h-4" /></button>
             </div>
             <div className="flex flex-col gap-2 mt-4">
-              <button onClick={() => desactivar(confirmUser)} disabled={bajaProcesando} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold text-white bg-neutral-700 dark:bg-neutral-600 hover:bg-neutral-800 disabled:opacity-50">
+              <button onClick={() => desactivar(confirmUser)} disabled={bajaProcesando} className="btn-secondary">
                 <UserIcon className="w-4 h-4" /> Desactivar cuenta (recomendado)
               </button>
-              <button onClick={() => eliminar(confirmUser)} disabled={bajaProcesando} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+              <button onClick={() => eliminar(confirmUser)} disabled={bajaProcesando} className="btn-danger">
                 <Trash2 className="w-4 h-4" /> {bajaProcesando ? 'Procesando...' : 'Eliminar definitivamente'}
               </button>
             </div>

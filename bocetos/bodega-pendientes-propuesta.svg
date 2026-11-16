@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="940" viewBox="0 0 1500 940" role="img" aria-labelledby="title desc">
+  <title id="title">Propuesta de rediseño para Pendientes de bodega</title>
+  <desc id="desc">Una bandeja única de cuatro casos, filtros por tipo y acciones claras para revisar devoluciones, conteos y producto retenido.</desc>
+  <rect width="1500" height="940" fill="#f5f5f7"/>
+  <g font-family="Segoe UI, Arial, sans-serif" fill="#17192f">
+    <text x="72" y="54" font-size="16" fill="#657087">Operaciones y Bodegas　›　Bodega　›　Control　›　Pendientes</text>
+    <text x="72" y="120" font-size="34" font-weight="700">Pendientes de bodega</text>
+    <text x="72" y="154" font-size="19" fill="#657087">Resuelve primero lo que requiere atención. Abre un caso para revisar los datos completos.</text>
+    <rect x="1254" y="82" width="174" height="44" rx="22" fill="#e2eaf7"/>
+    <text x="1341" y="110" text-anchor="middle" font-size="16" font-weight="700" fill="#405c91">4 casos abiertos</text>
+    <rect x="72" y="188" width="1356" height="70" rx="14" fill="#eaf0fa" stroke="#d8e2f2"/>
+    <circle cx="105" cy="223" r="14" fill="#4d6698"/><text x="105" y="229" text-anchor="middle" font-size="17" font-weight="700" fill="#fff">i</text>
+    <text x="132" y="220" font-size="16" font-weight="700">Para hoy</text>
+    <text x="132" y="242" font-size="15" fill="#5e6880">2 devoluciones por recibir　·　1 reconteo pendiente　·　1 producto retenido</text>
+
+    <rect x="72" y="282" width="1356" height="590" rx="18" fill="#fff" stroke="#e0e2e7"/>
+    <rect x="73" y="283" width="1354" height="78" rx="17" fill="#fff"/>
+    <rect x="94" y="300" width="112" height="42" rx="21" fill="#4d6698"/>
+    <text x="150" y="326" text-anchor="middle" font-size="15" font-weight="700" fill="#fff">Todos　4</text>
+    <rect x="216" y="300" width="166" height="42" rx="21" fill="#fff" stroke="#dfe3ea"/>
+    <text x="299" y="326" text-anchor="middle" font-size="15" font-weight="650" fill="#59647a">Devoluciones　2</text>
+    <rect x="392" y="300" width="116" height="42" rx="21" fill="#fff" stroke="#dfe3ea"/>
+    <text x="450" y="326" text-anchor="middle" font-size="15" font-weight="650" fill="#59647a">Conteos　1</text>
+    <rect x="518" y="300" width="124" height="42" rx="21" fill="#fff" stroke="#dfe3ea"/>
+    <text x="580" y="326" text-anchor="middle" font-size="15" font-weight="650" fill="#59647a">Retenidos　1</text>
+    <rect x="987" y="300" width="416" height="42" rx="10" fill="#fff" stroke="#dfe3ea"/>
+    <circle cx="1012" cy="321" r="8" fill="none" stroke="#7b8496" stroke-width="2"/><path d="M1018 327l7 7" stroke="#7b8496" stroke-width="2"/>
+    <text x="1038" y="327" font-size="15" fill="#7b8496">Buscar guía, camión o producto…</text>
+    <rect x="73" y="361" width="1354" height="42" fill="#f8f9fb"/>
+    <text x="103" y="387" font-size="12" font-weight="700" letter-spacing="1" fill="#697386">CASO</text>
+    <text x="575" y="387" font-size="12" font-weight="700" letter-spacing="1" fill="#697386">QUÉ REVISAR</text>
+    <text x="987" y="387" font-size="12" font-weight="700" letter-spacing="1" fill="#697386">REPORTADO</text>
+
+    <line x1="73" y1="403" x2="1427" y2="403" stroke="#eceef2"/>
+    <rect x="101" y="423" width="8" height="50" rx="4" fill="#d5a443"/>
+    <text x="126" y="441" font-size="16" font-weight="700">Devolución de ruta</text>
+    <rect x="300" y="423" width="96" height="24" rx="12" fill="#fff2d6"/><text x="348" y="440" text-anchor="middle" font-size="12" font-weight="700" fill="#74540e">Por recibir</text>
+    <text x="126" y="466" font-size="14" fill="#657087">GD-DEMO-012　·　Camión Ruta 10</text>
+    <text x="575" y="441" font-size="15" font-weight="700">Huevos - Grande · 3.5 kg</text>
+    <text x="575" y="465" font-size="13" fill="#657087">Confirma cuánto producto volvió físicamente</text>
+    <text x="987" y="441" font-size="14">Hoy · 10:42 a. m.</text><text x="987" y="464" font-size="13" fill="#657087">Reportó Carlos</text>
+    <rect x="1215" y="426" width="174" height="42" rx="10" fill="#4d6698"/><text x="1302" y="452" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">Revisar devolución</text>
+
+    <line x1="73" y1="493" x2="1427" y2="493" stroke="#eceef2"/>
+    <rect x="101" y="513" width="8" height="50" rx="4" fill="#d5a443"/>
+    <text x="126" y="531" font-size="16" font-weight="700">Sobrante de ruta</text>
+    <rect x="300" y="513" width="96" height="24" rx="12" fill="#fff2d6"/><text x="348" y="530" text-anchor="middle" font-size="12" font-weight="700" fill="#74540e">Por recibir</text>
+    <text x="126" y="556" font-size="14" fill="#657087">GD-DEMO-010　·　Camión Ruta 9</text>
+    <text x="575" y="531" font-size="15" font-weight="700">Huevos - Mediano · 2.0 kg</text>
+    <text x="575" y="555" font-size="13" fill="#657087">Confirma cantidad y estado del producto</text>
+    <text x="987" y="531" font-size="14">Hoy · 9:18 a. m.</text><text x="987" y="554" font-size="13" fill="#657087">Reportó José</text>
+    <rect x="1215" y="516" width="174" height="42" rx="10" fill="#4d6698"/><text x="1302" y="542" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">Revisar devolución</text>
+
+    <line x1="73" y1="583" x2="1427" y2="583" stroke="#eceef2"/>
+    <rect x="101" y="603" width="8" height="50" rx="4" fill="#dc8455"/>
+    <text x="126" y="621" font-size="16" font-weight="700">Reconteo independiente</text>
+    <rect x="320" y="603" width="156" height="24" rx="12" fill="#e8eef8"/><text x="398" y="620" text-anchor="middle" font-size="12" font-weight="700" fill="#435e93">Requiere otra persona</text>
+    <text x="126" y="646" font-size="14" fill="#657087">Guía GD-DEMO-008　·　Huevos - Grande</text>
+    <text x="575" y="621" font-size="15" font-weight="700">Validar diferencia</text>
+    <text x="575" y="645" font-size="13" fill="#657087">Sistema 42.0 kg　·　primer conteo 39.5 kg</text>
+    <text x="987" y="621" font-size="14">Ayer · 3:26 p. m.</text><text x="987" y="644" font-size="13" fill="#657087">Recontó María</text>
+    <rect x="1215" y="606" width="174" height="42" rx="10" fill="#e9eff8"/><text x="1302" y="632" text-anchor="middle" font-size="14" font-weight="700" fill="#405c91">Continuar conteo</text>
+
+    <line x1="73" y1="673" x2="1427" y2="673" stroke="#eceef2"/>
+    <rect x="101" y="693" width="8" height="50" rx="4" fill="#8b81b6"/>
+    <text x="126" y="711" font-size="16" font-weight="700">Producto retenido</text>
+    <rect x="274" y="693" width="91" height="24" rx="12" fill="#f2effa"/><text x="319" y="710" text-anchor="middle" font-size="12" font-weight="700" fill="#655a91">En revisión</text>
+    <text x="126" y="736" font-size="14" fill="#657087">Huevos - Pequeño　·　Guía GD-DEMO-006</text>
+    <text x="575" y="711" font-size="15" font-weight="700">6 kg en cuarentena</text>
+    <text x="575" y="735" font-size="13" fill="#657087">No disponible para venta</text>
+    <text x="987" y="711" font-size="14">Ayer · 1:05 p. m.</text><text x="987" y="734" font-size="13" fill="#657087">Administración</text>
+    <rect x="1215" y="696" width="174" height="42" rx="10" fill="#e9eff8"/><text x="1302" y="722" text-anchor="middle" font-size="14" font-weight="700" fill="#405c91">Ver caso</text>
+
+    <line x1="73" y1="763" x2="1427" y2="763" stroke="#eceef2"/>
+    <text x="94" y="810" font-size="13" fill="#7b8496">Al abrir un caso, se muestran solo sus datos y acciones. La lista queda compacta para revisar los demás.</text>
+    <text x="72" y="912" font-size="12" fill="#7b8496">BOCETO DE PROPUESTA · Datos ilustrativos · No ejecuta acciones reales</text>
+  </g>
+</svg>

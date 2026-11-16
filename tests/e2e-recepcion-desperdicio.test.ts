@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { requestAs } from './helpers/request-as';
 import { drizzle } from 'drizzle-orm/libsql';
 import * as schema from '../src/db/schema';
 import type { Express } from 'express';
@@ -27,7 +28,7 @@ beforeAll(async () => {
   app = await mod.createApp(true, testDb);
   backfill = mod.backfillRecepcionesDesperdicio;
 
-  const wiz = await request(app).post('/api/granjas/wizard').send({
+  const wiz = await requestAs(app, '1').post('/api/granjas/wizard').send({
     nombre: 'Granja Recepción',
     ubicacion: 'Heredia',
     tipo_produccion: 'Postura',
@@ -36,10 +37,10 @@ beforeAll(async () => {
   });
   expect(wiz.status).toBe(201);
 
-  granjaId = (await request(app).get('/api/granjas')).body.find((g: any) => g.nombre === 'Granja Recepción').id;
+  granjaId = (await requestAs(app, '1').get('/api/granjas')).body.find((g: any) => g.nombre === 'Granja Recepción').id;
   expect(granjaId).toBeTruthy();
 
-  const stock = await request(app).post('/api/produccion/recoleccion').send({
+  const stock = await requestAs(app, '1').post('/api/produccion/recoleccion').send({
     galeron: 'Galerón Recepción',
     detalles: [{ producto: 'Huevos - Grande', cantidad: 500 }]
   });
@@ -51,7 +52,7 @@ afterAll(() => {
 });
 
 async function crearCarga(cantidad: number): Promise<string> {
-  const res = await request(app).post('/api/operaciones/traslado').send({
+  const res = await requestAs(app, '1').post('/api/operaciones/traslado').send({
     granjaId,
     producto: 'Huevos - Grande',
     cantidad,
@@ -61,60 +62,63 @@ async function crearCarga(cantidad: number): Promise<string> {
     creadoPorId: encargadoId
   });
   expect(res.status).toBe(200);
-  const traslados = (await request(app).get('/api/operaciones/traslados')).body;
+  const traslados = (await requestAs(app, '1').get('/api/operaciones/traslados')).body;
   const t = traslados.filter((x: any) => x.granjaOrigenId === granjaId).pop();
+  const correccion = await requestAs(app, '1').post(`/api/operaciones/traslados/${t.id}/corregir-peso-kg`)
+    .send({ pesoKg: cantidad, motivo: 'Peso confirmado en báscula de prueba' });
+  expect(correccion.status).toBe(201);
   return t.id;
 }
 
 describe('E2E — Recepción en bodega con diferencia registra desperdicio y alerta', () => {
   it('recepción conforme no genera desperdicio', async () => {
     const trasladoId = await crearCarga(100);
-    const res = await request(app).post('/api/operaciones/recepcion').send({
+    const res = await requestAs(app, '1').post('/api/operaciones/recepcion').send({
       trasladoId,
-      cantidadEsperada: 100,
-      cantidadRecibida: 100,
+      cantidadKgEsperada: 100,
+      cantidadKgRecibida: 100,
       motivoDiferencia: null,
       producto: 'Huevos - Grande',
       responsableRecepcion: 'Bodeguero Test'
     });
     expect(res.status).toBe(200);
 
-    const desperdicios = (await request(app).get('/api/desperdicios')).body;
+    const desperdicios = (await requestAs(app, '1').get('/api/desperdicios')).body;
     expect(desperdicios.some((d: any) => d.producto === 'Huevos - Grande')).toBe(false);
   });
 
   it('REGRESIÓN — recepción con diferencia registra el desperdicio y la pérdida en tránsito', async () => {
     const trasladoId = await crearCarga(200);
-    const rec = await request(app).post('/api/operaciones/recepcion').send({
+    const rec = await requestAs(app, '1').post('/api/operaciones/recepcion').send({
       trasladoId,
-      cantidadEsperada: 200,
-      cantidadRecibida: 120,
+      cantidadKgEsperada: 200,
+      cantidadKgRecibida: 120,
       motivoDiferencia: 'Quebrado y sucio en tránsito',
       producto: 'Huevos - Grande',
       responsableRecepcion: 'Bodeguero Test'
     });
     expect(rec.status).toBe(200);
 
-    const desperdicios = (await request(app).get('/api/desperdicios')).body;
+    const desperdicios = (await requestAs(app, '1').get('/api/desperdicios')).body;
     const desp = desperdicios.find((d: any) => d.producto === 'Huevos - Grande');
     expect(desp).toBeDefined();
     expect(desp.cantidad).toBe(80);
     expect(desp.motivo).toBe('Quebrado y sucio en tránsito');
     expect(desp.origen).toContain('Recepción');
 
-    const movimientos = (await request(app).get('/api/inventario/movimientos')).body;
+    const movimientos = (await requestAs(app, '1').get('/api/inventario/movimientos')).body;
     const perdida = movimientos.find((m: any) => m.tipo === 'Pérdida en Tránsito' && m.producto === 'Huevos - Grande');
     expect(perdida).toBeDefined();
     expect(perdida.cantidad).toBe(80);
     expect(perdida.destino).toBe('Desperdicio');
 
-    const traslados = (await request(app).get('/api/operaciones/traslados')).body;
+    const traslados = (await requestAs(app, '1').get('/api/operaciones/traslados')).body;
     const t = traslados.find((x: any) => x.id === trasladoId);
     expect(t.estado).toBe('RecibidoConDiferencia');
   });
 
   it('REGRESIÓN — dashboard/enterprise emite alerta por recepción con diferencia', async () => {
-    const res = await request(app).get('/api/dashboard/enterprise');
+    const res = await requestAs(app, '1').get('/api/dashboard/enterprise');
     expect(res.status).toBe(200);
     const alerta = res.body.alertas.find((a: any) => a.tipo === 'Diferencia en recepción');
     expect(alerta).toBeDefined();

@@ -14,10 +14,9 @@
  * hub abre con un número que el siguiente tab contradice, y ese es el defecto que
  * hace que la gente deje de confiar en el resumen.
  *
- * Lo que aquí NO se comprueba es autorización por rol: casi ninguno de estos
- * endpoints lleva middleware de rol —solo Office lo tiene—, así que un 200 aquí
- * no significa "el que puede entrar puede ver". La matriz de la Fase 7 vive en
- * `nav-config.test.ts` y `nav-render.test.tsx`, que es donde el shell filtra.
+ * La autorización se comprueba en `e2e-autorizacion-operaciones.test.ts` con los
+ * perfiles demo y middleware backend; aquí se comprueban contratos y coherencia
+ * entre las cifras que alimentan el hub.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
@@ -36,6 +35,7 @@ const DB_PATH = path.resolve(process.cwd(), '.test-operaciones-hub.db');
 
 const ADMIN = 'adm-fase7';
 const HOY = new Date().toISOString().split('T')[0];
+const comoAdmin = (req: request.Test) => req.set('x-user-id', ADMIN);
 
 beforeAll(async () => {
   if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
@@ -74,36 +74,36 @@ describe('cada grupo del hub tiene su endpoint', () => {
     // pantalla que pide sus datos al montar. Si uno no responde, la fila ofrece un
     // tab que se abre en blanco.
     for (const ruta of ['/api/granjas', '/api/galerones', '/api/vacunaciones', '/api/alimento', '/api/activos']) {
-      expectApi(await request(app).get(ruta), 200, ruta);
+      expectApi(await comoAdmin(request(app).get(ruta)), 200, ruta);
     }
   });
 
   it('Bodega: existencias y control leen el mismo stock', async () => {
-    expectApi(await request(app).get('/api/bodega/stock'), 200);
-    expectApi(await request(app).get('/api/etiquetas'), 200);
+    expectApi(await comoAdmin(request(app).get('/api/bodega/stock')), 200);
+    expectApi(await comoAdmin(request(app).get('/api/etiquetas')), 200);
     // Control necesita además las recepciones, que es de donde salen las alertas
     // de faltante. Sin ellas, la vista abre sin poder explicar un descuadre.
-    expectApi(await request(app).get('/api/operaciones/recepciones'), 200);
+    expectApi(await comoAdmin(request(app).get('/api/operaciones/recepciones')), 200);
   });
 
   it('Despacho: remisiones y tablero de guías responden', async () => {
-    expectApi(await request(app).get('/api/operaciones/remisiones'), 200);
-    expectApi(await request(app).get('/api/logistica/tablero'), 200);
+    expectApi(await comoAdmin(request(app).get('/api/operaciones/remisiones')), 200);
+    expectApi(await comoAdmin(request(app).get('/api/logistica/tablero')), 200);
   });
 
   it('Ventas: Caja Ruta encuentra la guía pendiente', async () => {
     // Es el grupo que absorbió el tab `caja` de Logística, así que su primera
     // pantalla tiene que ser la misma que era.
-    const res = await request(app).get('/api/logistica/guias-activas');
+    const res = await comoAdmin(request(app).get('/api/logistica/guias-activas'));
     expectApi(res, 200);
     expect(Array.isArray(res.body)).toBe(true);
-    expectApi(await request(app).get('/api/logistica/camiones'), 200);
+    expectApi(await comoAdmin(request(app).get('/api/logistica/camiones')), 200);
   });
 });
 
 describe('Resumen del día y Bodega no se contradicen', () => {
   it('las cinco cifras que lee el primer tab existen y son números', async () => {
-    const res = await request(app).get('/api/dashboard/enterprise');
+    const res = await comoAdmin(request(app).get('/api/dashboard/enterprise'));
     expectApi(res, 200);
     // Si falta una, `ResumenDelDia` se oculta entero en vez de pintar ceros: es el
     // comportamiento que `tests/ui/operaciones-ia.test.tsx` fija. Aquí se ata el
@@ -115,8 +115,8 @@ describe('Resumen del día y Bodega no se contradicen', () => {
   });
 
   it('el stock de bodega del resumen es el mismo que ve el grupo Bodega', async () => {
-    const resumen = (await request(app).get('/api/dashboard/enterprise')).body;
-    const stock = (await request(app).get('/api/bodega/stock')).body;
+    const resumen = (await comoAdmin(request(app).get('/api/dashboard/enterprise'))).body;
+    const stock = (await comoAdmin(request(app).get('/api/bodega/stock'))).body;
     // 600 + 300 en Bodega Central. El item en Granja queda fuera de los dos: no
     // está en bodega, y si apareciera en alguno de los dos sería un error.
     expect(resumen.stockBodegaCentral).toBe(900);

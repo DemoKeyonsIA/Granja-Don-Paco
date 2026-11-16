@@ -86,19 +86,19 @@ const TONOS: Record<TonoKpi, PaletaTono> = {
     superficie: 'border-stone-200/60 dark:border-neutral-700/40',
     valor: '',
     fondo: 'color-mix(in srgb, var(--brand-primary) 8%, transparent)',
-    color: 'var(--brand-primary)',
+    color: 'var(--text-primary)',
   },
   'marca-info': {
     superficie: 'border-stone-200/60 dark:border-neutral-700/40',
     valor: '',
     fondo: 'color-mix(in srgb, var(--brand-secondary) 10%, transparent)',
-    color: 'var(--brand-secondary-dark)',
+    color: 'var(--text-primary)',
   },
   'marca-acento': {
     superficie: 'border-stone-200/60 dark:border-neutral-700/40',
     valor: '',
     fondo: 'color-mix(in srgb, var(--brand-accent) 8%, transparent)',
-    color: 'var(--brand-accent)',
+    color: 'var(--text-primary)',
   },
 };
 
@@ -173,7 +173,7 @@ export function TarjetaKpi({
     'font-bold uppercase',
     variante === 'pila' ? 'text-[10px]' : 'text-[10px] tracking-wide truncate',
     superficie === 'tono' && t.valor
-      ? cn(t.valor, 'opacity-70 tracking-wider')
+      ? cn(t.valor || 'text-primary', 'tracking-wider')
       : variante === 'fila' ? 'text-neutral-400' : 'text-neutral-500 dark:text-neutral-400',
   );
 

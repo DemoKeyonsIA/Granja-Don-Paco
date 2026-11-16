@@ -3,6 +3,7 @@ import { AlertTriangle, Check, ChevronRight, ChevronLeft, Wrench, Egg, Clipboard
 import { User } from '../types';
 import { toast } from 'sonner';
 import { BloqueCarga, Spinner } from './Spinner';
+import { sessionHeaders } from '../lib/session';
 
 type Granja = { id: string; nombre: string; ubicacion?: string; estado?: string };
 type Galeron = { id: string; granjaId: string; nombre: string; estado?: string };
@@ -68,7 +69,7 @@ export default function IncidentesMovil({ currentUser }: Props) {
 
   const loadIncidentes = async () => {
     try {
-      const res = await fetch('/api/incidentes');
+      const res = await fetch('/api/incidentes', { headers: sessionHeaders(currentUser.id) });
       if (res.ok) setIncidentes(await res.json());
     } catch { /* silencioso */ }
   };
@@ -76,7 +77,11 @@ export default function IncidentesMovil({ currentUser }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const [rG, rGal] = await Promise.all([fetch('/api/granjas'), fetch('/api/galerones')]);
+        const headers = sessionHeaders(currentUser.id);
+        const [rG, rGal] = await Promise.all([
+          fetch('/api/granjas', { headers }),
+          fetch('/api/galerones', { headers }),
+        ]);
         if (rG.ok) {
           const data = await rG.json();
           setGranjas(data.filter((g: Granja) => g.estado !== 'Archivado'));
@@ -89,7 +94,7 @@ export default function IncidentesMovil({ currentUser }: Props) {
       } catch { toast.error('Error cargando datos'); }
       setLoading(false);
     })();
-  }, []);
+  }, [currentUser.id]);
 
   const galeronesGranja = galerones.filter(g => g.granjaId === granjaSel?.id);
 
@@ -128,7 +133,7 @@ export default function IncidentesMovil({ currentUser }: Props) {
         : accionTomada.trim() || null;
       const res = await fetch('/api/incidentes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify({
           granjaId: granjaSel.id,
           galeronId: galeronSel?.id || null,

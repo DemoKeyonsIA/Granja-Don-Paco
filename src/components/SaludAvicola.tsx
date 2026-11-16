@@ -3,6 +3,7 @@ import { Shield, Plus, AlertTriangle, CheckCircle, Clock, Calendar, Syringe, Sea
 import { Vacunacion, User } from '../types';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { sessionHeaders } from '../lib/session';
 
 interface Props { currentUser: User; }
 
@@ -24,8 +25,8 @@ export default function SaludAvicola({ currentUser }: Props) {
     setLoading(true);
     try {
       const [vRes, aRes, gRes, galRes] = await Promise.all([
-        fetch('/api/vacunaciones'), fetch('/api/vacunaciones/alertas'),
-        fetch('/api/granjas'), fetch('/api/galerones')
+        fetch('/api/vacunaciones', { headers: sessionHeaders(currentUser.id) }), fetch('/api/vacunaciones/alertas', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/granjas', { headers: sessionHeaders(currentUser.id) }), fetch('/api/galerones', { headers: sessionHeaders(currentUser.id) })
       ]);
       setVacunaciones(await vRes.json());
       setAlertas(await aRes.json());
@@ -42,7 +43,7 @@ export default function SaludAvicola({ currentUser }: Props) {
     setLoading(true);
     try {
       const res = await fetch('/api/vacunaciones', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify(form)
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error al registrar la vacunación'); }
@@ -57,7 +58,7 @@ export default function SaludAvicola({ currentUser }: Props) {
   const aplicar = async (id: string) => {
     try {
       const res = await fetch(`/api/vacunaciones/${id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        method: 'PUT', headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify({ estado: 'Aplicada', fechaAplicada: new Date().toISOString() })
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error al marcar como aplicada'); }

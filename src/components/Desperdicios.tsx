@@ -3,10 +3,11 @@ import { Trash2, Plus, AlertTriangle, TrendingDown, MapPin, RefreshCw, X, Route,
 import { Desperdicio, User } from '../types';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
+import { sessionHeaders } from '../lib/session';
 
-interface Props { currentUser: User; }
+interface Props { currentUser: User; soloLectura?: boolean; }
 
-export default function Desperdicios({ currentUser }: Props) {
+export default function Desperdicios({ currentUser, soloLectura = false }: Props) {
   const [desperdicios, setDesperdicios] = useState<Desperdicio[]>([]);
   const [resumen, setResumen] = useState<any>(null);
   const [patrones, setPatrones] = useState<any>(null);
@@ -20,7 +21,7 @@ export default function Desperdicios({ currentUser }: Props) {
   const [subTab, setSubTab] = useState<'lista' | 'resumen' | 'patrones'>('lista');
 
   const [form, setForm] = useState({
-    origen: 'Granja', producto: 'Huevos - Grande', cantidad: 0, peso: 0,
+    origen: 'Granja', producto: 'Huevos - Grande', cantidad: 0, unidad: 'cartones', peso: 0,
     motivo: 'Quebrado Granja', responsable: '', impactoFinanciero: 0, observaciones: '',
     rutaId: '', camionId: '', vendedorId: ''
   });
@@ -29,15 +30,15 @@ export default function Desperdicios({ currentUser }: Props) {
     setLoading(true);
     try {
       const [dRes, rRes, rutasRes, camionesRes, usersRes] = await Promise.all([
-        fetch('/api/desperdicios'), fetch('/api/desperdicios/resumen'),
-        fetch('/api/rutas'), fetch('/api/logistica/camiones'), fetch('/api/users')
+        fetch('/api/desperdicios', { headers: sessionHeaders(currentUser.id) }), fetch('/api/desperdicios/resumen', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/rutas', { headers: sessionHeaders(currentUser.id) }), fetch('/api/camiones', { headers: sessionHeaders(currentUser.id) }), fetch('/api/users', { headers: sessionHeaders(currentUser.id) })
       ]);
       setDesperdicios(await dRes.json());
       setResumen(await rRes.json());
       setRutas((await rutasRes.json()) || []);
       setCamiones((await camionesRes.json()) || []);
       const users = (await usersRes.json()) || [];
-      setVendedores(users.filter((u: any) => u.role === 'Vendedor' || (u.roles || '').includes('Vendedor')));
+      setVendedores(users.filter((u: any) => ['Comercial', 'Vendedor', 'Facturador', 'Camionero'].includes(u.role) || String(u.roles || '').split(',').some((r: string) => ['Comercial', 'Vendedor', 'Facturador', 'Camionero'].includes(r.trim()))));
     } catch { toast.error('No se pudieron cargar los datos de desperdicio.'); }
     setLoading(false);
   };
@@ -48,7 +49,7 @@ export default function Desperdicios({ currentUser }: Props) {
       const qs = new URLSearchParams();
       if (fechaInicio) qs.set('fechaInicio', fechaInicio);
       if (fechaFin) qs.set('fechaFin', `${fechaFin}T23:59:59`);
-      const res = await fetch(`/api/desperdicios/patrones?${qs.toString()}`);
+      const res = await fetch(`/api/desperdicios/patrones?${qs.toString()}`, { headers: sessionHeaders(currentUser.id) });
       setPatrones(await res.json());
     } catch { toast.error('No se pudieron cargar los patrones.'); }
     setLoading(false);
@@ -66,13 +67,13 @@ export default function Desperdicios({ currentUser }: Props) {
     setLoading(true);
     try {
       const res = await fetch('/api/desperdicios', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify(form)
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error al registrar la pérdida'); }
       toast.success('Pérdida registrada');
       setIsCreating(false);
-      setForm({ origen: 'Granja', producto: 'Huevos - Grande', cantidad: 0, peso: 0, motivo: 'Quebrado Granja', responsable: '', impactoFinanciero: 0, observaciones: '', rutaId: '', camionId: '', vendedorId: '' });
+      setForm({ origen: 'Granja', producto: 'Huevos - Grande', cantidad: 0, unidad: 'cartones', peso: 0, motivo: 'Quebrado Granja', responsable: '', impactoFinanciero: 0, observaciones: '', rutaId: '', camionId: '', vendedorId: '' });
       cargar();
     } catch (e: any) { toast.error(e.message); }
     setLoading(false);
@@ -88,12 +89,14 @@ export default function Desperdicios({ currentUser }: Props) {
             <p className="text-sm text-neutral-500 dark:text-neutral-400">Control de pérdidas por etapa</p>
           </div>
         </div>
-        <div className="flex space-x-2">
-          <button onClick={cargar} className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-400"><RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} /></button>
-          <button onClick={() => setIsCreating(true)} className="flex items-center space-x-2 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 dark:hover:bg-red-500">
-            <Plus className="w-4 h-4" /><span>Registrar Pérdida</span>
-          </button>
-        </div>
+            <div className="flex space-x-2">
+              <button onClick={cargar} className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-400"><RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} /></button>
+              {!soloLectura && (
+                <button onClick={() => setIsCreating(true)} className="btn-primary">
+                  <Plus className="w-4 h-4" /><span>Registrar Pérdida</span>
+                </button>
+              )}
+            </div>
       </div>
 
       {/* Resumen */}
@@ -133,7 +136,7 @@ export default function Desperdicios({ currentUser }: Props) {
                   <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">{d.fecha}</td>
                   <td className="px-4 py-3"><span className="px-2 py-1 rounded-full text-xs font-bold bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300">{d.origen}</span></td>
                   <td className="px-4 py-3 font-medium text-neutral-900 dark:text-white">{d.producto}</td>
-                  <td className="px-4 py-3 text-right font-bold text-red-600 dark:text-red-400">{d.cantidad}</td>
+                  <td className="px-4 py-3 text-right font-bold text-red-600 dark:text-red-400">{d.cantidad} {d.unidad || 'cartones'}</td>
                   <td className="px-4 py-3 text-neutral-500 dark:text-neutral-400">{d.motivo}</td>
                   <td className="px-4 py-3 text-xs text-neutral-500 dark:text-neutral-400">{rutas.find((r: any) => r.id === d.rutaId)?.nombre || '—'}</td>
                   <td className="px-4 py-3 text-xs text-neutral-500 dark:text-neutral-400">{camiones.find((c: any) => c.id === d.camionId)?.nombre || '—'}</td>
@@ -346,12 +349,17 @@ export default function Desperdicios({ currentUser }: Props) {
                 <select value={form.motivo} onChange={e => setForm({ ...form, motivo: e.target.value })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white">
                   {['Quebrado Granja', 'Quebrado Bodega', 'Quebrado Camión', 'Rechazo Cliente', 'Vencido', 'Sucio', 'Diferencia Peso', 'Ajuste Administrativo'].map(m => <option key={m}>{m}</option>)}
                 </select></div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div><label className="block text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-1">Cantidad *</label>
-                  <input type="number" value={form.cantidad || ''} onChange={e => setForm({ ...form, cantidad: Number(e.target.value) })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white" /></div>
+                  <input type="number" min="0.01" step="0.01" value={form.cantidad || ''} onChange={e => setForm({ ...form, cantidad: Number(e.target.value) })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white" /></div>
+                <div><label className="block text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-1">Unidad *</label>
+                  <select value={form.unidad} onChange={e => setForm({ ...form, unidad: e.target.value })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white">
+                    <option value="cartones">Cartones</option><option value="kg">Kilos (kg)</option>
+                  </select></div>
                 <div><label className="block text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-1">Impacto (₡)</label>
                   <input type="number" value={form.impactoFinanciero || ''} onChange={e => setForm({ ...form, impactoFinanciero: Number(e.target.value) })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white" /></div>
               </div>
+              {form.unidad === 'kg' && <p className="text-xs text-amber-700 dark:text-amber-300">El sistema guardará el factor kg/cartón vigente. Sin factor, el cuadre quedará pendiente de conversión.</p>}
               <div><label className="block text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-1">Responsable *</label>
                 <input value={form.responsable} onChange={e => setForm({ ...form, responsable: e.target.value })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white" /></div>
 
@@ -383,7 +391,7 @@ export default function Desperdicios({ currentUser }: Props) {
                 </div>
               </div>
 
-              <button onClick={crear} className="w-full bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700 dark:hover:bg-red-500">Registrar</button>
+              <button onClick={crear} className="btn-primary btn-block">Registrar</button>
             </div>
           </div>
         </div>

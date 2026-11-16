@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { requestAs } from './helpers/request-as';
 import { drizzle } from 'drizzle-orm/libsql';
 import * as schema from '../src/db/schema';
 import type { Express } from 'express';
@@ -21,15 +22,16 @@ beforeAll(async () => {
   await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['1', 'Despachador', 'despacho@test.com', 'Despachador'] });
   await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['3', 'Vendedor', 'vendedor@test.com', 'Vendedor'] });
   await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['9', 'Facturador', 'facturador@test.com', 'Admin'] });
+  await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['2', 'Bodeguero', 'bodeguero@test.com', 'Bodeguero'] });
   await client.execute({ sql: `INSERT INTO clientes (id, nombre, documento_id, ruta, condicion_pago, estado, limite_credito, saldo_pendiente) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, args: ['c1', 'Cliente A', '1-101-101', 'R1', 'Contado', 'Activo', 0, 0] });
   await client.execute({ sql: `INSERT INTO clientes (id, nombre, documento_id, ruta, condicion_pago, estado, limite_credito, saldo_pendiente) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, args: ['c2', 'Cliente B', '2-202-202', 'R1', 'Credito', 'Activo', 5000000, 0] });
   await client.execute({ sql: `INSERT INTO rutas (id, nombre, cliente_ids, centroide_lat, centroide_lng, capacidad_max_cartones, estado) VALUES (?, ?, ?, ?, ?, ?, ?)`, args: ['r1', 'Ruta 1', JSON.stringify(['c1', 'c2']), 10.1, -84.1, 500, 'Activa'] });
-  await client.execute({ sql: `INSERT INTO inventario (id, producto, cantidad, unidad, ubicacion, ultima_actualizacion) VALUES (?, ?, ?, ?, ?, ?)`, args: ['i1', 'Huevos - Grande', 200, 'cartones', 'Bodega Central', new Date().toISOString()] });
+  await client.execute({ sql: `INSERT INTO inventario (id, producto, cantidad, unidad, ubicacion, ultima_actualizacion) VALUES (?, ?, ?, ?, ?, ?)`, args: ['i1', 'Huevos - Grande', 200, 'kg', 'Bodega Central', new Date().toISOString()] });
   const etiquetas = [['e10', 'ETQ-CN-010', 30], ['e11', 'ETQ-CN-011', 30], ['e12', 'ETQ-CN-012', 30], ['e13', 'ETQ-CN-013', 30], ['e14', 'ETQ-CN-014', 30]] as const;
   for (const [id, codigo, cantidad] of etiquetas) {
-    await client.execute({ sql: `INSERT INTO etiquetas (id, codigo_unico, producto, cantidad, estado, ubicacion_actual, lote, peso_bodega) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, args: [id, codigo, 'Huevos - Grande', cantidad, 'EnBodega', 'Bodega Central', 'L-CN-01', 20] });
+    await client.execute({ sql: `INSERT INTO etiquetas (id, codigo_unico, producto, cantidad, estado, ubicacion_actual, lote, peso_bodega, peso_neto, saldo_kg, peso_origen, peso_registrado_por, peso_registrado_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, args: [id, codigo, 'Huevos - Grande', cantidad, 'EnBodega', 'Bodega Central', 'L-CN-01', cantidad, cantidad, cantidad, 'Manual', '9', new Date().toISOString()] });
   }
-  await client.execute({ sql: `INSERT INTO productos_catalogo (id, nombre, descripcion, unidad, precio_base, categoria, estado, fecha_creacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, args: ['p1', 'Huevos - Grande', '', 'cartones', 16000, 'Huevos', 'Activo', new Date().toISOString()] });
+  await client.execute({ sql: `INSERT INTO productos_catalogo (id, nombre, descripcion, unidad, precio_base, categoria, estado, fecha_creacion) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, args: ['p1', 'Huevos - Grande', '', 'kg', 16000, 'Huevos', 'Activo', new Date().toISOString()] });
 
   const testDb = drizzle(client, { schema });
   const mod = await import('../server');
@@ -43,16 +45,16 @@ afterAll(() => {
 const costo = (n: number) => n * 16000;
 
 async function crearCamion(nombre: string) {
-  const cam = await request(app).post('/api/logistica/camiones').send({ nombre, placa: 'CR-000', ruta_defecto: 'Ruta 1', capacidad_cartones: 150 });
+  const cam = await requestAs(app, '9').post('/api/logistica/camiones').send({ nombre, placa: 'CR-000', ruta_defecto: 'Ruta 1', capacidad_cartones: 150 });
   expect(cam.status).toBe(201);
   return cam.body;
 }
 
 async function crearGuia(camionId: string, etiquetas: string[]) {
-  const gu = await request(app).post('/api/logistica/guias')
+  const gu = await requestAs(app, '9').post('/api/logistica/guias')
     .send({ camionId, rutaId: 'r1', etiquetasIds: etiquetas, responsablesCarga: 'Bodeguero', responsableTransporte: 'Vendedor' });
   expect(gu.status).toBe(201);
-  const list = await request(app).get('/api/logistica/guias');
+  const list = await requestAs(app, '9').get('/api/logistica/guias');
   return list.body.find((g: any) => g.camionId === camionId);
 }
 
@@ -62,30 +64,39 @@ describe('F4 — Consolidación de ruta → facturación electrónica (factura p
     refs.guia = await crearGuia(cam.id, ['e10', 'e11', 'e12']);
     expect(refs.guia.totalCartones).toBe(90);
 
-    const v1 = await request(app).post('/api/logistica/caja/venta').send({ guiaId: refs.guia.id, clienteId: 'c1', etiquetaId: 'e10', producto: 'Huevos - Grande', cartones: 30, cobro: 'Efectivo' });
+    const v1 = await requestAs(app, '9').post('/api/logistica/caja/venta').send({ guiaId: refs.guia.id, clienteId: 'c1', etiquetaId: 'e10', producto: 'Huevos - Grande', cantidadKg: 30, cobro: 'Efectivo' });
     expect(v1.status).toBe(201); refs.v1 = v1.body;
-    const v2 = await request(app).post('/api/logistica/caja/venta').send({ guiaId: refs.guia.id, clienteId: 'c2', etiquetaId: 'e11', producto: 'Huevos - Grande', cartones: 30, cobro: 'Credito' });
+    const v2 = await requestAs(app, '9').post('/api/logistica/caja/venta').send({ guiaId: refs.guia.id, clienteId: 'c2', etiquetaId: 'e11', producto: 'Huevos - Grande', cantidadKg: 30, cobro: 'Credito' });
     expect(v2.status).toBe(201); refs.v2 = v2.body;
-    const v3 = await request(app).post('/api/logistica/caja/venta').send({ guiaId: refs.guia.id, clienteId: 'c1', etiquetaId: 'e12', producto: 'Huevos - Grande', cartones: 30, cobro: 'Efectivo' });
+    const v3 = await requestAs(app, '9').post('/api/logistica/caja/venta').send({ guiaId: refs.guia.id, clienteId: 'c1', etiquetaId: 'e12', producto: 'Huevos - Grande', cantidadKg: 30, cobro: 'Efectivo' });
     expect(v3.status).toBe(201); refs.v3 = v3.body;
 
     // Devolución del primer tiquete (efectivo) → queda Anulada
-    const dev = await request(app).post('/api/logistica/caja/devolucion')
+    const dev = await requestAs(app, '9').post('/api/logistica/caja/devolucion')
       .send({ guiaId: refs.guia.id, etiquetaId: refs.v1.etiquetaId, ventaRutaId: refs.v1.ventaId, responsable: 'Vendedor' });
     expect(dev.status).toBe(201);
 
-    const fd = await request(app).post('/api/logistica/caja/fin-dia').send({ guiaId: refs.guia.id, responsable: 'Vendedor' });
+    const fd = await requestAs(app, '9').post('/api/logistica/caja/fin-dia').send({ guiaId: refs.guia.id, responsable: 'Vendedor' });
     expect(fd.body.cuadre.mermaPreliminar).toBe(0);
     expect(fd.body.cuadre.tiquetesEmitidos).toBe(2);
 
-    const cuadre = await request(app).post('/api/logistica/cuadre-central')
-      .set('x-user-id', '1').send({ guiaId: refs.guia.id, responsable: 'Despachador' });
+    const retornos = await requestAs(app, '9').get(`/api/logistica/retornos/pendientes?guiaId=${refs.guia.id}`);
+    for (const retorno of retornos.body) {
+      const recibido = await requestAs(app, '9').post('/api/logistica/bodega/retorno/aceptar')
+        .set('x-user-id', '2').send({ retornoId: retorno.id, responsable: 'Bodeguero' });
+      expect(recibido.status).toBe(200);
+    }
+
+    const cuadre = await requestAs(app, '9').post('/api/logistica/cuadre-central').set('x-user-id', '9')
+      .send({ guiaId: refs.guia.id, responsable: 'Despachador' });
     expect(cuadre.status).toBe(200);
     expect(cuadre.body.estado).toBe('Cerrada');
   });
 
   it('Consolidar: una factura por cliente (contado + crédito) y NC por la devolución, tiquetes enlazados', async () => {
-    const res = await request(app).post('/api/facturacion/consolidar-ruta')
+    // El precio auditado debe conservar lo que se vendió en ruta aunque el catálogo cambie antes de consolidar.
+    await client.execute({ sql: `UPDATE productos_catalogo SET precio_base = ? WHERE id = ?`, args: [19000, 'p1'] });
+    const res = await requestAs(app, '9').post('/api/facturacion/consolidar-ruta')
       .set('x-user-id', '9')
       .send({ guiaId: refs.guia.id, emisorNombre: 'Granja Don Paco', emisorCedula: '3-101-000000' });
     expect(res.status).toBe(200);
@@ -102,7 +113,16 @@ describe('F4 — Consolidación de ruta → facturación electrónica (factura p
     expect(factCredito.total).toBe(costo(30));
     expect(factCredito.condicion).toBe('Credito');
 
-    const docs = await request(app).get('/api/facturacion/documentos');
+    const libro = await requestAs(app, '9').get('/api/facturas');
+    const facturaCreditoId = libro.body.find((f: any) => f.clienteId === 'c2' && f.estado !== 'NotaCredito').id;
+    const detalleConsolidado = await client.execute({ sql: `SELECT resolucion_precio_json, precio_unitario FROM detalles_factura WHERE factura_id = ?`, args: [facturaCreditoId] });
+    expect(Number(detalleConsolidado.rows[0].precio_unitario)).toBe(16000);
+    const resolucionConsolidada = JSON.parse(String(detalleConsolidado.rows[0].resolucion_precio_json));
+    expect(resolucionConsolidada.tipo).toBe('ConsolidacionTiquetes');
+    expect(resolucionConsolidada.componentes).toHaveLength(1);
+    expect(resolucionConsolidada.componentes[0].resolucionPrecio.precioAplicado).toBe(16000);
+
+    const docs = await requestAs(app, '9').get('/api/facturacion/documentos');
     const feC2 = docs.body.find((d: any) => d.tipoDocumento === 'Factura' && d.receptorNombre === 'Cliente B');
     const feC1 = docs.body.find((d: any) => d.tipoDocumento === 'Factura' && d.receptorNombre === 'Cliente A');
     const nc = docs.body.find((d: any) => d.tipoDocumento === 'NotaCredito');
@@ -112,7 +132,7 @@ describe('F4 — Consolidación de ruta → facturación electrónica (factura p
     expect(nc.notasCreditoId).toBe(refs.v1.ventaId);
 
     // Facturas en el libro: c1 Pagada, c2 Pendiente, NC fuera de ingresos
-    const facturas = await request(app).get('/api/facturas');
+    const facturas = await requestAs(app, '9').get('/api/facturas');
     const fC1 = facturas.body.find((f: any) => f.clienteId === 'c1' && f.estado !== 'NotaCredito');
     const fC2 = facturas.body.find((f: any) => f.clienteId === 'c2');
     const fNC = facturas.body.find((f: any) => f.estado === 'NotaCredito');
@@ -121,7 +141,7 @@ describe('F4 — Consolidación de ruta → facturación electrónica (factura p
     expect(fNC.total).toBe(costo(30));
 
     // Tiquetes vinculados a la factura consolidada
-    const ventas = await client.execute({ sql: `SELECT tiquete_consecutivo, factura_id FROM ventas_ruta WHERE guia_id = ?`, args: [refs.guia.id] });
+    const ventas = await client.execute({ sql: `SELECT tiquete_consecutivo, factura_id FROM ventas_ruta WHERE guia_id = ? UNION ALL SELECT tiquete_consecutivo, factura_id FROM ventas_ruta_kg WHERE guia_id = ?`, args: [refs.guia.id, refs.guia.id] });
     const link = (t: string) => ventas.rows.find((v: any) => v.tiquete_consecutivo === t)?.factura_id;
     expect(link('TQ-0002')).toBe(fC2.id); // crédito vivo
     expect(link('TQ-0003')).toBe(fC1.id); // efectivo vivo
@@ -129,7 +149,7 @@ describe('F4 — Consolidación de ruta → facturación electrónica (factura p
   });
 
   it('Rutas del día: la guía aparece consolidada con su facturación', async () => {
-    const rd = await request(app).get('/api/facturacion/rutas-dia');
+    const rd = await requestAs(app, '9').get('/api/facturacion/rutas-dia');
     expect(rd.status).toBe(200);
     const ruta = rd.body.rutas.find((r: any) => r.guiaId === refs.guia.id);
     expect(ruta).toBeTruthy();
@@ -144,11 +164,11 @@ describe('F4 — Consolidación de ruta → facturación electrónica (factura p
   it('Guía no cerrada (sin cuadre) → 409; consolidar dos veces → 409', async () => {
     const cam = await crearCamion('Camión No Cuadrado');
     const guiaAbierta = await crearGuia(cam.id, ['e13']);
-    const res1 = await request(app).post('/api/facturacion/consolidar-ruta').set('x-user-id', '9').send({ guiaId: guiaAbierta.id });
+    const res1 = await requestAs(app, '9').post('/api/facturacion/consolidar-ruta').set('x-user-id', '9').send({ guiaId: guiaAbierta.id });
     expect(res1.status).toBe(409);
     expect((res1.body.error as string)).toContain('cerrada');
 
-    const res2 = await request(app).post('/api/facturacion/consolidar-ruta').set('x-user-id', '9').send({ guiaId: refs.guia.id });
+    const res2 = await requestAs(app, '9').post('/api/facturacion/consolidar-ruta').set('x-user-id', '9').send({ guiaId: refs.guia.id });
     expect(res2.status).toBe(409);
     expect((res2.body.error as string)).toContain('ya fue consolidada');
   });
@@ -156,13 +176,16 @@ describe('F4 — Consolidación de ruta → facturación electrónica (factura p
   it('Guía cerrada sin ventas → 400', async () => {
     const cam = await crearCamion('Camión Sin Ventas');
     const guiaVacia = await crearGuia(cam.id, ['e14']); // cargada pero sin ventas en caja
-    await request(app).post('/api/logistica/caja/fin-dia').send({ guiaId: guiaVacia.id, responsable: 'Vendedor' });
-    const cuadre = await request(app).post('/api/logistica/cuadre-central')
-      .set('x-user-id', '1').send({ guiaId: guiaVacia.id, responsable: 'Despachador' });
+    await requestAs(app, '9').post('/api/logistica/caja/fin-dia').send({ guiaId: guiaVacia.id, responsable: 'Vendedor' });
+    const recibido = await requestAs(app, '9').post('/api/logistica/bodega/retorno/aceptar-sobrante').set('x-user-id', '2')
+      .send({ guiaId: guiaVacia.id, responsable: 'Bodeguero', conteoPorProducto: [{ producto: 'Huevos - Grande', cantidad: 30 }] });
+    expect(recibido.status).toBe(200);
+    const cuadre = await requestAs(app, '9').post('/api/logistica/cuadre-central').set('x-user-id', '9')
+      .send({ guiaId: guiaVacia.id, responsable: 'Despachador' });
     expect(cuadre.status).toBe(200);
     expect(cuadre.body.estado).toBe('Cerrada');
 
-    const res = await request(app).post('/api/facturacion/consolidar-ruta').set('x-user-id', '9').send({ guiaId: guiaVacia.id });
+    const res = await requestAs(app, '9').post('/api/facturacion/consolidar-ruta').set('x-user-id', '9').send({ guiaId: guiaVacia.id });
     expect(res.status).toBe(400);
     expect((res.body.error as string)).toContain('No hay ventas');
   });

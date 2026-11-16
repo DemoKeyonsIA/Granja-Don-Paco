@@ -56,6 +56,10 @@ beforeAll(async () => {
     sql: `INSERT INTO inventario (id, producto, cantidad, unidad, ubicacion, ultima_actualizacion) VALUES (?, ?, ?, ?, ?, ?)`,
     args: ['inv1', 'Huevos - Grande', 100, 'cartones', 'Camión Ruta 1', new Date().toISOString()]
   });
+  await client.execute({
+    sql: `INSERT INTO productos_catalogo (id, nombre, unidad, precio_base, categoria, estado, fecha_creacion) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: ['p-grande', 'Huevos - Grande', 'cartones', 16000, 'Huevos', 'Activo', new Date().toISOString()]
+  });
 
   const testDb = drizzle(client, { schema });
   const mod = await import('../server');

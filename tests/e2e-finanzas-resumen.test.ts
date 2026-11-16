@@ -89,6 +89,15 @@ beforeAll(async () => {
     { id: 'p-1', facturaId: 'f-credito-pagada', fecha: '2026-09-18', monto: 50000, metodo: 'Transferencia', usuarioId: ADMIN },
     { id: 'p-2', facturaId: 'f-parcial', fecha: '2026-09-22', monto: 30000, metodo: 'Efectivo', usuarioId: ADMIN },
   ]);
+  await testDb.insert(schema.cierres_caja_ruta).values({
+    id: 'cc-1', guiaId: 'guia-1', vendedorId: ADMIN, fecha: '2026-09-12',
+    efectivoEsperado: 40000, efectivoContado: 39000, creditoDocumentado: 0,
+    diferencia: -1000, estado: 'DiferenciaPendiente', creadoEn: '2026-09-12T18:00:00.000Z',
+  });
+  await testDb.insert(schema.depositos_caja).values({
+    id: 'dep-1', cierreId: 'cc-1', montoEsperado: 39000, montoDepositado: 38000,
+    referencia: 'DEP-001', registradoPor: ADMIN, fecha: '2026-09-13', estado: 'DiferenciaPendiente',
+  });
 
   const mod = await import('../server');
   app = await mod.createApp(true, testDb);
@@ -105,6 +114,15 @@ const resumenDe = async (query = '') => {
 };
 
 describe('GET /api/finanzas/resumen — cifras contra datos crudos', () => {
+  it('incluye conciliación de cierres de caja y diferencias pendientes', async () => {
+    const r = await resumenDe(`?desde=${MES.desde}&hasta=${MES.hasta}`);
+    expect(r.conciliacionCaja).toMatchObject({
+      cierres: 1, pendientesConteo: 0, diferenciasPendientes: 1, cierresCuadrados: 0,
+      efectivoEsperado: 40000, efectivoContado: 39000, diferenciaNeta: -1000,
+      depositosPendientes: 1, depositosConciliados: 0, montoDepositado: 38000,
+    });
+  });
+
   it('los ingresos devengados cuadran contra facturas y tiquetes del periodo', async () => {
     const r = await resumenDe(`?desde=${MES.desde}&hasta=${MES.hasta}`);
 
@@ -145,15 +163,15 @@ describe('GET /api/finanzas/resumen — devengado vs cobrado', () => {
   it('el cobrado excluye lo que se vendió pero no se cobró', async () => {
     const r = await resumenDe(`?desde=${MES.desde}&hasta=${MES.hasta}`);
     // Cobrado: 100000 (contada) + 30000 (consolidada) + 50000 (pago de la
-    // crédito pagada) + 30000 (parcial de f-parcial). f-sin-cobrar no entra.
-    expect(r.ingresosCobrados).toBe(210000);
+    // crédito pagada) + 30000 (parcial) + 40000 (tiquete suelto en efectivo).
+    expect(r.ingresosCobrados).toBe(250000);
   });
 
   it('devengado y cobrado son cifras distintas y auditables entre sí', async () => {
     const r = await resumenDe(`?desde=${MES.desde}&hasta=${MES.hasta}`);
     expect(r.ingresosFacturados).not.toBe(r.ingresosCobrados);
     // La diferencia es exactamente lo vendido y no cobrado en el mes.
-    expect(r.ingresosFacturados - r.ingresosCobrados).toBe(150000);
+    expect(r.ingresosFacturados - r.ingresosCobrados).toBe(110000);
   });
 
   it('una factura Pagada sin filas en pagos se cuenta como cobrada', async () => {
@@ -235,7 +253,7 @@ describe('GET /api/finanzas/resumen — ciclo del dinero', () => {
     expect(porEtapa.cuentasPorCobrar).toBe(r.cuentasPorCobrar);
     expect(porEtapa.cobrado).toBe(r.ingresosCobrados);
     // Caja es el dinero cobrado menos lo gastado, no la utilidad devengada.
-    expect(porEtapa.caja).toBe(135000);
+    expect(porEtapa.caja).toBe(175000);
     expect(porEtapa.resultado).toBe(r.utilidad);
   });
 });

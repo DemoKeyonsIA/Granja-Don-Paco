@@ -1,3 +1,4 @@
+/** Camionero queda como alias de lectura para sesiones anteriores; la BD lo migra a Comercial. */
 export type Role = 'Admin' | 'Socio' | 'Comercial' | 'Despachador' | 'Bodeguero' | 'Camionero';
 
 export interface User {
@@ -16,6 +17,9 @@ export interface Cliente {
   telefono?: string;
   email?: string;
   direccion?: string;
+  provincia?: string;
+  canton?: string;
+  distrito?: string;
   latitud?: number;
   longitud?: number;
   ruta: string;
@@ -73,6 +77,9 @@ export interface Factura {
   condicion_pago: 'Contado' | 'Credito';
   metodo_pago?: 'Efectivo' | 'SINPE' | 'Transferencia';
   estado: 'Pagada' | 'Pendiente' | 'Anulada';
+  pagado?: number;
+  saldoPendiente?: number;
+  fechaVencimiento?: string | null;
 }
 
 export interface ControlRuta {
@@ -128,6 +135,8 @@ export interface Ruta {
   id: string;
   nombre: string;
   vendedor_asignado?: string;
+  vendedores?: string;
+  camion_id?: string;
   cliente_ids?: string;
   dias_frecuencia?: string;
   kilometraje_aprox?: number;
@@ -154,7 +163,7 @@ export interface Recepcion {
   cantidadRecibida: number;
   diferencia: number;
   motivoDiferencia?: string;
-  tipoDiferencia?: 'desperdicio' | 'alerta' | null;
+  tipoDiferencia?: 'desperdicio' | 'alerta' | 'sobrante' | null;
   responsableRecepcion?: string;
   estado: string;
   esPosibleRobo?: boolean;
@@ -318,6 +327,9 @@ export interface Desperdicio {
   etiquetaId?: string;
   lote?: string;
   cantidad: number;
+  unidad?: string;
+  factorKgPorCarton?: number | null;
+  cantidadCartones?: number | null;
   peso?: number;
   motivo: string;
   responsable: string;
@@ -349,6 +361,8 @@ export interface PrecioDetalle {
   listaId: string;
   producto: string;
   precioUnitario: number;
+  precioMinimo?: number | null;
+  precioMaximo?: number | null;
   descuentoMaximo: number;
   unidad: string;
 }

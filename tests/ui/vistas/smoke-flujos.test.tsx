@@ -153,7 +153,9 @@ describe('el fixture no esconde errores del servidor', () => {
 });
 
 describe('abrir y cerrar vistas no habla', () => {
-  const modulos = ['Finanzas', 'Operaciones y Bodegas', 'Logística', 'Admin', 'Office', 'Clientes'];
+  // Fase 8: Logística ya no es un módulo; se abre desde la sub-fila de Despacho
+  // y Ventas, que se cubre en `smoke-vistas` con sus vistas reales.
+  const modulos = ['Dirección', 'Operaciones y Bodegas', 'Clientes', 'Finanzas', 'Admin'];
 
   for (const modulo of modulos) {
     it(`${modulo} no emite avisos al abrirse`, async () => {
@@ -259,9 +261,9 @@ describe('una escritura rechazada avisa del error y no dice que salió bien', ()
     limpiarToasts();
 
     // El tipo de documento se elige en el paso 1 y solo ahí, así que va primero.
-    // Tiquete evita depender de que el catálogo de clientes tenga un elemento
+    // Nota de venta evita depender de que el catálogo de clientes tenga un elemento
     // seleccionable, que es lo que haría frágil el flujo.
-    await hacerClicEn(boton('Tiquete'));
+    await hacerClicEn(boton('Nota de venta'));
     await asentar();
 
     // Se escanea un producto de demostración, que es el camino que el propio
@@ -305,7 +307,7 @@ describe('una escritura rechazada avisa del error y no dice que salió bien', ()
     await asentar();
     // El tipo de documento se elige en el paso 1 y solo ahí. Tiquete evita
     // depender de que el catálogo de clientes tenga un elemento seleccionable.
-    await hacerClicEn(boton('Tiquete'));
+    await hacerClicEn(boton('Nota de venta'));
     await asentar();
     await hacerClicEn(boton('Escanear (demo)'));
     await asentar();

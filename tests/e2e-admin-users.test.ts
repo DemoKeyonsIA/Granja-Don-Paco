@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import request from 'supertest';
 import { drizzle } from 'drizzle-orm/libsql';
 import { eq } from 'drizzle-orm';
 import * as schema from '../src/db/schema';
@@ -8,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { ejecutarDdl, abrirClienteDePrueba } from './helpers/db';
 import { expectApi } from './helpers/http';
+import { requestAs } from './helpers/request-as';
 
 let app: Express;
 let testDb: ReturnType<typeof drizzle>;
@@ -29,8 +29,9 @@ afterAll(() => {
 });
 
 describe('E2E — Admin Usuarios (CRUD con roles múltiples y estado)', () => {
+  const adminRequest = () => requestAs(app, '1');
   it('crea usuario con roles CSV y activo', async () => {
-    const res = await request(app).post('/api/users').send({
+    const res = await adminRequest().post('/api/users').send({
       name: 'Juan Camionero', email: 'juan@granja.com', role: 'Camionero', roles: 'Despachador,Bodeguero', activo: true,
     });
     expectApi(res, 201);
@@ -39,12 +40,12 @@ describe('E2E — Admin Usuarios (CRUD con roles múltiples y estado)', () => {
   });
 
   it('rechaza email duplicado', async () => {
-    const res = await request(app).post('/api/users').send({ name: 'Dup', email: 'juan@granja.com', role: 'Camionero' });
+    const res = await adminRequest().post('/api/users').send({ name: 'Dup', email: 'juan@granja.com', role: 'Camionero' });
     expect(res.status).toBe(400);
   });
 
   it('listar usuarios incluye roles y activo', async () => {
-    const res = await request(app).get('/api/users');
+    const res = await adminRequest().get('/api/users');
     expectApi(res, 200);
     const juan = res.body.find((u: any) => u.email === 'juan@granja.com');
     expect(juan?.roles).toBe('Despachador,Bodeguero');
@@ -53,7 +54,7 @@ describe('E2E — Admin Usuarios (CRUD con roles múltiples y estado)', () => {
 
   it('actualiza rol/estado y resetea clave', async () => {
     const u = (await testDb.select().from(schema.users)).find((x: any) => x.email === 'juan@granja.com');
-    const res = await request(app).put(`/api/users/${u!.id}`).send({
+    const res = await adminRequest().put(`/api/users/${u!.id}`).send({
       role: 'Despachador', roles: 'Camionero', activo: false, password: 'nueva123',
     });
     expectApi(res, 200);
@@ -65,7 +66,7 @@ describe('E2E — Admin Usuarios (CRUD con roles múltiples y estado)', () => {
 
   it('elimina un usuario', async () => {
     const u = (await testDb.select().from(schema.users)).find((x: any) => x.email === 'juan@granja.com');
-    const res = await request(app).delete(`/api/users/${u!.id}`);
+    const res = await adminRequest().delete(`/api/users/${u!.id}`);
     expectApi(res, 200);
     const after = await testDb.select().from(schema.users);
     expect(after.some((x: any) => x.id === u!.id)).toBe(false);
@@ -73,10 +74,10 @@ describe('E2E — Admin Usuarios (CRUD con roles múltiples y estado)', () => {
 
   it('NO elimina un usuario que es encargado de granja (409 + mensaje)', async () => {
     const maria = (await testDb.select().from(schema.users)).find((x: any) => x.email === 'admin@granja.com');
-    await request(app).post('/api/granjas').send({
+    await adminRequest().post('/api/granjas').send({
       nombre: 'Granja Linda', ubicacion: 'Cartago', encargadoId: maria!.id,
     });
-    const res = await request(app).delete(`/api/users/${maria!.id}`);
+    const res = await adminRequest().delete(`/api/users/${maria!.id}`);
     expect(res.status).toBe(409);
     expect(res.body.error).toContain('granja(s) a cargo');
     const after = await testDb.select().from(schema.users);

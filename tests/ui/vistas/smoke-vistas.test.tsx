@@ -28,6 +28,7 @@
  *   así que un cambio de contrato se nota en un archivo solo.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { waitFor } from '@testing-library/react';
 import {
   FIXTURES, instalarRed, instalarMatchMedia, capturarConsola, avisosDeReact,
   montarComo, limpiar, asentar, abrirModulo, irATab, irAEspacio, tabs, tabActiva, textoVisible,
@@ -128,12 +129,16 @@ async function recorrer(opts: {
         await irATab(paso.tab);
         await asentar();
       }
-      // 2. El tab resaltado es el que se acaba de elegir. Es el bug 2 del plan, y
-      //    se comprueba en cada parada porque se puede reintroducir en cualquier fila.
+      // Con una sub-vista abierta hay dos marcas correctas a la vez — la del grupo
+      // en la fila primaria y la del paso en la secundaria —, así que el resaltado
+      // se comprueba sobre el tab que se eligió, no contra el primer marcado del
+      // documento. Esto es el bug 2 del plan, y se comprueba en cada parada porque
+      // se puede reintroducir en cualquier fila.
+      const tabSeleccionado = document.querySelector(`[data-tab-id="${paso.tab}"]`);
       expect(
-        tabActiva(),
+        tabSeleccionado?.getAttribute('aria-current') === 'page' || tabSeleccionado?.getAttribute('aria-selected') === 'true',
         `${ctx.vista}/${paso.tab}: el tab resaltado no es el que se eligió`,
-      ).toBe(paso.tab);
+      ).toBe(true);
     }
 
     // 1. La vista montó algo y no es la pantalla en blanco.
@@ -152,10 +157,10 @@ async function recorrer(opts: {
     }
     if (paso.debeContener) {
       const re = paso.debeContener instanceof RegExp ? paso.debeContener : new RegExp(escapar(paso.debeContener));
-      expect(
-        re.test(texto),
-        `${ctx.vista}/${paso.tab ?? paso.espacio ?? ''}: el texto "${texto.slice(0, 400)}" no contiene ${paso.debeContener}`,
-      ).toBe(true);
+      await waitFor(() => expect(
+        re.test(textoVisible()),
+        `${ctx.vista}/${paso.tab ?? paso.espacio ?? ''}: la vista aún no muestra ${paso.debeContener}`,
+      ).toBe(true));
     }
 
     afirmarSinAvisos(ctx);
@@ -286,6 +291,13 @@ describe('vistas de Operaciones y Bodegas', () => {
     });
   });
 
+  it('Bodega > Entradas: la remisión GR- y el alistamiento', async () => {
+    await recorrer({
+      vista: 'Operaciones/Bodega/Entradas', rol: 'Admin', modulo: 'Operaciones',
+      pasos: [{ tab: 'bodega' }, { tab: 'bodega-entradas', debeContener: /remisi|guía|guia|bodega|alistar/i }],
+    });
+  });
+
   it('Despacho: la guía cargada del fixture', async () => {
     await recorrer({
       vista: 'Operaciones/Despacho', rol: 'Admin', modulo: 'Operaciones',
@@ -301,46 +313,42 @@ describe('vistas de Operaciones y Bodegas', () => {
   });
 });
 
-describe('vistas de Logística', () => {
-  it('Logística: auditoría de ruta', async () => {
+describe('el módulo Logística como pasos de Despacho y Ventas', () => {
+  it('Auditoría de ruta: vive dentro de la pantalla de Despacho (G2)', async () => {
+    // La consolidación G2 le quitó a Ventas el paso `ventas-trazabilidad`: la
+    // auditoría es lectura de las guías que crea Despacho, así que su panel de
+    // stock y merma ahora se ve en el cuerpo del grupo Despacho.
     await recorrer({
-      vista: 'Logística/Logistica', rol: 'Admin', modulo: 'Logística',
-      pasos: [{ tab: 'logistica', debeContener: /logística|ruta|camión/i }],
+      vista: 'Operaciones/Despacho/Auditoría', rol: 'Admin', modulo: 'Operaciones',
+      pasos: [{ tab: 'despacho' }, { tab: 'despacho-guias', debeContener: /Auditoría de ruta|Merma|Stock actual|Carga en guías/i }],
     });
   });
 
-  it('Guías y Camiones: la guía del fixture', async () => {
+  it('Tablero de Rutas: el tablero vivo de las ventas', async () => {
     await recorrer({
-      vista: 'Logística/Guias', rol: 'Admin', modulo: 'Logística',
-      pasos: [{ tab: 'guias', debeContener: /guía|guia|camión 9/i }],
-    });
-  });
-
-  it('Tablero Vivo: el tablero de rutas', async () => {
-    await recorrer({
-      vista: 'Logística/Tablero', rol: 'Admin', modulo: 'Logística',
-      pasos: [{ tab: 'tablero', debeContener: /tablero|ruta|vivo/i }],
+      vista: 'Operaciones/Ventas/Tablero', rol: 'Admin', modulo: 'Operaciones',
+      pasos: [{ tab: 'ventas' }, { tab: 'ventas-tablero', debeContener: /tablero|ruta|vivo/i }],
     });
   });
 
   it('Etiquetas QR: la etiqueta generada del fixture', async () => {
     await recorrer({
-      vista: 'Logística/Etiquetas', rol: 'Admin', modulo: 'Logística',
-      pasos: [{ tab: 'etiquetas', debeContener: /etiqueta|ETQ-/i }],
+      vista: 'Operaciones/Despacho/Etiquetas', rol: 'Admin', modulo: 'Operaciones',
+      pasos: [{ tab: 'despacho' }, { tab: 'despacho-etiquetas', debeContener: /etiqueta|ETQ-/i }],
     });
   });
 
   it('Control Pesos: el pesaje registrado', async () => {
     await recorrer({
-      vista: 'Logística/Pesos', rol: 'Admin', modulo: 'Logística',
-      pasos: [{ tab: 'pesos', debeContener: /peso|pesaje|bascula|báscula/i }],
+      vista: 'Operaciones/Despacho/Pesos', rol: 'Admin', modulo: 'Operaciones',
+      pasos: [{ tab: 'despacho' }, { tab: 'despacho-pesos', debeContener: /peso|pesaje|bascula|báscula/i }],
     });
   });
 
   it('Precios: la lista de la ruta Norte', async () => {
     await recorrer({
-      vista: 'Logística/Precios', rol: 'Admin', modulo: 'Logística',
-      pasos: [{ tab: 'precios', debeContener: /precio|lista/i }],
+      vista: 'Operaciones/Ventas/Precios', rol: 'Admin', modulo: 'Operaciones',
+      pasos: [{ tab: 'ventas' }, { tab: 'ventas-precios', debeContener: /precio|lista/i }],
     });
   });
 });
@@ -388,37 +396,47 @@ describe('Clientes: una sola pantalla, sin banda de tabs', () => {
   });
 });
 
-describe('Office: su propia fila de espacios', () => {
+describe('Dirección: su propia fila de espacios', () => {
   it('Correo: monta aunque no haya cuentas conectadas', async () => {
     await recorrer({
-      vista: 'Office/Correo', rol: 'Admin', modulo: 'Office',
+      vista: 'Office/Correo', rol: 'Admin', modulo: 'Dirección',
       pasos: [{ espacio: 'correo' }],
     });
   });
 
   it('Documentos: monta aunque el buzón esté vacío', async () => {
     await recorrer({
-      vista: 'Office/Documentos', rol: 'Admin', modulo: 'Office',
+      vista: 'Office/Documentos', rol: 'Admin', modulo: 'Dirección',
       pasos: [{ espacio: 'documentos' }],
     });
   });
 
-  it('Vinculaciones: solo Admin, y monta', async () => {
+  it('Admin/Vinculaciones: monta desde la fila de Admin, no desde Office', async () => {
     await recorrer({
-      vista: 'Office/Vinculaciones', rol: 'Admin', modulo: 'Office',
-      pasos: [{ espacio: 'vinculaciones', debeContener: /vincular|cuenta|correo/i }],
+      vista: 'Admin/Vinculaciones', rol: 'Admin', modulo: 'Admin',
+      pasos: [{ tab: 'vinculaciones', debeContener: /vincular|cuenta|correo|carpeta/i }],
     });
   });
 
   it('el espacio resaltado es el que se eligió', async () => {
     montarComo(App, 'Admin');
     await asentar();
-    await abrirModulo('Office');
+    await abrirModulo('Dirección');
     await asentar();
     const marcados = Array.from(
       document.querySelectorAll('[data-espacio-id][aria-current="page"]'),
     ).map(e => e.getAttribute('data-espacio-id'));
     expect(marcados).toHaveLength(1);
+  });
+
+  it('Vinculaciones ya no es un espacio de Dirección', async () => {
+    montarComo(App, 'Admin');
+    await asentar();
+    await abrirModulo('Dirección');
+    await asentar();
+    const ids = Array.from(document.querySelectorAll('[data-espacio-id]'))
+      .map(e => e.getAttribute('data-espacio-id'));
+    expect(ids).toEqual(['correo', 'documentos']);
   });
 });
 
@@ -437,10 +455,10 @@ describe('el camino móvil de Operaciones', () => {
     });
   });
 
-  it('Camionero: Confirmar Cargas monta directo', async () => {
+  it('Camionero: la banda Mi Ruta permite confirmar cargas asignadas', async () => {
     await recorrer({
-      vista: 'Movil/Camionero', rol: 'Camionero', modulo: 'Confirmar Cargas',
-      pasos: [{ debeContener: /confirm|carga|guía|guia/i }],
+      vista: 'Movil/Camionero', rol: 'Camionero', modulo: 'Mi Ruta',
+      pasos: [{ tab: 'cargas-comercial' }, { debeContener: /cargas asignadas|confirmar|rechazar/i }],
     });
   });
 
@@ -474,12 +492,7 @@ describe('matriz de acceso por rol', () => {
   const sinAcceso: { rol: Role; modulo: string }[] = [
     { rol: 'Socio', modulo: 'admin' },
     { rol: 'Socio', modulo: 'operaciones' },
-    { rol: 'Socio', modulo: 'clientes' },
-    { rol: 'Socio', modulo: 'logistica' },
     { rol: 'Comercial', modulo: 'admin' },
-    { rol: 'Camionero', modulo: 'finanzas' },
-    { rol: 'Camionero', modulo: 'clientes' },
-    { rol: 'Camionero', modulo: 'logistica' },
     { rol: 'Bodeguero', modulo: 'finanzas' },
     { rol: 'Bodeguero', modulo: 'clientes' },
     { rol: 'Despachador', modulo: 'finanzas' },
@@ -502,17 +515,18 @@ describe('matriz de acceso por rol', () => {
     { rol: 'Admin', modulo: 'admin' },
     { rol: 'Admin', modulo: 'office' },
     { rol: 'Admin', modulo: 'operaciones' },
-    { rol: 'Admin', modulo: 'logistica' },
     { rol: 'Admin', modulo: 'clientes' },
     { rol: 'Socio', modulo: 'finanzas' },
     { rol: 'Socio', modulo: 'office' },
+    { rol: 'Socio', modulo: 'clientes' },
     { rol: 'Comercial', modulo: 'finanzas' },
     { rol: 'Comercial', modulo: 'operaciones' },
-    { rol: 'Comercial', modulo: 'logistica' },
     { rol: 'Comercial', modulo: 'clientes' },
     { rol: 'Bodeguero', modulo: 'operaciones' },
     { rol: 'Despachador', modulo: 'operaciones' },
     { rol: 'Camionero', modulo: 'operaciones' },
+    { rol: 'Camionero', modulo: 'finanzas' },
+    { rol: 'Camionero', modulo: 'clientes' },
   ];
 
   for (const { rol, modulo } of conAcceso) {

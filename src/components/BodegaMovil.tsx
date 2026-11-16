@@ -2,10 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowDownToLine, Truck, Check, AlertTriangle, ChevronRight, QrCode, X } from 'lucide-react';
 import { User } from '../types';
 import { OPCIONES_DIFERENCIA_RECEPCION } from '../lib/opcionesRecepcion';
+import { sessionHeaders } from '../lib/session';
 import { BloqueCarga, SpinnerConTexto } from './Spinner';
+import { toast } from 'sonner';
+import AccionFijaMovil from './AccionFijaMovil';
 
 type ScanEstado = 'validando' | 'pendiente' | 'yaIngresada' | 'noExiste' | 'otroProducto' | 'duplicado';
-type Escan = { codigo: string; estado: ScanEstado; detalle?: string; producto?: string; cartones?: number };
+type Escan = { codigo: string; estado: ScanEstado; detalle?: string; producto?: string };
 
 interface BodegaMovilProps {
   currentUser: User;
@@ -25,6 +28,7 @@ type Movimiento = {
   id: string;
   producto: string;
   cantidad: number;
+  unidad?: string | null;
   tipo: string;
   referencia_id: string;
 };
@@ -42,6 +46,7 @@ type Carga = {
 export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
   const [pantalla, setPantalla] = useState<'inicio' | 'recibir' | 'camion' | 'detalleRecibir' | 'exito'>('inicio');
   const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState('');
   const [cargas, setCargas] = useState<Carga[]>([]);
   const [selCarga, setSelCarga] = useState<Carga | null>(null);
   const [recibidos, setRecibidos] = useState<Record<string, number>>({});
@@ -54,12 +59,20 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
 
   const cargar = useCallback(async () => {
     setCargando(true);
+    setErrorCarga('');
     try {
-      const [tRes, gRes, mRes] = await Promise.all([
-        fetch('/api/operaciones/traslados').then(r => r.json()),
-        fetch('/api/granjas').then(r => r.json()),
-        fetch('/api/inventario/movimientos').then(r => r.json()),
+      const [trasladosRes, granjasRes, movimientosRes] = await Promise.all([
+        fetch('/api/operaciones/traslados', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/granjas', { headers: sessionHeaders(currentUser.id) }),
+        fetch('/api/inventario/movimientos', { headers: sessionHeaders(currentUser.id) }),
       ]);
+      if (!trasladosRes.ok || !granjasRes.ok || !movimientosRes.ok) {
+        throw new Error('No se pudieron cargar las cargas pendientes. Revisa la conexión e inténtalo de nuevo.');
+      }
+      const [tRes, gRes, mRes] = await Promise.all([trasladosRes.json(), granjasRes.json(), movimientosRes.json()]);
+      if (!Array.isArray(tRes) || !Array.isArray(gRes) || !Array.isArray(mRes)) {
+        throw new Error('La respuesta del servidor está incompleta. Vuelve a cargar la pantalla.');
+      }
       const traslados: Traslado[] = tRes || [];
       const movs: Movimiento[] = mRes || [];
       const granjas: Granja[] = gRes || [];
@@ -83,7 +96,7 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
         if (mv) {
           item.producto = mv.producto;
           item.cantidad = mv.cantidad;
-          item.unidad = String(mv.producto).includes('Gallinaza') ? 'sacos' : 'cartones';
+          item.unidad = mv.unidad || (String(mv.producto).includes('Gallinaza') ? 'sacos' : 'cartones');
         }
         const carga = agrupadas.get(cid)!;
         carga.items.push(item);
@@ -101,9 +114,12 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
       const orden = new Map<string, Granja>(granjas.map(g => [g.id, g]));
       setCargas(conEstado);
       setGranjaMap(orden);
-    } catch { /* ignore */ }
-    setCargando(false);
-  }, []);
+    } catch (error) {
+      setErrorCarga(error instanceof Error ? error.message : 'No se pudieron cargar las cargas pendientes. Revisa la conexión e inténtalo de nuevo.');
+    } finally {
+      setCargando(false);
+    }
+  }, [currentUser.id]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -112,49 +128,77 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
 
   const fechaHora = (iso: string) => {
     const d = new Date(iso);
-    const fecha = isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-VE', { day: '2-digit', month: 'short' });
-    const hora = isNaN(d.getTime()) ? '' : d.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+    const fecha = isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-CR', { day: '2-digit', month: 'short' });
+    const hora = isNaN(d.getTime()) ? '' : d.toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' });
     return { fecha, hora };
   };
 
+  const mostrarCantidad = (cantidad: number, unidad: string) => unidad === 'kg'
+    ? `${cantidad.toFixed(2)} kg`
+    : `${cantidad} ${unidad}`;
+
+  const huevosEnUnidadHistorica = (carga: Carga | null) => carga?.items.filter(item =>
+    /huevo/i.test(item.producto) && item.unidad !== 'kg'
+  ) || [];
+
+  if (errorCarga && !cargando) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-12 text-center" role="alert">
+        <div className="rounded-2xl p-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--status-danger)' }}>
+          <h2 className="text-xl font-extrabold" style={{ color: 'var(--text-primary)' }}>No se cargaron las recepciones</h2>
+          <p className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>{errorCarga}</p>
+          <button onClick={() => void cargar()} className="mt-5 min-h-12 w-full rounded-xl px-4 text-base font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
+            Intentar de nuevo
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const recibirCarga = async () => {
     if (!selCarga || enviando) return;
+    if (huevosEnUnidadHistorica(selCarga).length > 0) {
+      toast.error('Esta carga de huevo está registrada en cartones. Administración debe corregirla con un peso confirmado en kg.');
+      return;
+    }
     setEnviando(true);
     try {
-      let ok = true;
       for (const it of selCarga.items) {
         const recibida = recibidos[it.id] ?? 0;
         const pendientes = escaneos
           .filter(e => e.estado === 'pendiente' && e.producto === it.producto)
           .map(e => e.codigo);
+        const esKg = it.unidad === 'kg';
         const resp = await fetch('/api/operaciones/recepcion', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: sessionHeaders(currentUser.id, true),
           body: JSON.stringify({
             trasladoId: it.id,
-            cantidadEsperada: it.cantidad,
-            cantidadRecibida: recibida,
+            ...(esKg
+              ? { cantidadKgEsperada: it.cantidad, cantidadKgRecibida: recibida }
+              : { cantidadEsperada: it.cantidad, cantidadRecibida: recibida }),
             motivoDiferencia: motivos[it.id] || undefined,
             producto: it.producto,
             responsableRecepcion: currentUser.name,
             etiquetasCodigos: pendientes.length > 0 ? pendientes : undefined,
           }),
         });
-        if (!resp.ok) { ok = false; break; }
+        if (!resp.ok) {
+          const error = await resp.json().catch(() => ({}));
+          throw new Error(error.error || `No se pudo registrar ${it.producto}. Revisa la conexión e inténtalo de nuevo.`);
+        }
       }
-      if (ok) {
-        setRecibidaOk(selCarga);
-        setSelCarga(null);
-        setRecibidos({});
-        setMotivos({});
-        setEscaneos([]);
-        setUltimoScan(null);
-        setPantalla('exito');
-        cargar();
-      } else {
-        alert('Ocurrió un error registrando la recepción. Intenta de nuevo.');
-      }
-    } catch { /* ignore */ }
+      setRecibidaOk(selCarga);
+      setSelCarga(null);
+      setRecibidos({});
+      setMotivos({});
+      setEscaneos([]);
+      setUltimoScan(null);
+      setPantalla('exito');
+      cargar();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar la recepción. Revisa la conexión e inténtalo de nuevo.');
+    }
     setEnviando(false);
   };
 
@@ -170,7 +214,7 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
     setEscaneos(prev => [...prev, { codigo, estado: 'validando' }]);
     setUltimoScan(null);
     try {
-      const res = await fetch(`/api/etiquetas/trazabilidad/${encodeURIComponent(codigo)}`);
+      const res = await fetch(`/api/etiquetas/trazabilidad/${encodeURIComponent(codigo)}`, { headers: sessionHeaders(currentUser.id) });
       if (!res.ok) {
         setEscaneos(prev => prev.map(e => e.codigo === codigo ? { ...e, estado: 'noExiste' } : e));
         setUltimoScan({ ok: false, msg: `${codigo}: etiqueta no encontrada` });
@@ -188,10 +232,8 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
         setUltimoScan({ ok: false, msg: `${codigo}: ya está ${etiqueta.estado}` });
         return;
       }
-      const cartones = 1;
-      setEscaneos(prev => prev.map(e => e.codigo === codigo ? { ...e, estado: 'pendiente', producto: etiqueta.producto, cartones } : e));
-      setRecibidos(r => ({ ...r, [item.id]: (r[item.id] ?? 0) + 1 }));
-      setUltimoScan({ ok: true, msg: `✓ ${etiqueta.producto}: +1 cartón` });
+      setEscaneos(prev => prev.map(e => e.codigo === codigo ? { ...e, estado: 'pendiente', producto: etiqueta.producto } : e));
+      setUltimoScan({ ok: true, msg: `✓ Etiqueta ${codigo} vinculada a ${etiqueta.producto}. Registra el peso recibido en kg.` });
     } catch {
       setEscaneos(prev => prev.map(e => e.codigo === codigo ? { ...e, estado: 'noExiste' } : e));
       setUltimoScan({ ok: false, msg: `${codigo}: error de conexión` });
@@ -201,10 +243,6 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
   const quitarEscan = (codigo: string) => {
     const e = escaneos.find(x => x.codigo === codigo);
     setEscaneos(prev => prev.filter(x => x.codigo !== codigo));
-    if (e?.estado === 'pendiente' && e.producto && selCarga) {
-      const item = selCarga.items.find(i => i.producto === e.producto);
-      if (item) setRecibidos(r => ({ ...r, [item.id]: Math.max(0, (r[item.id] ?? 0) - (e.cartones || 1)) }));
-    }
     setUltimoScan(null);
   };
 
@@ -213,8 +251,8 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
     const carga = recibidaOk;
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4 animate-in fade-in">
-        <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6" style={{ background: '#dcfce7' }}>
-          <Check className="w-10 h-10" style={{ color: '#16a34a' }} />
+        <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6" style={{ background: 'var(--status-success-soft)' }}>
+          <Check className="w-10 h-10" style={{ color: 'var(--status-success)' }} />
         </div>
         <h2 className="text-2xl font-extrabold mb-2 text-center" style={{ color: 'var(--text-primary)' }}>
           ¡Carga recibida!
@@ -223,8 +261,8 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
           {carga?.items.length === 1 ? '1 artículo registrado en la bodega.' : `${carga?.items.length || 0} artículos registrados en la bodega.`}
         </p>
         <button onClick={() => { setPantalla('inicio'); setRecibidaOk(null); }}
-          className="px-6 py-3 rounded-xl font-bold text-white transition-all"
-          style={{ background: 'var(--brand-primary)' }}>
+          className="min-h-11 px-6 py-3 rounded-xl font-bold transition-all"
+          style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
           Volver al inicio
         </button>
       </div>
@@ -234,49 +272,75 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
   // --- DETALLE: RECIBIR CARGA ---
   if (pantalla === 'detalleRecibir' && selCarga) {
     const fh = fechaHora(selCarga.fechaSalida);
-    const totalItems = selCarga.items.reduce((a, i) => a + (recibidos[i.id] ?? 0), 0);
-    const totalEsperado = selCarga.items.reduce((a, i) => a + i.cantidad, 0);
-    const completado = selCarga.items.every(i => (recibidos[i.id] ?? 0) > 0);
+    const totalesPorUnidad = selCarga.items.reduce<Record<string, { recibido: number; esperado: number }>>((totales, item) => {
+      const unidad = item.unidad || 'unidades';
+      const total = totales[unidad] || { recibido: 0, esperado: 0 };
+      total.recibido += recibidos[item.id] ?? 0;
+      total.esperado += item.cantidad;
+      totales[unidad] = total;
+      return totales;
+    }, {});
+    const historicos = huevosEnUnidadHistorica(selCarga);
+    const completado = historicos.length === 0 && selCarga.items.every(i => {
+      if (!(i.id in recibidos)) return false;
+      const diferencia = i.cantidad - recibidos[i.id];
+      return diferencia === 0 || Boolean(motivos[i.id]);
+    });
     return (
-      <div className="max-w-md mx-auto px-4 pb-8 animate-in fade-in">
-        <button onClick={() => { setPantalla('recibir'); setRecibidos({}); setMotivos({}); setEscaneos([]); setUltimoScan(null); }} className="flex items-center gap-1 text-sm font-semibold mb-4" style={{ color: 'var(--brand-primary)' }}>
+      <div className="max-w-md mx-auto px-4 pb-32 lg:pb-8 animate-in fade-in">
+        <button onClick={() => { setPantalla('recibir'); setRecibidos({}); setMotivos({}); setEscaneos([]); setUltimoScan(null); }} className="flex min-h-11 items-center gap-1 px-1 py-2 text-sm font-semibold mb-4" style={{ color: 'var(--brand-primary)' }}>
           <ChevronRight className="w-4 h-4 rotate-180" /> Volver
         </button>
         <h2 className="text-xl font-extrabold mb-1" style={{ color: 'var(--text-primary)' }}>Recibir carga</h2>
-        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Escanea cada cartón y confirma lo que recibes</p>
+        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
+          {historicos.length === 0
+            ? 'Pesa la carga en kg y registra lo que recibes. Las etiquetas conservan la trazabilidad.'
+            : 'Esta carga histórica está en cartones. No registres un peso estimado; solicita a Administración una corrección en kg.'}
+        </p>
+        {historicos.length > 0 && (
+          <div role="alert" className="rounded-xl p-4 mb-5" style={{ background: 'var(--status-warning-soft)', border: '1px solid var(--status-warning)' }}>
+            <p className="font-bold" style={{ color: 'var(--status-warning)' }}>Hace falta confirmar el peso</p>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-primary)' }}>
+              Esta carga se registró en cartones. No se puede recibir hasta convertirla con un peso real y una corrección trazable.
+            </p>
+          </div>
+        )}
 
         <div className="rounded-2xl p-4 mb-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
           <div className="flex items-center gap-2 text-xs font-bold mb-2" style={{ color: 'var(--text-muted)' }}>
-            <QrCode className="w-4 h-4" /> ESCANEAR CARTÓN (1 etiqueta = 1 cartón)
+            <QrCode className="w-4 h-4" /> ESCANEAR ETIQUETA PARA TRAZABILIDAD
           </div>
+          <label htmlFor="bodega-scan" className="sr-only">Código de etiqueta de trazabilidad</label>
           <input
+            id="bodega-scan"
             ref={scanRef}
             autoFocus
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); agregarEscan((e.target as HTMLInputElement).value); } }}
             className="w-full text-base font-bold py-3 px-3 rounded-xl outline-none"
             style={{ background: 'var(--bg-muted)', border: '2px solid var(--brand-primary)', color: 'var(--text-primary)' }}
-            placeholder="Apunta el escáner y pulsa Enter…"
+            placeholder="Escanea la etiqueta y pulsa Enter"
+            autoComplete="off"
           />
           {ultimoScan && (
-            <p className="text-xs font-bold mt-2" style={{ color: ultimoScan.ok ? '#16a34a' : '#b91c1c' }}>{ultimoScan.msg}</p>
+            <p role="status" aria-live="polite" className="text-xs font-bold mt-2" style={{ color: ultimoScan.ok ? 'var(--status-success)' : 'var(--status-danger)' }}>{ultimoScan.msg}</p>
           )}
           {escaneos.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3">
               {escaneos.map(es => {
                 const estilos: Record<ScanEstado, { bg: string; color: string; etiqueta: string }> = {
-                  validando: { bg: '#e0e7ff', color: '#4338ca', etiqueta: 'Validando…' },
-                  pendiente: { bg: '#dcfce7', color: '#16a34a', etiqueta: `✓ ${es.producto || ''}` },
-                  yaIngresada: { bg: '#fee2e2', color: '#b91c1c', etiqueta: es.detalle || 'Ya ingresada' },
-                  noExiste: { bg: '#f3f4f6', color: '#6b7280', etiqueta: 'No existe' },
-                  otroProducto: { bg: '#fef9c3', color: '#a16207', etiqueta: `No en carga${es.detalle ? ` (${es.detalle})` : ''}` },
-                  duplicado: { bg: '#f3f4f6', color: '#6b7280', etiqueta: 'Duplicado' },
+                  validando: { bg: 'var(--status-info-soft)', color: 'var(--status-info)', etiqueta: 'Validando…' },
+                  pendiente: { bg: 'var(--status-success-soft)', color: 'var(--status-success)', etiqueta: `✓ ${es.producto || ''}` },
+                  yaIngresada: { bg: 'var(--status-danger-soft)', color: 'var(--status-danger)', etiqueta: es.detalle || 'Ya ingresada' },
+                  noExiste: { bg: 'var(--status-neutral-soft)', color: 'var(--text-secondary)', etiqueta: 'No existe' },
+                  otroProducto: { bg: 'var(--status-warning-soft)', color: 'var(--status-warning)', etiqueta: `No en carga${es.detalle ? ` (${es.detalle})` : ''}` },
+                  duplicado: { bg: 'var(--status-neutral-soft)', color: 'var(--text-secondary)', etiqueta: 'Duplicado' },
                 };
                 const s = estilos[es.estado];
                 return (
-                  <span key={es.codigo} className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full" style={{ background: s.bg, color: s.color }}>
+                  <span key={es.codigo} className="inline-flex min-h-11 items-center gap-1 text-xs font-bold px-2 py-1 rounded-full" style={{ background: s.bg, color: s.color }}>
                     {es.codigo}
                     <span className="normal-case font-semibold">{s.etiqueta}</span>
-                    <button onClick={() => quitarEscan(es.codigo)} className="opacity-70 hover:opacity-100" aria-label={`Quitar ${es.codigo}`}>
+                    <button onClick={() => quitarEscan(es.codigo)} className="flex min-h-11 min-w-11 items-center justify-center rounded-full opacity-80 hover:opacity-100" aria-label={`Quitar ${es.codigo}`}>
                       <X className="w-3 h-3" />
                     </button>
                   </span>
@@ -298,48 +362,56 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
           {selCarga.items.map(it => {
             const recibida = recibidos[it.id] ?? 0;
             const diferencia = it.cantidad - recibida;
-            const conDiferencia = recibida > 0 && diferencia !== 0;
+            const conDiferencia = it.id in recibidos && diferencia !== 0;
             return (
               <div key={it.id} className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <p className="text-[15px] font-bold" style={{ color: 'var(--text-primary)' }}>{it.producto}</p>
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Esperado: {it.cantidad} {it.unidad}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Esperado: {mostrarCantidad(it.cantidad, it.unidad)}</p>
                   </div>
-                  <span className="text-xs font-bold px-2 py-1 rounded-full" style={{ background: conDiferencia ? '#fef9c3' : '#dcfce7', color: conDiferencia ? '#a16207' : '#16a34a' }}>
-                    {conDiferencia ? `Faltan ${diferencia}` : recibida > 0 ? 'Conforme' : 'Pendiente'}
+                  <span className="text-xs font-bold px-2 py-1 rounded-full" style={{ background: conDiferencia ? 'var(--status-warning-soft)' : 'var(--status-success-soft)', color: conDiferencia ? 'var(--status-warning)' : 'var(--status-success)' }}>
+                    {conDiferencia ? diferencia > 0 ? `Faltan ${mostrarCantidad(diferencia, it.unidad)}` : `Sobran ${mostrarCantidad(Math.abs(diferencia), it.unidad)}` : it.id in recibidos ? 'Conforme' : 'Pendiente'}
                   </span>
                 </div>
                 {escaneos.filter(e => e.estado === 'pendiente' && e.producto === it.producto).length > 0 ? (
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: '#dcfce7', color: '#166534' }}>
-                      {escaneos.filter(e => e.estado === 'pendiente' && e.producto === it.producto).length} escaneado(s)
+                    <span className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: 'var(--status-success-soft)', color: 'var(--status-success)' }}>
+                      {escaneos.filter(e => e.estado === 'pendiente' && e.producto === it.producto).length} etiqueta(s) vinculada(s)
                     </span>
-                    {it.unidad !== 'sacos' && <span className="text-xs" style={{ color: 'var(--text-muted)' }}>esto suma al campo de abajo</span>}
                   </div>
                 ) : null}
-                <label className="text-xs font-bold mb-1 block" style={{ color: 'var(--text-muted)' }}>
-                  RECIBIDO ({it.unidad})
-                </label>
-                <input type="number" min={0} value={recibida || ''}
-                  onChange={e => setRecibidos(r => ({ ...r, [it.id]: Number(e.target.value) }))}
-                  className="w-full text-center text-2xl font-extrabold py-3 rounded-xl outline-none"
-                  style={{
-                    background: 'var(--bg-muted)',
-                    border: conDiferencia ? '2px solid #f59e0b' : '2px solid var(--border-default)',
-                    color: conDiferencia ? '#b45309' : 'var(--text-primary)',
-                  }}
-                  placeholder="0" />
-                {conDiferencia && (
-                  <select value={motivos[it.id] || ''}
+                {/huevo/i.test(it.producto) && it.unidad !== 'kg' ? (
+                  <p className="text-sm rounded-lg p-3" style={{ background: 'var(--status-warning-soft)', color: 'var(--text-primary)' }}>
+                    Registro histórico: {mostrarCantidad(it.cantidad, it.unidad)}. Se requiere convertirlo con peso confirmado en kg.
+                  </p>
+                ) : <>
+                  <label htmlFor={`recibido-${it.id}`} className="text-sm font-bold mb-1 block" style={{ color: 'var(--text-primary)' }}>
+                    {it.unidad === 'kg' ? 'Peso recibido (kg)' : `Cantidad recibida (${it.unidad})`}
+                  </label>
+                  <input id={`recibido-${it.id}`} type="number" inputMode={it.unidad === 'kg' ? 'decimal' : 'numeric'} step={it.unidad === 'kg' ? '0.01' : '1'} min={0} value={it.id in recibidos ? recibida : ''}
+                    onChange={e => setRecibidos(r => ({ ...r, [it.id]: Number(e.target.value) }))}
+                    className="w-full min-h-14 text-center text-2xl font-extrabold py-3 rounded-xl outline-none"
+                    style={{
+                      background: 'var(--bg-muted)',
+                      border: conDiferencia ? '2px solid var(--status-warning)' : '2px solid var(--border-default)',
+                      color: conDiferencia ? 'var(--status-warning)' : 'var(--text-primary)',
+                    }}
+                    placeholder="0" />
+                </>}
+                {conDiferencia && !(/huevo/i.test(it.producto) && it.unidad !== 'kg') && (
+                  <div>
+                  <label htmlFor={`motivo-${it.id}`} className="text-sm font-semibold mt-3 mb-1 block" style={{ color: 'var(--text-primary)' }}>Indica el motivo</label>
+                  <select id={`motivo-${it.id}`} value={motivos[it.id] || ''}
                     onChange={e => setMotivos(m => ({ ...m, [it.id]: e.target.value }))}
-                    className="w-full text-sm mt-2 py-2 px-3 rounded-lg outline-none bg-white"
-                    style={{ border: '1px solid #f59e0b', color: 'var(--text-primary)' }}>
+                    className="w-full min-h-12 text-base py-2 px-3 rounded-lg outline-none bg-white"
+                    style={{ border: '1px solid var(--status-warning)', color: 'var(--text-primary)' }}>
                     <option value="">Motivo de la diferencia…</option>
-                    {OPCIONES_DIFERENCIA_RECEPCION.map(o => (
+                    {OPCIONES_DIFERENCIA_RECEPCION.filter(o => diferencia < 0 ? o.tipo === 'sobrante' : o.tipo !== 'sobrante').map(o => (
                       <option key={o.id} value={o.id}>{o.label}</option>
                     ))}
                   </select>
+                  </div>
                 )}
               </div>
             );
@@ -347,21 +419,33 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
         </div>
 
         <div className="mt-6 rounded-2xl p-4 flex justify-between items-center" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
-          <span className="text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>Total recibido</span>
-          <span className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>{totalItems} / {totalEsperado}</span>
+          <div>
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-muted)' }}>Recibido / esperado</span>
+            {Object.entries(totalesPorUnidad).map(([unidad, total]) => (
+              <p key={unidad} className="text-sm font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                {unidad === 'kg' ? `${total.recibido.toFixed(2)} / ${total.esperado.toFixed(2)} kg` : `${total.recibido} / ${total.esperado} ${unidad}`}
+              </p>
+            ))}
+          </div>
         </div>
 
-        <button disabled={enviando || !completado}
-          onClick={recibirCarga}
-          className="w-full mt-6 py-4 rounded-2xl text-lg font-extrabold text-white transition-all active:scale-[0.98]"
-          style={{ background: enviando || !completado ? 'var(--text-muted)' : 'var(--brand-primary)', opacity: enviando || !completado ? 0.5 : 1 }}>
-          {enviando ? <SpinnerConTexto>Registrando...</SpinnerConTexto> : '✅ Confirmar recepción'}
-        </button>
-        {!completado && (
-          <p className="text-xs text-center mt-2" style={{ color: 'var(--text-muted)' }}>
-            Registra la cantidad recibida de cada producto para confirmar
-          </p>
-        )}
+        <AccionFijaMovil enLineaEnEscritorio etiquetaAccesible="Confirmar recepción">
+          <div className="mx-auto max-w-md">
+            <button disabled={enviando || !completado}
+              onClick={recibirCarga}
+              className="w-full min-h-12 rounded-xl text-lg font-extrabold transition-all active:scale-[0.98] disabled:cursor-not-allowed"
+              style={{ background: enviando || !completado ? 'var(--text-muted)' : 'var(--brand-primary)', color: 'var(--text-on-action)', opacity: enviando || !completado ? 0.65 : 1 }}>
+              {enviando ? <SpinnerConTexto>Registrando...</SpinnerConTexto> : 'Confirmar recepción'}
+            </button>
+            {!completado && (
+              <p className="text-xs text-center mt-2" style={{ color: 'var(--text-muted)' }}>
+                {historicos.length > 0
+                  ? 'Administración debe corregir el peso histórico antes de confirmar.'
+                  : 'Registra cada cantidad; si no coincide, indica el motivo.'}
+              </p>
+            )}
+          </div>
+        </AccionFijaMovil>
       </div>
     );
   }
@@ -377,8 +461,8 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
           <button key={c.cargaId} onClick={() => { setSelCarga(c); setRecibidos({}); setMotivos({}); setPantalla('detalleRecibir'); }}
             className="w-full text-left rounded-2xl p-5 flex items-center gap-4 transition-all active:scale-[0.98]"
             style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-            <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#fef9c3' }}>
-              <Truck className="w-7 h-7" style={{ color: '#a16207' }} />
+              <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--status-warning-soft)' }}>
+              <Truck className="w-7 h-7" style={{ color: 'var(--status-warning)' }} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[15px] font-bold truncate" style={{ color: 'var(--text-primary)' }}>
@@ -392,7 +476,7 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs font-bold px-2 py-1 rounded-full" style={{ background: c.items.some(i => i.estado === 'EnTransito') ? '#dbeafe' : '#fef9c3', color: c.items.some(i => i.estado === 'EnTransito') ? '#1d4ed8' : '#a16207' }}>
+              <span className="text-xs font-bold px-2 py-1 rounded-full" style={{ background: c.items.some(i => i.estado === 'EnTransito') ? 'var(--status-info-soft)' : 'var(--status-warning-soft)', color: c.items.some(i => i.estado === 'EnTransito') ? 'var(--status-info)' : 'var(--status-warning)' }}>
                 {c.items.some(i => i.estado === 'EnTransito') ? 'En tránsito' : 'Pendiente'}
               </span>
               <ChevronRight className="w-5 h-5" style={{ color: 'var(--text-muted)' }} />
@@ -406,7 +490,7 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
   const renderVacio = () => (
     <div className="flex flex-col items-center py-16">
       <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: 'var(--bg-muted)' }}>
-        <Truck className="w-8 h-8" style={{ color: '#16a34a' }} />
+        <Truck className="w-8 h-8" style={{ color: 'var(--status-success)' }} />
       </div>
       <p className="text-lg font-bold mb-1" style={{ color: 'var(--text-primary)' }}>Nada pendiente</p>
       <p className="text-sm text-center" style={{ color: 'var(--text-muted)' }}>Los camiones enviados por el encargado aparecerán aquí</p>
@@ -417,7 +501,7 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
   if (pantalla === 'camion') {
     return (
       <div className="max-w-md mx-auto px-4 pb-8 animate-in fade-in">
-        <button onClick={() => setPantalla('inicio')} className="flex items-center gap-1 text-sm font-semibold mb-4" style={{ color: 'var(--brand-primary)' }}>
+        <button onClick={() => setPantalla('inicio')} className="flex min-h-11 items-center gap-1 px-1 py-2 text-sm font-semibold mb-4" style={{ color: 'var(--brand-primary)' }}>
           <ChevronRight className="w-4 h-4 rotate-180" /> Volver
         </button>
         <h2 className="text-2xl font-extrabold mb-1" style={{ color: 'var(--text-primary)' }}>Cargar camión</h2>
@@ -435,7 +519,7 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
   if (pantalla === 'recibir') {
     return (
       <div className="max-w-md mx-auto px-4 pb-8 animate-in fade-in">
-        <button onClick={() => setPantalla('inicio')} className="flex items-center gap-1 text-sm font-semibold mb-4" style={{ color: 'var(--brand-primary)' }}>
+        <button onClick={() => setPantalla('inicio')} className="flex min-h-11 items-center gap-1 px-1 py-2 text-sm font-semibold mb-4" style={{ color: 'var(--brand-primary)' }}>
           <ChevronRight className="w-4 h-4 rotate-180" /> Volver
         </button>
         <h2 className="text-2xl font-extrabold mb-1" style={{ color: 'var(--text-primary)' }}>Recibir carga</h2>
@@ -448,7 +532,7 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
         ) : pendientes.length === 0 ? (
           <div className="flex flex-col items-center py-16">
             <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: 'var(--bg-muted)' }}>
-              <Check className="w-8 h-8" style={{ color: '#16a34a' }} />
+              <Check className="w-8 h-8" style={{ color: 'var(--status-success)' }} />
             </div>
             <p className="text-lg font-bold mb-1" style={{ color: 'var(--text-primary)' }}>Todo recibido</p>
             <p className="text-sm text-center" style={{ color: 'var(--text-muted)' }}>No hay camiones en tránsito pendientes de recibir</p>
@@ -479,15 +563,15 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
             className="w-full text-left rounded-3xl p-6 transition-all active:scale-[0.98]"
             style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
             <div className="flex items-center gap-4 mb-4">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: '#fef9c3' }}>
-                <ArrowDownToLine className="w-7 h-7" style={{ color: '#a16207' }} />
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'var(--status-warning-soft)' }}>
+                <ArrowDownToLine className="w-7 h-7" style={{ color: 'var(--status-warning)' }} />
               </div>
               <div className="flex-1">
                 <p className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>Recibir carga</p>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Cargas que llegan de la granja</p>
               </div>
               {recPend > 0 && (
-                <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ background: '#fef9c3', color: '#a16207' }}>
+                <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ background: 'var(--status-warning-soft)', color: 'var(--status-warning)' }}>
                   {recPend} camión{recPend !== 1 ? 'es' : ''}
                 </span>
               )}
@@ -501,15 +585,15 @@ export default function BodegaMovil({ currentUser }: BodegaMovilProps) {
             className="w-full text-left rounded-3xl p-6 transition-all active:scale-[0.98]"
             style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
             <div className="flex items-center gap-4 mb-4">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: '#dbeafe' }}>
-                <Truck className="w-7 h-7" style={{ color: '#1d4ed8' }} />
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'var(--status-info-soft)' }}>
+                <Truck className="w-7 h-7" style={{ color: 'var(--status-info)' }} />
               </div>
               <div className="flex-1">
                 <p className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>Cargar camión</p>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Camiones enviados de la granja</p>
               </div>
               {camPend > 0 && (
-                <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
+                <span className="text-xs font-bold px-3 py-1 rounded-full" style={{ background: 'var(--status-info-soft)', color: 'var(--status-info)' }}>
                   {camPend} camión{camPend !== 1 ? 'es' : ''}
                 </span>
               )}

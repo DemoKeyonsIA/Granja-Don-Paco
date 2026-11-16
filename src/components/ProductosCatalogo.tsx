@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Package, Plus, Edit2, Trash2, Search, Check, X, DollarSign, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { rotuloFactor } from '../lib/kilos';
 import Breadcrumb from './Breadcrumb';
 import { User } from '../types';
+import { sessionHeaders } from '../lib/session';
 
 interface Props { currentUser: User; }
 
@@ -12,6 +14,7 @@ interface ProductoCatalogo {
   nombre: string;
   descripcion: string;
   unidad: string;
+  kgPorCarton?: number;
   precioBase: number;
   categoria: string;
   estado: string;
@@ -33,8 +36,8 @@ export default function ProductosCatalogo({ currentUser }: Props) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ nombre: '', descripcion: '', unidad: 'cartones', precioBase: 0, categoria: 'Huevos', vidaUtilDias: 28, diasAvisoVencimiento: 7 });
-  const [editForm, setEditForm] = useState({ nombre: '', descripcion: '', unidad: 'cartones', precioBase: 0, categoria: 'Huevos', estado: 'Activo', vidaUtilDias: 28, diasAvisoVencimiento: 7 });
+  const [form, setForm] = useState({ nombre: '', descripcion: '', unidad: 'kg', kgPorCarton: 0, precioBase: 0, categoria: 'Huevos', vidaUtilDias: 28, diasAvisoVencimiento: 7 });
+  const [editForm, setEditForm] = useState({ nombre: '', descripcion: '', unidad: 'kg', kgPorCarton: 0, precioBase: 0, categoria: 'Huevos', estado: 'Activo', vidaUtilDias: 28, diasAvisoVencimiento: 7 });
 
   const [tipos, setTipos] = useState<TipoCarton[]>([]);
   const [tipoForm, setTipoForm] = useState({ nombre: '', unidades: 30 });
@@ -45,7 +48,7 @@ export default function ProductosCatalogo({ currentUser }: Props) {
   const cargar = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/productos-catalogo');
+      const res = await fetch('/api/productos-catalogo', { headers: sessionHeaders(currentUser.id) });
       if (res.ok) setProductos(await res.json());
     } catch { toast.error('No se pudo cargar el catálogo de productos.'); }
     setLoading(false);
@@ -109,13 +112,13 @@ export default function ProductosCatalogo({ currentUser }: Props) {
   const agregar = async () => {
     if (!form.nombre) { toast.error('Nombre es requerido'); return; }
     const res = await fetch('/api/productos-catalogo', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: sessionHeaders(currentUser.id, true),
       body: JSON.stringify(form)
     });
     if (res.ok) {
       toast.success('Producto agregado al catálogo');
       setIsAdding(false);
-      setForm({ nombre: '', descripcion: '', unidad: 'cartones', precioBase: 0, categoria: 'Huevos', vidaUtilDias: 28, diasAvisoVencimiento: 7 });
+      setForm({ nombre: '', descripcion: '', unidad: 'kg', kgPorCarton: 0, precioBase: 0, categoria: 'Huevos', vidaUtilDias: 28, diasAvisoVencimiento: 7 });
       cargar();
     } else {
       const e = await res.json();
@@ -125,7 +128,7 @@ export default function ProductosCatalogo({ currentUser }: Props) {
 
   const guardarEdicion = async (id: string) => {
     const res = await fetch(`/api/productos-catalogo/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: sessionHeaders(currentUser.id, true),
       body: JSON.stringify(editForm)
     });
     if (res.ok) {
@@ -136,14 +139,14 @@ export default function ProductosCatalogo({ currentUser }: Props) {
   };
 
   const eliminar = async (id: string, nombre: string) => {
-    if (!confirm(`¿Eliminar "${nombre}" del catálogo?`)) return;
-    const res = await fetch(`/api/productos-catalogo/${id}`, { method: 'DELETE' });
-    if (res.ok) { toast.success('Producto eliminado'); cargar(); }
+    if (!confirm(`¿Archivar "${nombre}"? Se conservará su historial y ya no podrá usarse en nuevas operaciones.`)) return;
+    const res = await fetch(`/api/productos-catalogo/${id}`, { method: 'DELETE', headers: sessionHeaders(currentUser.id) });
+    if (res.ok) { toast.success('Producto archivado'); cargar(); }
   };
 
   const iniciarEdicion = (p: ProductoCatalogo) => {
     setEditingId(p.id);
-    setEditForm({ nombre: p.nombre, descripcion: p.descripcion, unidad: p.unidad, precioBase: p.precioBase, categoria: p.categoria, estado: p.estado, vidaUtilDias: p.vidaUtilDias ?? 28, diasAvisoVencimiento: p.diasAvisoVencimiento ?? 7 });
+    setEditForm({ nombre: p.nombre, descripcion: p.descripcion, unidad: p.unidad, kgPorCarton: p.kgPorCarton ?? 0, precioBase: p.precioBase, categoria: p.categoria, estado: p.estado, vidaUtilDias: p.vidaUtilDias ?? 28, diasAvisoVencimiento: p.diasAvisoVencimiento ?? 7 });
   };
 
   const filtered = productos.filter(p =>
@@ -190,15 +193,14 @@ export default function ProductosCatalogo({ currentUser }: Props) {
       {isAdding && (
         <div className="bg-white dark:bg-neutral-800 border-2 border-emerald-400 rounded-xl p-4 space-y-3">
           <h3 className="font-bold text-emerald-700 dark:text-emerald-400">Nuevo Producto</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} placeholder="Nombre *" className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
             <input value={form.descripcion} onChange={e => setForm({ ...form, descripcion: e.target.value })} placeholder="Descripción" className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
-            <select value={form.unidad} onChange={e => setForm({ ...form, unidad: e.target.value })} className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600">
-              <option value="cartones">Cartones</option>
-              <option value="sacos">Sacos</option>
-              <option value="kg">Kilogramos</option>
-              <option value="unidades">Unidades</option>
-            </select>
+            <div className="rounded-lg border px-3 py-2 text-sm text-neutral-600 dark:text-neutral-300">Unidad comercial: <strong>kilogramos (kg)</strong></div>
+            <div>
+              <input type="number" step="0.01" min={0} value={form.kgPorCarton || ''} onChange={e => setForm({ ...form, kgPorCarton: Number(e.target.value) })} placeholder="Peso por presentación (kg)" className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
+              <p className="text-[10px] text-neutral-400 mt-0.5">Peso neto de una presentación, expresado en kilos. Se usa para calcular existencias en kg.</p>
+            </div>
             <select value={form.categoria} onChange={e => setForm({ ...form, categoria: e.target.value })} className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600">
               <option value="Huevos">Huevos</option>
               <option value="Subproductos">Subproductos</option>
@@ -229,18 +231,19 @@ export default function ProductosCatalogo({ currentUser }: Props) {
         </div>
       )}
 
-      <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+      <div className="admin-table-scroll bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700">
         {loading ? (
           <div className="p-8 text-center text-neutral-400">Cargando...</div>
         ) : filtered.length === 0 ? (
           <div className="p-8 text-center text-neutral-400">No hay productos en el catálogo</div>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[920px] text-sm">
             <thead>
               <tr className="bg-neutral-50 dark:bg-neutral-750 border-b dark:border-neutral-700">
                 <th className="text-left px-4 py-3 font-bold text-neutral-600 dark:text-neutral-300">Producto</th>
                 <th className="text-left px-4 py-3 font-bold text-neutral-600 dark:text-neutral-300">Categoría</th>
                 <th className="text-left px-4 py-3 font-bold text-neutral-600 dark:text-neutral-300">Unidad</th>
+                <th className="text-right px-4 py-3 font-bold text-neutral-600 dark:text-neutral-300">Kilos</th>
                 <th className="text-right px-4 py-3 font-bold text-neutral-600 dark:text-neutral-300">Precio Base</th>
                 <th className="text-center px-4 py-3 font-bold text-neutral-600 dark:text-neutral-300">Vida útil</th>
                 <th className="text-center px-4 py-3 font-bold text-neutral-600 dark:text-neutral-300">Estado</th>
@@ -252,7 +255,7 @@ export default function ProductosCatalogo({ currentUser }: Props) {
                 <tr key={p.id} className="border-b dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-750">
                   {editingId === p.id ? (
                     <>
-                      <td className="px-4 py-2">
+                      <td className="min-w-[200px] px-4 py-2">
                         <input value={editForm.nombre} onChange={e => setEditForm({ ...editForm, nombre: e.target.value })} className="w-full px-2 py-1 border rounded text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
                         <input value={editForm.descripcion} onChange={e => setEditForm({ ...editForm, descripcion: e.target.value })} placeholder="Descripción" className="w-full px-2 py-1 border rounded text-xs mt-1 dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
                       </td>
@@ -262,9 +265,7 @@ export default function ProductosCatalogo({ currentUser }: Props) {
                         </select>
                       </td>
                       <td className="px-4 py-2">
-                        <select value={editForm.unidad} onChange={e => setEditForm({ ...editForm, unidad: e.target.value })} className="px-2 py-1 border rounded text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600">
-                          <option value="cartones">Cartones</option><option value="sacos">Sacos</option><option value="kg">Kg</option><option value="unidades">Unid.</option>
-                        </select>
+                        <span className="text-xs font-semibold">kg (unidad comercial)</span>
                       </td>
                       <td className="px-4 py-2 text-right">
                         <input type="number" value={editForm.precioBase} onChange={e => setEditForm({ ...editForm, precioBase: Number(e.target.value) })} className="w-24 px-2 py-1 border rounded text-sm text-right dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
@@ -277,7 +278,7 @@ export default function ProductosCatalogo({ currentUser }: Props) {
                       </td>
                       <td className="px-4 py-2 text-center">
                         <select value={editForm.estado} onChange={e => setEditForm({ ...editForm, estado: e.target.value })} className="px-2 py-1 border rounded text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600">
-                          <option>Activo</option><option>Inactivo</option>
+                          <option>Activo</option><option>Inactivo</option>{p.estado === 'Archivado' && <option>Archivado</option>}
                         </select>
                       </td>
                       <td className="px-4 py-2 text-center">
@@ -287,7 +288,7 @@ export default function ProductosCatalogo({ currentUser }: Props) {
                     </>
                   ) : (
                     <>
-                      <td className="px-4 py-3">
+                      <td className="min-w-[200px] px-4 py-3">
                         <div className="font-bold text-neutral-800 dark:text-white">{p.nombre}</div>
                         {p.descripcion && <div className="text-xs text-neutral-500 dark:text-neutral-400">{p.descripcion}</div>}
                       </td>
@@ -303,6 +304,13 @@ export default function ProductosCatalogo({ currentUser }: Props) {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">{p.unidad}</td>
+                      <td className="px-4 py-3 text-right">
+                        {rotuloFactor(p.kgPorCarton, p.unidad) ? (
+                          <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">{rotuloFactor(p.kgPorCarton, p.unidad)}</span>
+                        ) : (
+                          <span className="text-xs text-neutral-400">sin conversión</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right font-black text-emerald-700 dark:text-emerald-400">{formatCRC(p.precioBase)}</td>
                       <td className="px-4 py-3 text-center text-xs text-neutral-600 dark:text-neutral-400">
                         <div className="font-bold text-neutral-800 dark:text-white">{p.vidaUtilDias ?? 28} d</div>
@@ -317,7 +325,7 @@ export default function ProductosCatalogo({ currentUser }: Props) {
                       {currentUser.role === 'Admin' && (
                         <td className="px-4 py-3 text-center">
                           <button onClick={() => iniciarEdicion(p)} className="text-blue-600 hover:text-blue-800 mr-2"><Edit2 className="w-4 h-4 inline" /></button>
-                          <button onClick={() => eliminar(p.id, p.nombre)} className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4 inline" /></button>
+                          {p.estado !== 'Archivado' && <button onClick={() => eliminar(p.id, p.nombre)} title="Archivar producto" className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4 inline" /></button>}
                         </td>
                       )}
                     </>
@@ -330,7 +338,7 @@ export default function ProductosCatalogo({ currentUser }: Props) {
       </div>
 
       {/* ===== TIPOS DE CARTÓN ===== */}
-      <div className="mt-6 bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+      <div className="admin-table-scroll mt-6 bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700">
         <div className="p-4 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-neutral-800 dark:text-white">Tipos de cartón</h3>
@@ -344,7 +352,7 @@ export default function ProductosCatalogo({ currentUser }: Props) {
         </div>
         {addingTipo && (
           <div className="p-4 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input value={tipoForm.nombre} onChange={e => setTipoForm({ ...tipoForm, nombre: e.target.value })} placeholder="Nombre * (ej. Cartón de 24 huevos)" className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
               <input type="number" min={1} value={tipoForm.unidades || ''} onChange={e => setTipoForm({ ...tipoForm, unidades: Number(e.target.value) })} placeholder="Unidades por cartón *" className="px-3 py-2 border rounded-lg text-sm dark:bg-neutral-700 dark:text-white dark:border-neutral-600" />
             </div>
@@ -361,7 +369,7 @@ export default function ProductosCatalogo({ currentUser }: Props) {
         {tipos.length === 0 ? (
           <div className="p-6 text-center text-neutral-400 text-sm">No hay tipos de cartón configurados.</div>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[520px] text-sm">
             <thead>
               <tr className="bg-neutral-50 dark:bg-neutral-750 border-b dark:border-neutral-700">
                 <th className="text-left px-4 py-3 font-bold text-neutral-600 dark:text-neutral-300">Tipo</th>

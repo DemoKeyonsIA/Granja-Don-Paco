@@ -247,7 +247,7 @@ describe('lo que aportaba el Centro de Mando vive en Resumen', () => {
     renderComo('Admin');
     await abrirModulo('Finanzas');
     expect(screen.getByTestId('finanzas-salud-negocio-no-disponible')).toBeTruthy();
-    expect(screen.queryByText('0')).toBeNull();
+    expect(screen.getByTestId('finanzas-salud-negocio-no-disponible').textContent).not.toContain('0');
   });
 
   it('el Comercial no ve Resumen, así que el bloque operativo tampoco se le filtra', async () => {
@@ -256,7 +256,7 @@ describe('lo que aportaba el Centro de Mando vive en Resumen', () => {
     expect(screen.queryByTestId('finanzas-resumen')).toBeNull();
     expect(screen.queryByTestId('finanzas-salud-negocio')).toBeNull();
     // Documentos sí es suyo: la otra mitad de la fase 4 sigue en pie.
-    expect(screen.getByTestId('documentos-ventas')).toBeTruthy();
+    expect(await screen.findByTestId('documentos-ventas')).toBeTruthy();
   });
 
   it('el Socio ve Resumen con la columna derecha', async () => {

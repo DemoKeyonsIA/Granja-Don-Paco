@@ -3,6 +3,7 @@ import { Truck, Check, ChevronLeft, ChevronRight, X, Package, AlertCircle } from
 import { User } from '../types';
 import { toast } from 'sonner';
 import { BloqueCarga, SpinnerConTexto } from './Spinner';
+import { sessionHeaders } from '../lib/session';
 
 type CargaItem = { trasladoId: string; granjaOrigenId?: string; producto: string; cantidad: number; unidad: string };
 type Carga = {
@@ -32,7 +33,7 @@ export default function CamioneroMovil({ currentUser }: Props) {
 
   const fetchCargas = async () => {
     try {
-      const res = await fetch(`/api/operaciones/cargas?camioneroId=${currentUser.id}`);
+      const res = await fetch('/api/operaciones/cargas', { headers: sessionHeaders(currentUser.id) });
       if (res.ok) {
         const data = await res.json();
         setCargas(data);
@@ -53,7 +54,7 @@ export default function CamioneroMovil({ currentUser }: Props) {
     try {
       const res = await fetch(`/api/operaciones/carga/${selected.cargaId}/confirmar`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify({ camioneroId: currentUser.id })
       });
       const data = await res.json();
@@ -72,7 +73,7 @@ export default function CamioneroMovil({ currentUser }: Props) {
     try {
       const res = await fetch(`/api/operaciones/carga/${selected.cargaId}/rechazar`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify({ camioneroId: currentUser.id, motivo: motivo.trim() })
       });
       const data = await res.json();
@@ -141,9 +142,9 @@ export default function CamioneroMovil({ currentUser }: Props) {
           <>
             {/* Regla: no puede confirmar si creó la carga */}
             {selected.creadoPorId === currentUser.id ? (
-              <div className="p-4 rounded-2xl mb-4 flex items-start gap-3" style={{ background: 'var(--status-warning-soft, #fef3c7)', border: '1px solid var(--status-warning, #f59e0b)' }}>
-                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" style={{ color: 'var(--status-warning, #f59e0b)' }} />
-                <p className="text-sm font-medium" style={{ color: 'var(--status-warning-text, #92400e)' }}>
+              <div className="p-4 rounded-2xl mb-4 flex items-start gap-3" style={{ background: 'var(--status-warning-soft)', border: '1px solid var(--status-warning)' }}>
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" style={{ color: 'var(--status-warning)' }} />
+                <p className="text-sm font-medium" style={{ color: 'var(--status-warning)' }}>
                   Tú creaste esta solicitud. No puedes confirmar o rechazar tu propia carga.
                 </p>
               </div>
@@ -151,8 +152,8 @@ export default function CamioneroMovil({ currentUser }: Props) {
               <>
                 <button onClick={handleConfirmar}
                   disabled={sendingAction === 'confirm'}
-                  className="w-full py-5 rounded-2xl text-lg font-black transition-all active:scale-[0.97] disabled:opacity-60"
-                  style={{ background: '#16a34a', color: '#fff', boxShadow: '0 8px 24px rgba(22,163,74,0.3)' }}>
+                  className="w-full min-h-14 py-4 rounded-2xl text-lg font-black transition-all active:scale-[0.97] disabled:opacity-60"
+                  style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)', boxShadow: 'var(--shadow-md)' }}>
                   {sendingAction === 'confirm' ? (
                     <SpinnerConTexto tamano="md" className="justify-center">Confirmando...</SpinnerConTexto>
                   ) : (
@@ -160,8 +161,8 @@ export default function CamioneroMovil({ currentUser }: Props) {
                   )}
                 </button>
                 <button onClick={() => setShowReject(true)}
-                  className="w-full mt-3 py-4 rounded-2xl text-base font-bold transition-all"
-                  style={{ color: '#dc2626' }}>
+                  className="w-full min-h-12 mt-3 py-3 rounded-2xl text-base font-bold transition-all"
+                  style={{ color: 'var(--status-danger)', background: 'var(--status-danger-soft)' }}>
                   Rechazar esta carga
                 </button>
               </>
@@ -177,11 +178,11 @@ export default function CamioneroMovil({ currentUser }: Props) {
                   style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }} />
                 <div className="flex gap-2 mt-3">
                   <button onClick={() => { setShowReject(false); setMotivo(''); }}
-                    className="flex-1 py-3 rounded-xl text-sm font-bold" style={{ color: 'var(--text-muted)' }}>Cancelar</button>
+                    className="flex-1 min-h-12 py-3 rounded-xl text-sm font-bold" style={{ color: 'var(--text-muted)' }}>Cancelar</button>
                   <button onClick={handleRechazar}
                     disabled={!motivo.trim() || sendingAction === 'reject'}
-                    className="flex-1 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
-                    style={{ background: '#dc2626', color: '#fff' }}>
+                    className="flex-1 min-h-12 py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                    style={{ background: 'var(--brand-danger)', color: '#10122A' }}>
                     {sendingAction === 'reject' ? 'Rechazando...' : 'Confirmar rechazo'}
                   </button>
                 </div>
@@ -222,9 +223,9 @@ export default function CamioneroMovil({ currentUser }: Props) {
             {pendientes.map(c => (
               <button key={c.cargaId} onClick={() => setSelected(c)}
                 className="w-full text-left p-5 rounded-2xl flex items-center gap-4 transition-all active:scale-[0.97]"
-                style={{ background: 'var(--bg-card)', border: '2px solid #fbbf24' }}>
+                style={{ background: 'var(--bg-card)', border: '2px solid var(--status-warning)' }}>
                 <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0"
-                  style={{ background: '#fef3c7', color: '#f59e0b' }}>
+                  style={{ background: 'var(--status-warning-soft)', color: 'var(--status-warning)' }}>
                   <Truck className="w-7 h-7" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -232,7 +233,7 @@ export default function CamioneroMovil({ currentUser }: Props) {
                   {c.creadoPorNombre && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Solicitado por: {c.creadoPorNombre}</p>}
                   <p className="text-sm mt-1" style={{ color: 'var(--brand-primary)' }}>{totalItems(c)} unidades · {c.items.length} producto{c.items.length !== 1 ? 's' : ''}</p>
                 </div>
-                <ChevronRight className="w-6 h-6 shrink-0" style={{ color: '#f59e0b' }} />
+                <ChevronRight className="w-6 h-6 shrink-0" style={{ color: 'var(--status-warning)' }} />
               </button>
             ))}
           </div>
@@ -249,7 +250,7 @@ export default function CamioneroMovil({ currentUser }: Props) {
                 className="w-full text-left p-4 rounded-2xl flex items-center gap-3 transition-all"
                 style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                  style={{ background: '#dcfce7', color: '#16a34a' }}>
+                  style={{ background: 'var(--status-success-soft)', color: 'var(--status-success)' }}>
                   <Package className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -273,8 +274,8 @@ export default function CamioneroMovil({ currentUser }: Props) {
                 style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
                   style={{
-                    background: c.estado === 'Rechazada' ? '#fee2e2' : c.estado === 'RecibidoConDiferencia' ? '#fef3c7' : '#dcfce7',
-                    color: c.estado === 'Rechazada' ? '#dc2626' : c.estado === 'RecibidoConDiferencia' ? '#f59e0b' : '#16a34a'
+                    background: c.estado === 'Rechazada' ? 'var(--status-danger-soft)' : c.estado === 'RecibidoConDiferencia' ? 'var(--status-warning-soft)' : 'var(--status-success-soft)',
+                    color: c.estado === 'Rechazada' ? 'var(--status-danger)' : c.estado === 'RecibidoConDiferencia' ? 'var(--status-warning)' : 'var(--status-success)'
                   }}>
                   {c.estado === 'Rechazada' ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                 </div>

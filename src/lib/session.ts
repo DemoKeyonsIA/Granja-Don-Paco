@@ -27,6 +27,16 @@ export function loadSession(): Session | null {
   }
 }
 
+/** Headers de identidad para llamadas demo que protegen acciones por usuario. */
+export function sessionHeaders(userId: string, json = false): Record<string, string> {
+  const token = loadSession()?.token;
+  return {
+    ...(json ? { 'Content-Type': 'application/json' } : {}),
+    'x-user-id': userId,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export function clearSession() {
   try {
     localStorage.removeItem(KEY);

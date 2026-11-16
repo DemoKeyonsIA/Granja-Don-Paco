@@ -129,21 +129,26 @@ export const ingresosCobradosDe = (
   facturas: FacturaPago[],
   pagos: { facturaId?: string | null; fecha: string; monto: number }[],
   periodo?: RangoPeriodo,
+  tiquetes: TiqueteVenta[] = [],
 ): number => {
   const enPeriodo = (fecha: string) => (periodo ? dentroDePeriodo(fecha, periodo) : true);
   const porFacturaPagada = facturas
     .filter(f => f.estado === 'Pagada' && enPeriodo(f.fecha))
     .reduce((a, f) => a + Number(f.total || 0), 0);
+  const facturaPorId = new Map(facturas.map(f => [String(f.id ?? ''), f]));
   const porPagos = pagos
     .filter(p => {
       if (!enPeriodo(p.fecha)) return false;
-      const f = facturas.find(x => String(x.id) === String(p.facturaId));
+      const f = facturaPorId.get(String(p.facturaId));
       // Sin factura local no hay forma de saber si ya se reconoció como `Pagada`;
       // se cuenta, porque el pago existe y el dinero entró.
       return !f || f.estado !== 'Pagada';
     })
     .reduce((a, p) => a + Number(p.monto || 0), 0);
-  return round2(porFacturaPagada + porPagos);
+  const porTiquetesContado = tiquetes
+    .filter(t => cuentaComoTiquete(t) && !tiqueteConsolidado(t) && t.cobro !== 'Credito' && enPeriodo(String(t.fechaHora || '')))
+    .reduce((a, t) => a + Number(t.total || 0), 0);
+  return round2(porFacturaPagada + porPagos + porTiquetesContado);
 };
 
 /**

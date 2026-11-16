@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bocetos — Granja Don Paco</title>
+<style>
+/* Tokens de src/components/gcrm.css para que la galería se lea como la app. */
+body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:#e9edf2;color:#0f172a;}
+.wrap{max-width:940px;margin:0 auto;padding:34px 22px 64px;}
+h1{font-size:24px;font-weight:800;margin:0 0 7px;letter-spacing:-.01em;}
+.lede{color:#5b6675;font-size:13.5px;line-height:1.6;margin:0 0 6px;max-width:760px;}
+.note{background:#fff;border:1px solid #d7dce2;border-left:3px solid #059669;border-radius:0 10px 10px 0;
+      padding:12px 15px;font-size:12.5px;color:#5b6675;line-height:1.6;margin:18px 0 26px;}
+.note b{color:#0f172a;}
+code{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 5px;font-size:11.5px;
+     font-family:Consolas,monospace;}
+.list{display:flex;flex-direction:column;gap:11px;}
+a.card{display:flex;gap:14px;align-items:flex-start;background:#fff;border:1px solid #d7dce2;
+       border-radius:12px;padding:15px 17px;text-decoration:none;color:inherit;
+       box-shadow:0 1px 2px rgba(15,23,42,.05);transition:border-color .12s,box-shadow .12s;}
+a.card:hover{border-color:#059669;box-shadow:0 4px 14px rgba(15,23,42,.09);}
+.card .ico{width:34px;height:34px;flex:0 0 34px;border-radius:9px;background:#059669;color:#fff;
+           display:flex;align-items:center;justify-content:center;font-size:15px;}
+.card.nuevo{border-color:#059669;box-shadow:0 0 0 2px #d1fae5;}
+.card.nuevo .ico{background:#065f46;}
+.card .txt{flex:1;min-width:0;}
+.card .t{font-size:14.5px;font-weight:800;margin:0 0 3px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.card .d{font-size:12.5px;color:#5b6675;line-height:1.55;margin:0;}
+.card .go{font-size:18px;color:#94a3b8;align-self:center;}
+.pill{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;padding:2px 8px;
+      border-radius:999px;background:#d1fae5;color:#065f46;}
+.pill.old{background:#e2e8f0;color:#475569;}
+h2{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;
+   margin:32px 0 11px;padding-bottom:6px;border-bottom:1px solid #d7dce2;}
+.muted{color:#94a3b8;font-size:12px;font-style:italic;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Bocetos</h1>
+  <p class="lede">Simulaciones de pantallas, todav&aacute; fuera del c&oacute;digo de la app. Sirven para
+     decidir antes de implementar; cuando una pantalla se aprueba, lo que queda es el c&oacute;digo, no este archivo.</p>
+
+  <div class="note">
+    <b>C&oacute;mo abrir uno:</b> elegilo de la lista y se abre en esta misma pestaña.
+    Si llegu&aacute;ste desde <code>/bocetos/</code> y antes te aparec&iacute;a la pantalla de login, era que
+    esta carpeta no estaba montada en el servidor: el build de Vite solo compila el
+    <code>index.html</code> de la app, as&iacute; que el fallback SPA respond&iacute;a con la app en vez de con
+    el boceto. Ya est&aacute; montado en <code>server.ts</code>.
+  </div>
+
+  <h2>Acabado enterprise &mdash; 5 variantes</h2>
+  <div class="list">
+    <a class="card nuevo" href="./bocetos-enterprise-5-variantes.html">
+      <span class="ico">&#127912;</span>
+      <span class="txt">
+        <span class="t">5 bocetos enterprise, claro + oscuro <span class="pill">Nuevo</span></span>
+        <span class="d">Cinco direcciones visuales aplicando las mismas buenas pr&aacute;cticas UI/UX 2026
+           (jerarqu&iacute;a de un solo KPI, insight&rarr;acci&oacute;n, densidad de datos, tabla enterprise con
+           encabezado fijo y columna congelada, tokens sem&aacute;nticos, dise&ntilde;o por rol, command palette
+           y WCAG 2.2). Cada una con su paleta para modo claro y modo oscuro, sobre un <b>mismo markup</b>
+           movido por tokens.</span>
+      </span>
+      <span class="go">&rsaquo;</span>
+    </a>
+  </div>
+
+  <h2>Consolidaci&oacute;n de vistas</h2>
+  <div class="list">
+    <a class="card nuevo" href="./bocetos-consolidacion-vistas.html">
+      <span class="ico">&#128257;</span>
+      <span class="txt">
+        <span class="t">Vistas duplicadas: antes y despu&eacute;s <span class="pill">Nuevo</span></span>
+        <span class="d">Ocho grupos de pantallas que repiten el mismo dato: camiones, trazabilidad de
+           gu&iacute;a, cierre de ruta, tablero vivo, cartera, desperdicios, resumen del d&iacute;a y ventas.
+           Cada uno con su diagn&oacute;stico (cu&aacute;l es el ancla, qu&eacute; se borra, qu&eacute; endpoint se deprec&aacute;)
+           y el boceto de c&oacute;mo quedar&iacute;a, sobre el tema V3 en claro y oscuro.</span>
+      </span>
+      <span class="go">&rsaquo;</span>
+    </a>
+  </div>
+
+  <h2>Office</h2>
+  <div class="list">
+    <a class="card nuevo" href="./boceto-office-correo-documentos.html">
+      <span class="ico">&#9993;</span>
+      <span class="txt">
+        <span class="t">Office: Correo y Documentos <span class="pill">Nuevo</span></span>
+        <span class="d">C&oacute;mo queda Office despu&eacute;s de mover <b>Vinculaciones</b> a Admin.
+           Los dos espacios con la fila real, los datos del seed, la tabla de qui&eacute;n ve qu&eacute; y qu&eacute;
+           deja de romperse al quitar el tab.</span>
+      </span>
+      <span class="go">&rsaquo;</span>
+    </a>
+    <a class="card" href="./boceto-modulo-office.html">
+      <span class="ico">&#9993;</span>
+      <span class="txt">
+        <span class="t">Office integrado en la app <span class="pill old">Base</span></span>
+        <span class="d">El m&oacute;dulo Office completo con sus tres espacios: Correo, Documentos y
+           Vinculaciones. Es de donde sale la estructura que los dos bocetos siguientes recortan.</span>
+      </span>
+      <span class="go">&rsaquo;</span>
+    </a>
+  </div>
+
+  <h2>Otros m&oacute;dulos</h2>
+  <div class="list">
+    <a class="card nuevo" href="./boceto-flujo-ruta-guia.html">
+      <span class="ico">&#128666;</span>
+      <span class="txt">
+        <span class="t">El flujo Ruta &rarr; Gu&iacute;a de Despacho en la UI <span class="pill">Nuevo</span></span>
+        <span class="d">Forma de gu&iacute;a en 4 pasos numerados, tarjeta &laquo;Ruta heredada&raquo; que muestra
+           qu&eacute; precarga el viaje (vendedor, cami&oacute;n, d&iacute;as, clientes), clientes en orden
+           geogr&aacute;fico con contador, y el form de ruta separado en «recorrido» y «clientes a
+           visitar» — con la franja de proceso arriba de las dos pantallas.</span>
+      </span>
+      <span class="go">&rsaquo;</span>
+    </a>
+    <a class="card nuevo" href="./boceto-despacho-unificado.html">
+      <span class="ico">&#128666;</span>
+      <span class="txt">
+        <span class="t">Despacho y Gu&iacute;as: un solo taller de la ruta <span class="pill">Nuevo</span></span>
+        <span class="d">Diagn&oacute;stico y propuesta para el grupo Despacho del hub: la GD queda
+           visible en la sub-fila ("Gu&iacute;as de Despacho"), camiones y rutas se unifican en
+           "Flota y Rutas", y etiquetas y pesos dejan de duplicar al flujo.</span>
+      </span>
+      <span class="go">&rsaquo;</span>
+    </a>
+    <a class="card" href="./boceto-operaciones-logistica.html">
+      <span class="ico">&#9881;</span>
+      <span class="txt">
+        <span class="t">Operaciones y Log&iacute;stica</span>
+        <span class="d">Bodega, despacho, gu&iacute;as, camiones y tablero vivo, con el hub de Operaciones
+           y la l&iacute;nea de tiempo de cada unidad.</span>
+      </span>
+      <span class="go">&rsaquo;</span>
+    </a>
+    <a class="card" href="./boceto-finanzas-reportes.html">
+      <span class="ico">&#36;</span>
+      <span class="txt">
+        <span class="t">Finanzas y Reportes</span>
+        <span class="d">Caja de ruta, cobranza, anal&iacute;tica y los reportes. De aqu&iacute; sali&oacute; la regla
+           de oro de que el P&amp;L se calcula en un solo lugar.</span>
+      </span>
+      <span class="go">&rsaquo;</span>
+    </a>
+  </div>
+
+  <h2>En la ra&iacute;z del repo</h2>
+  <p class="muted">Estos tres quedaron fuera de <code>bocetos/</code>, as&iacute; que solo se ven con el servidor
+     de desarrollo (<code>npm run dev</code>), no en el build de producci&oacute;n.</p>
+  <div class="list">
+    <a class="card" href="../boceto-clientes-360.html">
+      <span class="ico">&#128100;</span>
+      <span class="txt"><span class="t">Clientes 360</span>
+        <span class="d">Ficha de cliente con cartera, cobranza y documentos en una sola vista.</span></span>
+      <span class="go">&rsaquo;</span>
+    </a>
+    <a class="card" href="../boceto-desglose-existencias-bodega.html">
+      <span class="ico">&#9635;</span>
+      <span class="txt"><span class="t">Desglose de existencias en bodega</span>
+        <span class="d">Disponibilidad por producto con su desglose por lote y ubicaci&oacute;n.</span></span>
+      <span class="go">&rsaquo;</span>
+    </a>
+    <a class="card" href="../bodega-mockup.html">
+      <span class="ico">&#9635;</span>
+      <span class="txt"><span class="t">Bodega</span>
+        <span class="d">Mockup general del m&oacute;dulo de bodega.</span></span>
+      <span class="go">&rsaquo;</span>
+    </a>
+  </div>
+
+</div>
+</body>
+</html>

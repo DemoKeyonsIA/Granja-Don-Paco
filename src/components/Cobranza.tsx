@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Search, Calendar, AlertCircle, CheckCircle2, TrendingUp, TrendingDown, Clock, MessageSquare, CreditCard, Wallet, X } from 'lucide-react';
+import { DollarSign, Search, Calendar, AlertCircle, CheckCircle2, TrendingUp, TrendingDown, Clock, MessageSquare, CreditCard, Wallet, X, Copy } from 'lucide-react';
 import { Factura, User, Cliente } from '../types';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { BloqueCarga } from './Spinner';
+import { loadSession, sessionHeaders } from '../lib/session';
+import { diasVencidoDe, esCredito, estaSaldada } from '../lib/cobranza';
 
 interface CobranzaProps {
   currentUser: User;
@@ -18,13 +20,16 @@ export default function Cobranza({ currentUser }: CobranzaProps) {
   const [pagoSel, setPagoSel] = useState<Factura | null>(null);
   const [metodoPago, setMetodoPago] = useState<'Efectivo' | 'SINPE' | 'Transferencia'>('Efectivo');
   const [enviandoPago, setEnviandoPago] = useState(false);
+  const [clavesPago, setClavesPago] = useState<Record<string, string>>({});
+  const [montoPago, setMontoPago] = useState('');
+  const [recordatorioSel, setRecordatorioSel] = useState<Factura | null>(null);
 
   useEffect(() => {
     const cargarDatos = async () => {
       try {
         const [resFac, resCli] = await Promise.all([
-          fetch('/api/facturas'),
-          fetch('/api/clientes')
+          fetch('/api/facturas', { headers: sessionHeaders(currentUser.id) }),
+          fetch('/api/clientes', { headers: sessionHeaders(currentUser.id) })
         ]);
         if (resFac.ok) {
           const data = await resFac.json();
@@ -43,9 +48,22 @@ export default function Cobranza({ currentUser }: CobranzaProps) {
       }
     };
     cargarDatos();
-  }, []);
+  }, [currentUser.id]);
 
   const getCliente = (id: string) => clientes.find(c => c.id === id);
+
+  const copiarRecordatorio = async () => {
+    if (!recordatorioSel) return;
+    const clienteNombre = getCliente(recordatorioSel.clienteId)?.nombre || 'cliente';
+    const saldo = Number(recordatorioSel.saldoPendiente ?? recordatorioSel.total);
+    const mensaje = `Hola ${clienteNombre}, te recordamos que la factura ${recordatorioSel.consecutivo} tiene un saldo pendiente de ₡${saldo.toLocaleString('es-CR')}. Cuando realices el pago, por favor envíanos el comprobante. Gracias, Granja Don Paco.`;
+    try {
+      await navigator.clipboard.writeText(mensaje);
+      toast.success('Texto del recordatorio copiado. Revísalo antes de enviarlo.');
+    } catch {
+      toast.error('El navegador no permitió copiar el texto. Selecciónalo y cópialo manualmente.');
+    }
+  };
 
 /**
  * Días transcurridos desde `dateStr`, como mínimo 0.
@@ -61,17 +79,35 @@ const calculateDaysPast = (dateStr: string) => {
 
   const confirmarPago = async () => {
     if (!pagoSel) return;
+    const saldo = Number(pagoSel.saldoPendiente ?? pagoSel.total);
+    const monto = Number(montoPago);
+    if (!Number.isFinite(monto) || monto <= 0 || monto > saldo) {
+      toast.error(`Ingrese un monto mayor a cero y hasta ₡${saldo.toLocaleString()}`);
+      return;
+    }
     setEnviandoPago(true);
     try {
+      const idempotencyKey = clavesPago[pagoSel.id] || crypto.randomUUID();
+      if (!clavesPago[pagoSel.id]) setClavesPago(prev => ({ ...prev, [pagoSel.id]: idempotencyKey }));
+      const token = loadSession()?.token;
       const res = await fetch('/api/pagos', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ facturaId: pagoSel.id, metodoPago, monto: pagoSel.total, usuarioId: currentUser.id })
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey, 'x-user-id': currentUser.id, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ facturaId: pagoSel.id, metodoPago, monto, usuarioId: currentUser.id })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al registrar el pago');
-      setFacturas(facturas.map(f => f.id === pagoSel.id ? { ...f, estado: 'Pagada', metodo_pago: metodoPago } : f));
+      const facturaActualizada = data.factura || {};
+      setFacturas(facturas.map(f => f.id === pagoSel.id ? {
+        ...f,
+        ...facturaActualizada,
+        pagado: Number(data.pagado ?? (Number(f.pagado || 0) + monto)),
+        saldoPendiente: Number(data.saldo ?? Math.max(0, saldo - monto)),
+        estado: facturaActualizada.estado || (saldo - monto <= 0 ? 'Pagada' : 'Pendiente'),
+        metodo_pago: metodoPago,
+      } : f));
       setPagoSel(null);
+      setClavesPago(prev => { const next = { ...prev }; delete next[pagoSel.id]; return next; });
       toast.success(`Pago de la factura ${pagoSel.consecutivo} registrado`);
     } catch (err: any) {
       toast.error(err.message || "Error al registrar el pago");
@@ -80,7 +116,11 @@ const calculateDaysPast = (dateStr: string) => {
     }
   };
 
-  const facturasCreditoPendientes = facturas.filter(f => f.condicion_pago === 'Credito' && f.estado === 'Pendiente');
+  const facturasCreditoPendientes = facturas.filter(f =>
+    esCredito(f.condicion_pago)
+    && !estaSaldada(f.estado)
+    && Number(f.saldoPendiente ?? f.total) > 0
+  );
   
   const filteredCuentas = facturasCreditoPendientes.filter(f => {
     const cliente = getCliente(f.clienteId)?.nombre || '';
@@ -90,14 +130,14 @@ const calculateDaysPast = (dateStr: string) => {
 
   // Métricas de Finanzas
   const totalCobradoContado = facturas
-    .filter(f => f.condicion_pago === 'Contado' && f.estado === 'Pagada')
-    .reduce((acc, f) => acc + f.total, 0);
+    .filter(f => f.condicion_pago === 'Contado' && f.estado !== 'Anulada')
+    .reduce((acc, f) => acc + Number(f.pagado ?? (f.estado === 'Pagada' ? f.total : 0)), 0);
 
   const totalCuentasPorCobrar = facturasCreditoPendientes
-    .reduce((acc, f) => acc + f.total, 0);
+    .reduce((acc, f) => acc + Number(f.saldoPendiente ?? f.total), 0);
 
-  const facturasVencidas = facturasCreditoPendientes.filter(f => calculateDaysPast(f.fecha) > 15);
-  const totalVencido = facturasVencidas.reduce((acc, f) => acc + f.total, 0);
+  const facturasVencidas = facturasCreditoPendientes.filter(f => diasVencidoDe(f) > 15);
+  const totalVencido = facturasVencidas.reduce((acc, f) => acc + Number(f.saldoPendiente ?? f.total), 0);
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6 animate-in fade-in pb-20">
@@ -144,7 +184,7 @@ const calculateDaysPast = (dateStr: string) => {
                 </div>
               </div>
               <p className="text-3xl font-black" style={{ color: 'var(--brand-primary)' }}>₡{totalCobradoContado.toLocaleString()}</p>
-              <div className="mt-4 flex items-center text-xs font-bold bg-stone-50 px-3 py-1.5 rounded-lg w-fit" style={{ color: 'var(--brand-primary-dark)' }}>
+              <div className="mt-4 flex items-center text-xs font-bold bg-stone-50 px-3 py-1.5 rounded-lg w-fit" style={{ color: 'var(--text-link)' }}>
                 <TrendingUp className="w-4 h-4 mr-1" />
                 +12% vs mes anterior
               </div>
@@ -241,8 +281,9 @@ const calculateDaysPast = (dateStr: string) => {
                   </tr>
                 )}
                 {!isLoading && filteredCuentas.map(f => {
-                  const daysPast = calculateDaysPast(f.fecha);
+                  const daysPast = diasVencidoDe(f);
                   const isPastDue = daysPast > 15;
+                  const saldoPendiente = Number(f.saldoPendiente ?? f.total);
                   
                   return (
                     <tr key={f.id} className="hover:bg-neutral-50/50 transition-colors">
@@ -266,19 +307,19 @@ const calculateDaysPast = (dateStr: string) => {
                            <p className="text-[10px] text-red-600 font-bold mt-1 uppercase tracking-wider">Vencida</p>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-right font-black text-neutral-800">₡{f.total.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-right font-black text-neutral-800">₡{saldoPendiente.toLocaleString()}</td>
                       <td className="px-6 py-4">
                         <div className="flex justify-center space-x-2">
-                          <button className="text-neutral-500 p-2 hover:bg-stone-50 rounded-lg transition-colors border border-transparent flex items-center justify-center group relative" style={{ color: 'var(--brand-primary)' }}>
+                          <button onClick={() => setRecordatorioSel(f)} aria-label={`Preparar recordatorio para ${getCliente(f.clienteId)?.nombre || 'cliente'} por la factura ${f.consecutivo}`} className="text-neutral-500 p-2 hover:bg-stone-50 rounded-lg transition-colors border border-transparent flex items-center justify-center group relative" style={{ color: 'var(--brand-primary)' }}>
                             <MessageSquare className="w-4 h-4" />
                             <span className="absolute bottom-full mb-2 hidden group-hover:block bg-neutral-900 text-white text-[10px] px-2 py-1 rounded font-bold whitespace-nowrap">
-                              Enviar Recordatorio
+                              Preparar recordatorio
                             </span>
                           </button>
                           <button 
-                            onClick={() => { setPagoSel(f); setMetodoPago('Efectivo'); }}
+                            onClick={() => { setPagoSel(f); setMontoPago(String(Number(f.saldoPendiente ?? f.total))); setMetodoPago('Efectivo'); }}
                             className="p-2 rounded-lg transition-colors font-bold flex items-center justify-center group relative border border-stone-200 hover:opacity-90"
-                            style={{ background: 'color-mix(in srgb, var(--brand-primary) 8%, transparent)', color: 'var(--brand-primary-dark)' }}
+                            style={{ background: 'color-mix(in srgb, var(--brand-primary) 8%, transparent)', color: 'var(--text-link)' }}
                           >
                             <CheckCircle2 className="w-4 h-4" />
                             <span className="absolute bottom-full mb-2 hidden group-hover:block bg-neutral-900 text-white text-[10px] px-2 py-1 rounded font-bold whitespace-nowrap">
@@ -323,10 +364,13 @@ const calculateDaysPast = (dateStr: string) => {
               <p className="text-xs text-neutral-500 mt-2">Cliente</p>
               <p className="font-bold text-neutral-900">{getCliente(pagoSel.clienteId)?.nombre || 'Desconocido'}</p>
               <div className="flex justify-between items-end mt-3 pt-3 border-t border-neutral-200">
-                <p className="text-xs text-neutral-500">Total a cobrar</p>
-                <p className="text-2xl font-black" style={{ color: 'var(--brand-primary)' }}>₡{pagoSel.total.toLocaleString()}</p>
+                <p className="text-xs text-neutral-500">Saldo pendiente</p>
+                <p className="text-2xl font-black" style={{ color: 'var(--brand-primary)' }}>₡{Number(pagoSel.saldoPendiente ?? pagoSel.total).toLocaleString()}</p>
               </div>
             </div>
+            <label htmlFor="monto-pago" className="block text-xs font-bold text-neutral-500 mb-1.5">Monto recibido (₡)</label>
+            <input id="monto-pago" type="number" min="0.01" max={Number(pagoSel.saldoPendiente ?? pagoSel.total)} step="0.01" value={montoPago} onChange={e => setMontoPago(e.target.value)}
+              className="w-full rounded-xl border border-neutral-200 px-3 py-3 mb-4 text-lg font-bold" />
             <label className="block text-xs font-bold text-neutral-500 mb-1.5">Método de pago</label>
             <div className="grid grid-cols-3 gap-2">
               {(['Efectivo', 'SINPE', 'Transferencia'] as const).map(m => (
@@ -352,6 +396,32 @@ const calculateDaysPast = (dateStr: string) => {
           </div>
         </div>
       )}
+
+      {recordatorioSel && (() => {
+        const clienteNombre = getCliente(recordatorioSel.clienteId)?.nombre || 'cliente';
+        const saldo = Number(recordatorioSel.saldoPendiente ?? recordatorioSel.total);
+        const mensaje = `Hola ${clienteNombre}, te recordamos que la factura ${recordatorioSel.consecutivo} tiene un saldo pendiente de ₡${saldo.toLocaleString('es-CR')}. Cuando realices el pago, por favor envíanos el comprobante. Gracias, Granja Don Paco.`;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setRecordatorioSel(null)}>
+            <section role="dialog" aria-modal="true" aria-labelledby="recordatorio-title" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 id="recordatorio-title" className="text-lg font-bold text-neutral-900">Preparar recordatorio</h3>
+                  <p className="mt-1 text-sm text-neutral-600">Factura {recordatorioSel.consecutivo} · saldo ₡{saldo.toLocaleString('es-CR')}</p>
+                </div>
+                <button type="button" onClick={() => setRecordatorioSel(null)} aria-label="Cerrar" className="rounded-lg p-2 text-neutral-600 hover:bg-neutral-100"><X className="h-5 w-5" /></button>
+              </div>
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-neutral-500">Texto sugerido</p>
+              <textarea readOnly value={mensaje} rows={4} className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-sm leading-relaxed text-neutral-800" />
+              <p className="mt-2 text-xs text-neutral-600">El sistema no envía mensajes. Copia el texto y revísalo antes de compartirlo.</p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button type="button" onClick={() => setRecordatorioSel(null)} className="min-h-11 rounded-xl border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-800 hover:bg-neutral-50">Cerrar</button>
+                <button type="button" onClick={() => void copiarRecordatorio()} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-white" style={{ background: 'var(--brand-primary)' }}><Copy className="h-4 w-4" />Copiar texto</button>
+              </div>
+            </section>
+          </div>
+        );
+      })()}
     </div>
   );
 }

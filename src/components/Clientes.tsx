@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Download, Plus, Check, X } from 'lucide-react';
+import { Search, Download, Plus, Check, X, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { Cliente, User } from '../types';
 import Cliente360 from './Cliente360';
+import { sessionHeaders } from '../lib/session';
 import './gcrm.css';
 
 interface ClientesProps {
@@ -42,6 +43,8 @@ interface CarteraRow {
 
 const fmt = (n: any) => `₡${Math.round(Number(n || 0)).toLocaleString()}`;
 
+const PROVINCIAS = ['San José', 'Alajuela', 'Cartago', 'Heredia', 'Guanacaste', 'Puntarenas', 'Limón'];
+
 const COMBO: Record<string, { chip: string }> = {
   'Puntual': { chip: 'green' },
   'Atraso leve': { chip: 'amber' },
@@ -69,7 +72,9 @@ function diasTranscurridos(fechaISO: string, ref?: number) {
 }
 
 export default function Clientes({ currentUser }: ClientesProps) {
-  const [view, setView] = useState<'cartera' | 'analisis'>('analisis');
+  const canViewAnalysis = currentUser.role === 'Admin' || currentUser.role === 'Socio'
+    || (currentUser.roles || []).some(role => role === 'Admin' || role === 'Socio');
+  const [view, setView] = useState<'cartera' | 'analisis'>(canViewAnalysis ? 'analisis' : 'cartera');
   const [aTab, setATab] = useState<'hoy' | 'seg' | 'reglas' | 'politica'>('hoy');
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -77,6 +82,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
   const [analisis, setAnalisis] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [segmentHelpOpen, setSegmentHelpOpen] = useState<string | null>(null);
 
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -87,6 +93,9 @@ export default function Clientes({ currentUser }: ClientesProps) {
     telefono: '',
     email: '',
     direccion: '',
+    provincia: '',
+    canton: '',
+    distrito: '',
     ruta: '',
     condicion_pago: 'Contado',
     precio_especial: null,
@@ -107,14 +116,14 @@ export default function Clientes({ currentUser }: ClientesProps) {
     setIsLoading(true);
     try {
       const [resCliente, resCartera, resAnalisis, resRutas] = await Promise.all([
-        fetch('/api/clientes'),
-        fetch('/api/clientes/cartera'),
-        fetch('/api/clientes/analisis'),
+        fetch('/api/clientes', { headers: headersUsuario() }),
+        fetch('/api/clientes/cartera', { headers: headersUsuario() }),
+        canViewAnalysis ? fetch('/api/clientes/analisis', { headers: headersUsuario() }) : Promise.resolve(null),
         fetch('/api/rutas'),
       ]);
       if (resCliente.ok) setClientes(await resCliente.json());
       if (resCartera.ok) { const d = await resCartera.json(); setCartera(d.clientes || []); }
-      if (resAnalisis.ok) setAnalisis(await resAnalisis.json());
+      if (resAnalisis?.ok) setAnalisis(await resAnalisis.json());
       if (resRutas.ok) setRutas(await resRutas.json());
     } catch (err) {
       console.error(err);
@@ -124,12 +133,16 @@ export default function Clientes({ currentUser }: ClientesProps) {
   };
 
   useEffect(() => { fetchData(); }, []);
+  useEffect(() => { if (!canViewAnalysis) setView('cartera'); }, [canViewAnalysis]);
 
-  const canEdit = currentUser.role === 'Admin' || currentUser.role === 'Comercial';
+  const canEdit = currentUser.role === 'Admin' || (currentUser.roles || []).includes('Admin');
+
+  const headersUsuario = (json = false) => sessionHeaders(currentUser.id, json);
 
   const resetForm = () => {
     setNewCliente({
       nombre: '', tipo_documento: 'Fisica', documento_id: '', telefono: '', email: '', direccion: '',
+      provincia: '', canton: '', distrito: '',
       ruta: '', condicion_pago: 'Contado', precio_especial: null, limite_credito: 0, notas: ''
     });
   };
@@ -143,6 +156,9 @@ export default function Clientes({ currentUser }: ClientesProps) {
       telefono: cliente.telefono || '',
       email: cliente.email || '',
       direccion: cliente.direccion || '',
+      provincia: cliente.provincia || '',
+      canton: cliente.canton || '',
+      distrito: cliente.distrito || '',
       ruta: cliente.ruta || '',
       condicion_pago: cliente.condicion_pago || 'Contado',
       precio_especial: cliente.precio_especial,
@@ -157,7 +173,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
     if (!newCliente.nombre) return;
     try {
       const res = await fetch('/api/clientes', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: headersUsuario(true),
         body: JSON.stringify(newCliente)
       });
       if (!res.ok) throw new Error('Error al crear cliente');
@@ -175,7 +191,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
     if (!editingId) return;
     try {
       const res = await fetch(`/api/clientes/${editingId}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        method: 'PUT', headers: headersUsuario(true),
         body: JSON.stringify(newCliente)
       });
       if (!res.ok) throw new Error('Error al actualizar cliente');
@@ -190,12 +206,12 @@ export default function Clientes({ currentUser }: ClientesProps) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('¿Está seguro de eliminar este cliente?')) return;
+    if (!window.confirm('¿Archivar este cliente? Se conservará su historial y no aparecerá en nuevas ventas.')) return;
     try {
-      const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE', headers: headersUsuario() });
       if (!res.ok) throw new Error('Error al eliminar');
       await fetchData();
-      toast.success('Cliente eliminado');
+      toast.success('Cliente archivado');
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -304,7 +320,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
         </div>
 
         <div className="a-tabs">
-          <button className={cn(view === 'analisis' && 'on')} onClick={() => { setView('analisis'); setATab('hoy'); }}>Análisis</button>
+          {canViewAnalysis && <button className={cn(view === 'analisis' && 'on')} onClick={() => { setView('analisis'); setATab('hoy'); }}>Análisis</button>}
           <button className={cn(view === 'cartera' && 'on')} onClick={() => setView('cartera')}>Cartera</button>
         </div>
 
@@ -341,6 +357,14 @@ export default function Clientes({ currentUser }: ClientesProps) {
                         </select>
                       </div>
                       <div className="field full"><label>Dirección</label><input type="text" value={newCliente.direccion} onChange={e => setNewCliente({ ...newCliente, direccion: e.target.value })} placeholder="Dirección completa" /></div>
+                      <div className="field"><label>Provincia</label>
+                        <select value={newCliente.provincia || ''} onChange={e => setNewCliente({ ...newCliente, provincia: e.target.value })}>
+                          <option value="">—</option>
+                          {PROVINCIAS.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </div>
+                      <div className="field"><label>Cantón</label><input type="text" value={newCliente.canton || ''} onChange={e => setNewCliente({ ...newCliente, canton: e.target.value })} placeholder="Ej. Alajuela" /></div>
+                      <div className="field"><label>Distrito</label><input type="text" value={newCliente.distrito || ''} onChange={e => setNewCliente({ ...newCliente, distrito: e.target.value })} placeholder="Ej. San Rafael" /></div>
                       <div className="field"><label>Condición de Pago</label>
                         <select value={newCliente.condicion_pago} onChange={e => setNewCliente({ ...newCliente, condicion_pago: e.target.value as any })}>
                           <option value="Contado">Contado</option><option value="Credito">Crédito</option>
@@ -398,8 +422,32 @@ export default function Clientes({ currentUser }: ClientesProps) {
                             </td>
                             <td>{c.ruta ? <span className="chip gray">{c.ruta}</span> : <span className="mini">Sin ruta</span>}</td>
                             <td>
-                              <span className={cn('seg', c.segmento === 'A' ? 'seg-A' : c.segmento === 'B' ? 'seg-B' : 'seg-C')}>{c.segmento}</span>
-                              {' '}<span className={cn('chip', COMBO[c.comportamiento]?.chip || 'gray')}>{c.comportamiento}</span>
+                              <div className="client-segment-stack">
+                                <div className="client-segment-line">
+                                  <span className={cn('seg', c.segmento === 'A' ? 'seg-A' : c.segmento === 'B' ? 'seg-B' : 'seg-C')} title={`Segmento ${c.segmento}. ${fmt(c.monto90d)} en ${c.pedidos90d} pedidos durante los últimos 90 días.`}>{c.segmento}</span>
+                                  <button
+                                    type="button"
+                                    className="segment-help-trigger"
+                                    aria-label="Explicar segmentos de clientes"
+                                    aria-expanded={segmentHelpOpen === c.id}
+                                    aria-controls={`segment-help-${c.id}`}
+                                    aria-describedby={segmentHelpOpen === c.id ? `segment-help-${c.id}` : undefined}
+                                    title={`Por qué ${c.nombre} está en segmento ${c.segmento}`}
+                                    onClick={(e) => { e.stopPropagation(); setSegmentHelpOpen(open => open === c.id ? null : c.id); }}
+                                  ><Info aria-hidden="true" /></button>
+                                </div>
+                                {segmentHelpOpen === c.id && (
+                                  <div id={`segment-help-${c.id}`} className="segment-help-popover" role="tooltip" onClick={e => e.stopPropagation()}>
+                                    <strong>Por qué está en {c.segmento}</strong>
+                                    <span>{fmt(c.monto90d)} en {c.pedidos90d} pedidos durante los últimos 90 días.</span>
+                                    {c.segmento === 'A' && <span>Alcanza el nivel A: ₡400.000 o más.</span>}
+                                    {c.segmento === 'B' && <span>Está entre ₡120.000 y ₡399.999 (nivel B).</span>}
+                                    {c.segmento === 'C' && <span>Está por debajo de ₡120.000; le faltan {fmt(Math.max(0, 120000 - c.monto90d))} para llegar a B.</span>}
+                                    <small>Ticket promedio: {fmt(c.ticketPromedio)}. Pago: “{c.comportamiento}”, con máximo de {c.diasVencido} días de atraso y {fmt(c.vencido)} de saldo vencido.</small>
+                                  </div>
+                                )}
+                                <span className={cn('chip', COMBO[c.comportamiento]?.chip || 'gray')} title={`${c.comportamiento}: máximo ${c.diasVencido} días de atraso registrados${c.vencido > 0 ? `; ${fmt(c.vencido)} vencidos` : '; sin saldo vencido'}.`}>{c.comportamiento}</span>
+                              </div>
                             </td>
                             <td>
                               <div className="strong">{c.pedidos90d}</div>
@@ -428,7 +476,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
                               <td style={{ textAlign: 'center' }}>
                                 <span className="row-actions">
                                   <button className="btn sm ico" title="Editar" onClick={(e) => { e.stopPropagation(); startEdit(clientes.find(x => x.id === c.id) || toCliente(c)); }}><span style={{ fontSize: 12 }}>✎</span></button>
-                                  <button className="btn sm ico" title="Eliminar" onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }}><span style={{ color: 'var(--red)', fontSize: 12 }}>🗑</span></button>
+                                  <button className="btn sm ico" title="Archivar" onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }}><span style={{ color: 'var(--red)', fontSize: 12 }}>🗑</span></button>
                                 </span>
                               </td>
                             )}
@@ -498,10 +546,10 @@ export default function Clientes({ currentUser }: ClientesProps) {
                           return (
                             <>
                               <div className="stacked">
-                                <div style={{ flex: Math.max(4, pct(a.alDia)), background: 'var(--brand)' }}>{pct(a.alDia)}%</div>
-                                <div style={{ flex: Math.max(2, pct(a.d1_30)), background: '#f59e0b' }}>{pct(a.d1_30)}%</div>
-                                <div style={{ flex: Math.max(2, pct(a.d31_60)), background: 'var(--orange)' }}>{pct(a.d31_60)}%</div>
-                                <div style={{ flex: Math.max(2, pct(a.d60)), background: 'var(--red)' }}>{pct(a.d60)}%</div>
+                                <div aria-label={`Al día: ${pct(a.alDia)}%`} style={{ flex: Math.max(4, pct(a.alDia)), background: 'var(--brand)' }} />
+                                <div aria-label={`1 a 30 días: ${pct(a.d1_30)}%`} style={{ flex: Math.max(2, pct(a.d1_30)), background: 'var(--status-warning-soft)' }} />
+                                <div aria-label={`31 a 60 días: ${pct(a.d31_60)}%`} style={{ flex: Math.max(2, pct(a.d31_60)), background: 'var(--status-blocked-soft)' }} />
+                                <div aria-label={`Más de 60 días: ${pct(a.d60)}%`} style={{ flex: Math.max(2, pct(a.d60)), background: 'var(--status-danger-soft)' }} />
                               </div>
                               <div className="legend">
                                 <span><span className="dot green"></span>Al día · {fmt(a.alDia)}</span>
@@ -522,7 +570,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
                         {mejoresVenta.map(c => (
                           <div className="tbar" key={c.id}>
                             <div className="lb"><span>{c.nombre} {c.riesgo !== 'Bajo' && <span className={c.riesgo === 'Alto' ? 'chip red' : 'chip amber'}>{c.riesgo}</span>}</span><b className="mono">{fmt(c.venta12m)}</b></div>
-                            <div className="track"><div className="fill" style={{ width: `${Math.round((c.venta12m / maxVenta5(mejoresVenta)) * 100)}%`, background: c.riesgo === 'Alto' ? 'var(--red)' : c.riesgo === 'Medio' ? '#f59e0b' : 'var(--brand)' }}></div></div>
+                            <div className="track"><div className="fill" style={{ width: `${Math.round((c.venta12m / maxVenta5(mejoresVenta)) * 100)}%`, background: c.riesgo === 'Alto' ? 'var(--red)' : c.riesgo === 'Medio' ? 'var(--status-warning)' : 'var(--brand)' }}></div></div>
                           </div>
                         ))}
                         <div className="mini" style={{ marginTop: 8 }}>Verde: paga bien · ámbar: saldo vencido · rojo: morosidad (el valor crece, el efectivo no llega).</div>
@@ -659,9 +707,9 @@ export default function Clientes({ currentUser }: ClientesProps) {
                   <div className="panel" style={{ padding: 16 }}>
                     <div className="sect"><h4>Matriz valor × disciplina (foco: cuentas A)</h4></div>
                     <div style={{ display: 'grid', width: '100%', gridTemplateColumns: '1fr 1fr 1fr', border: '1px solid var(--line)', borderRadius: 12, overflow: 'hidden' }}>
-                      <div style={{ padding: 8, background: '#f8fafc', fontSize: 10, fontWeight: 800, color: 'var(--ink3)', textAlign: 'center', borderBottom: '1px solid var(--line)' }}>A · Alto</div>
-                      <div style={{ padding: 8, background: '#f8fafc', fontSize: 10, fontWeight: 800, color: 'var(--ink3)', textAlign: 'center', borderBottom: '1px solid var(--line)', borderLeft: '1px solid var(--line)' }}>B · Medio</div>
-                      <div style={{ padding: 8, background: '#f8fafc', fontSize: 10, fontWeight: 800, color: 'var(--ink3)', textAlign: 'center', borderBottom: '1px solid var(--line)', borderLeft: '1px solid var(--line)' }}>C · Bajo</div>
+                      <div style={{ padding: 8, background: 'var(--bg-muted)', fontSize: 10, fontWeight: 800, color: 'var(--ink3)', textAlign: 'center', borderBottom: '1px solid var(--line)' }}>A · Alto</div>
+                      <div style={{ padding: 8, background: 'var(--bg-muted)', fontSize: 10, fontWeight: 800, color: 'var(--ink3)', textAlign: 'center', borderBottom: '1px solid var(--line)', borderLeft: '1px solid var(--line)' }}>B · Medio</div>
+                      <div style={{ padding: 8, background: 'var(--bg-muted)', fontSize: 10, fontWeight: 800, color: 'var(--ink3)', textAlign: 'center', borderBottom: '1px solid var(--line)', borderLeft: '1px solid var(--line)' }}>C · Bajo</div>
                       {(['Puntual', 'Atraso leve', 'Atraso frecuente'] as const).map((lvl, i) => (
                         <React.Fragment key={lvl}>
                           {(['A', 'B', 'C'] as const).map((seg) => {
@@ -670,7 +718,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
                               <div key={seg} style={{
                                 padding: 14, borderBottom: i < 2 ? '1px solid var(--line)' : undefined,
                                 borderLeft: seg !== 'A' ? '1px solid var(--line)' : undefined,
-                                background: lvl === 'Puntual' ? '#ecfdf5' : lvl === 'Atraso leve' ? '#fef3c7' : '#fee2e2'
+                                background: lvl === 'Puntual' ? 'var(--status-success-soft)' : lvl === 'Atraso leve' ? 'var(--status-warning-soft)' : 'var(--status-danger-soft)'
                               }}>
                                 <div className="strong" style={lvl === 'Atraso frecuente' ? { color: 'var(--red)' } : undefined}>{n}</div>
                                 <div className="mini">{lvl === 'Puntual' ? 'sanos' : lvl === 'Atraso leve' ? 'seguimiento' : 'alto riesgo'}</div>
@@ -712,8 +760,8 @@ export default function Clientes({ currentUser }: ClientesProps) {
                         return (
                           <>
                             <div className="stacked" style={{ margin: '6px 0 10px' }}>
-                              <div style={{ flex: Math.max(10, credito), background: 'var(--brand)' }}>{Math.round((credito / Math.max(1, cartera.length)) * 100)}%</div>
-                              <div style={{ flex: Math.max(6, contado), background: 'var(--ink3)' }}>{Math.round((contado / Math.max(1, cartera.length)) * 100)}%</div>
+                              <div aria-label={`Crédito: ${Math.round((credito / Math.max(1, cartera.length)) * 100)}%`} style={{ flex: Math.max(10, credito), background: 'var(--brand)' }} />
+                              <div aria-label={`Contado: ${Math.round((contado / Math.max(1, cartera.length)) * 100)}%`} style={{ flex: Math.max(6, contado), background: 'var(--status-neutral-soft)' }} />
                             </div>
                             <div className="legend">
                               <span><span className="dot green"></span>Crédito · {credito} cuentas</span>
@@ -797,9 +845,10 @@ export default function Clientes({ currentUser }: ClientesProps) {
 
       <Cliente360
         cliente={drawerCliente}
+        currentUser={currentUser}
         open={!!drawerCliente}
         onClose={() => setDrawerCliente(null)}
-        onEdit={(c) => { if (c) { setDrawerCliente(null); startEdit(c); } }}
+        onEdit={canEdit ? (c) => { if (c) { setDrawerCliente(null); startEdit(c); } } : undefined}
       />
     </div>
   );

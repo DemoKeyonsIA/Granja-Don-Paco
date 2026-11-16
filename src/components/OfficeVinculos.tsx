@@ -148,6 +148,7 @@ export default function OfficeVinculos({ currentUser }: Props) {
             <span className="panel-title"><Play className="w-4 h-4" />Resultado de la prueba (dry-run, no escribe nada)</span>
             <button className="btn sm" onClick={() => setPrueba(null)}><X className="w-3.5 h-3.5" /></button>
           </div>
+          <div className="admin-table-scroll">
           <table className="gcrm-table">
             <thead><tr><th>Regla</th><th>Carpeta</th><th className="num">Mensajes</th><th>Ejemplos</th></tr></thead>
             <tbody>
@@ -167,6 +168,7 @@ export default function OfficeVinculos({ currentUser }: Props) {
               </tr>
             </tbody>
           </table>
+          </div>
           <div className="of-meta">
             <span>{prueba.totalMensajes} mensajes evaluados contra {prueba.reglas.length} reglas</span>
             <span style={{ marginLeft: 'auto' }}><Check className="w-3 h-3" />dry-run: nada se modificó</span>

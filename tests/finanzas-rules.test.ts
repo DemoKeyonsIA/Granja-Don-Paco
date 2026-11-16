@@ -112,6 +112,16 @@ describe('ingresosCobradosDe — efectivo', () => {
     )).toBe(0);
   });
 
+  it('cuenta tiquetes de ruta cobrados una vez y excluye crédito, anulados y consolidados', () => {
+    const tiquetes = [
+      { fechaHora: '2026-09-10T10:00:00.000Z', total: 12000, estado: 'Emitida', cobro: 'Transferencia' },
+      { fechaHora: '2026-09-10T11:00:00.000Z', total: 9000, estado: 'Emitida', cobro: 'Credito' },
+      { fechaHora: '2026-09-10T12:00:00.000Z', total: 5000, estado: 'Anulada', cobro: 'Efectivo' },
+      { fechaHora: '2026-09-10T13:00:00.000Z', total: 7000, estado: 'Emitida', cobro: 'Efectivo', facturaId: 'f-1' },
+    ];
+    expect(ingresosCobradosDe([], [], TODAS, tiquetes)).toBe(12000);
+  });
+
   it('cuenta los pagos del periodo sobre facturas de crédito', () => {
     const facturas = [{ id: 'f-1', fecha: '2026-09-02', total: 90000, estado: 'Pendiente' }];
     const pagos = [{ facturaId: 'f-1', fecha: '2026-09-20', monto: 40000 }];

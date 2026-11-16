@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boceto — Consolidación de vistas duplicadas</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════
+   CAPA DEL DOCUMENTO (marco del boceto)
+   ══════════════════════════════════════════════════════════════════ */
+:root{
+  --pg-bg:#e9edf2; --pg-card:#ffffff; --pg-line:#d7dce2;
+  --pg-ink:#0f172a; --pg-ink2:#5b6675; --pg-ink3:#94a3b8;
+}
+html[data-theme="dark"]{
+  --pg-bg:#0a0d12; --pg-card:#111722; --pg-line:#263149;
+  --pg-ink:#e8eef7; --pg-ink2:#9aa8bc; --pg-ink3:#64748b;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--pg-bg);color:var(--pg-ink);
+     font-family:'Segoe UI',system-ui,-apple-system,sans-serif;line-height:1.55;}
+.wrap{max-width:1240px;margin:0 auto;padding:0 22px 80px;}
+
+.bar{position:sticky;top:0;z-index:50;background:var(--pg-card);
+     border-bottom:1px solid var(--pg-line);}
+.bar .inner{max-width:1240px;margin:0 auto;padding:12px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.bar h1{font-size:16px;font-weight:800;margin:0;letter-spacing:-.01em;}
+.bar .lbl{font-size:12px;color:var(--pg-ink2);}
+.jumps{display:flex;gap:5px;flex-wrap:wrap;margin-left:auto;}
+.jumps a{font-size:11px;font-weight:700;text-decoration:none;color:var(--pg-ink2);
+         border:1px solid var(--pg-line);border-radius:999px;padding:3px 9px;}
+.jumps a:hover{border-color:var(--pg-ink3);color:var(--pg-ink);}
+.tgl{display:inline-flex;border:1px solid var(--pg-line);border-radius:999px;overflow:hidden;}
+.tgl button{border:0;background:transparent;color:var(--pg-ink2);font-weight:700;font-size:11.5px;
+            padding:6px 14px;cursor:pointer;font-family:inherit;}
+.tgl button.on{background:var(--pg-ink);color:var(--pg-card);}
+
+.lede{color:var(--pg-ink2);font-size:13.5px;max-width:900px;margin:26px 0 0;}
+.lede b{color:var(--pg-ink);}
+code{background:var(--pg-line);border-radius:4px;padding:1px 5px;font-size:11.5px;font-family:Consolas,monospace;}
+
+/* tabla resumen */
+.sum{width:100%;border-collapse:collapse;margin:18px 0 0;font-size:12.5px;background:var(--pg-card);
+     border:1px solid var(--pg-line);border-radius:12px;overflow:hidden;}
+.sum th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--pg-ink3);
+        padding:9px 12px;border-bottom:1px solid var(--pg-line);background:var(--pg-bg);}
+.sum td{padding:9px 12px;border-bottom:1px solid var(--pg-line);color:var(--pg-ink2);vertical-align:top;}
+.sum tr:last-child td{border-bottom:0;}
+.sum td:first-child{font-weight:800;color:var(--pg-ink);white-space:nowrap;}
+.sum td.g{color:var(--pg-ink);font-weight:600;}
+
+/* grupo */
+.grp{margin-top:40px;background:var(--pg-card);border:1px solid var(--pg-line);border-radius:16px;overflow:hidden;}
+.gh{padding:16px 20px 14px;border-bottom:1px solid var(--pg-line);display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;}
+.gh h2{font-size:17px;margin:0;letter-spacing:-.02em;flex:1;min-width:240px;}
+.gh h2 .g{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+          color:var(--pg-card);background:var(--pg-ink);border-radius:6px;padding:3px 8px;margin-right:8px;}
+.gdesc{font-size:12.5px;color:var(--pg-ink2);margin:8px 0 0;max-width:900px;padding:0 20px 16px;}
+.gdesc b{color:var(--pg-ink);}
+
+.vd{font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+    border-radius:999px;padding:4px 11px;white-space:nowrap;}
+.v-fusionar{background:#1e40af;color:#fff;}
+.v-simplificar{background:#b45309;color:#fff;}
+.v-compartir{background:#15803d;color:#fff;}
+.v-notocar{background:#64748b;color:#fff;}
+html[data-theme="dark"] .vd{filter:brightness(1.35);}
+
+/* panel de contenido */
+.panel{padding:0 20px 20px;}
+.ptitle{font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--pg-ink3);
+        margin:20px 0 10px;display:flex;align-items:center;gap:8px;}
+.ptitle::after{content:"";flex:1;height:1px;background:var(--pg-line);}
+
+/* hoy: cajas de duplicado */
+.hoy{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));gap:10px;}
+.entry{border:1px solid var(--pg-line);border-radius:11px;padding:11px 13px;background:var(--pg-bg);}
+.entry.dead{opacity:.62;border-style:dashed;}
+.entry .et{font-size:13px;font-weight:800;display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:5px;}
+.entry .ep{font-size:11px;font-family:Consolas,monospace;color:var(--pg-ink2);
+           background:var(--pg-card);border:1px solid var(--pg-line);border-radius:5px;
+           padding:2px 6px;display:inline-block;margin-bottom:6px;word-break:break-all;}
+.entry .ecap{font-size:11.5px;color:var(--pg-ink2);line-height:1.5;}
+.rpill{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+       border-radius:999px;padding:2px 7px;background:var(--pg-line);color:var(--pg-ink2);}
+.rpill.adm{background:#fee2e2;color:#991b1b;}
+.rpill.com{background:#dbeafe;color:#1e40af;}
+.rpill.soc{background:#fef3c7;color:#92400e;}
+html[data-theme="dark"] .rpill{filter:brightness(1.3);}
+.deadlbl{font-size:10px;font-weight:800;color:#b91c1c;text-transform:uppercase;letter-spacing:.05em;}
+
+.merge{display:flex;align-items:center;gap:10px;margin:14px 0 6px;font-size:12px;color:var(--pg-ink2);flex-wrap:wrap;}
+.merge .from{flex:1;min-width:180px;text-align:center;}
+.merge .to{font-weight:800;color:var(--pg-ink);}
+
+/* ══════════════════════════════════════════════════════════════════
+   MOCK DE LA APP (tema V3 «Data-dense operativa»)
+   ══════════════════════════════════════════════════════════════════ */
+.app{
+  --a-bg:#EDF0F3; --a-card:#FFFFFF; --a-muted:#F4F6F8; --a-line:#D5DCE4; --a-line2:#B9C3CE;
+  --a-ink:#0F172A; --a-ink2:#556074; --a-ink3:#8590A0;
+  --a-pri:#1E40AF; --a-pri-soft:#E4E9FE;
+  --a-sec:#B45309; --a-sec-soft:#FDF0DC;
+  --a-ok:#15803D; --a-ok-soft:#DCFCE7;
+  --a-warn:#B45309; --a-warn-soft:#FEF3C7;
+  --a-bad:#B91C1C; --a-bad-soft:#FEE2E2;
+  --a-info:#1D4ED8; --a-info-soft:#DBEAFE;
+}
+html[data-theme="dark"] .app{
+  --a-bg:#0B0F16; --a-card:#121826; --a-muted:#172033; --a-line:#263149; --a-line2:#384766;
+  --a-ink:#E6EDF7; --a-ink2:#94A2BA; --a-ink3:#64748B;
+  --a-pri:#60A5FA; --a-pri-soft:rgba(96,165,250,.16);
+  --a-sec:#F59E0B; --a-sec-soft:rgba(245,158,11,.15);
+  --a-ok:#22C55E; --a-ok-soft:rgba(34,197,94,.16);
+  --a-warn:#F59E0B; --a-warn-soft:rgba(245,158,11,.16);
+  --a-bad:#F87171; --a-bad-soft:rgba(248,113,113,.16);
+  --a-info:#60A5FA; --a-info-soft:rgba(96,165,250,.16);
+}
+.app{background:var(--a-bg);border:1px solid var(--a-line);border-radius:12px;padding:14px;color:var(--a-ink);}
+.app + .app{margin-top:14px;}
+.mcrumb{font-size:11px;color:var(--a-ink3);margin-bottom:8px;}
+.mcrumb b{color:var(--a-ink2);font-weight:700;}
+.mtabs{display:flex;gap:2px;border-bottom:1px solid var(--a-line);margin-bottom:12px;flex-wrap:wrap;}
+.mtab{font-size:12px;font-weight:600;color:var(--a-ink2);padding:7px 12px;border-bottom:2px solid transparent;
+      cursor:default;white-space:nowrap;}
+.mtab.on{color:var(--a-pri);border-bottom-color:var(--a-pri);font-weight:700;}
+.mhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:11px;}
+.mhead h3{font-size:15px;margin:0;letter-spacing:-.01em;}
+.mhead .sp{flex:1;}
+.msearch{border:1px solid var(--a-line);background:var(--a-card);border-radius:8px;
+         padding:5px 10px;font-size:11.5px;color:var(--a-ink3);min-width:150px;}
+
+.mcard{background:var(--a-card);border:1px solid var(--a-line);border-radius:10px;padding:12px;}
+.mgrid{display:grid;gap:10px;}
+.mgrid.c2{grid-template-columns:repeat(auto-fit,minmax(250px,1fr));}
+.mgrid.c3{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));}
+.mgrid.c4{grid-template-columns:repeat(auto-fit,minmax(155px,1fr));}
+.mgrid.c5{grid-template-columns:repeat(auto-fit,minmax(128px,1fr));}
+
+.mtbl{width:100%;border-collapse:collapse;font-size:11.5px;}
+.mtbl th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--a-ink3);
+         padding:6px 8px;border-bottom:1px solid var(--a-line);font-weight:800;}
+.mtbl td{padding:7px 8px;border-bottom:1px solid var(--a-line);color:var(--a-ink2);}
+.mtbl tr:last-child td{border-bottom:0;}
+.mtbl td.n{color:var(--a-ink);font-weight:600;}
+.mtbl td.r{text-align:right;font-variant-numeric:tabular-nums;}
+.mtbl .acts{display:flex;gap:4px;justify-content:flex-end;}
+
+.mbtn{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;font-family:inherit;
+      border-radius:7px;padding:5px 11px;border:1px solid var(--a-line);background:var(--a-card);
+      color:var(--a-ink2);cursor:default;}
+.mbtn.p{background:var(--a-pri);border-color:var(--a-pri);color:#fff;}
+.mbtn.d{background:var(--a-bad);border-color:var(--a-bad);color:#fff;}
+.mbtn.g{background:transparent;color:var(--a-pri);border-color:transparent;padding:3px 6px;font-size:11px;}
+.mbtn.s{width:26px;height:24px;padding:0;justify-content:center;font-size:11px;}
+
+.mkpi{background:var(--a-card);border:1px solid var(--a-line);border-radius:9px;padding:10px 11px;}
+.mkpi .k{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--a-ink3);font-weight:800;}
+.mkpi .v{font-size:17px;font-weight:800;letter-spacing:-.02em;margin-top:3px;font-variant-numeric:tabular-nums;}
+.mkpi .u{font-size:10.5px;color:var(--a-ink3);}
+.mkpi.pri{border-left:3px solid var(--a-pri);}
+.mkpi.ok{border-left:3px solid var(--a-ok);}
+.mkpi.bad{border-left:3px solid var(--a-bad);}
+.mkpi.warn{border-left:3px solid var(--a-warn);}
+.mkpi.info{border-left:3px solid var(--a-info);}
+.mkpi .sub{font-size:10.5px;color:var(--a-ink3);margin-top:2px;}
+
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;
+      border-radius:999px;padding:2px 8px;white-space:nowrap;}
+.c-ok{background:var(--a-ok-soft);color:var(--a-ok);}
+.c-warn{background:var(--a-warn-soft);color:var(--a-warn);}
+.c-bad{background:var(--a-bad-soft);color:var(--a-bad);}
+.c-info{background:var(--a-info-soft);color:var(--a-info);}
+.c-pri{background:var(--a-pri-soft);color:var(--a-pri);}
+.c-mut{background:var(--a-muted);color:var(--a-ink2);}
+
+.bar-prog{height:5px;border-radius:99px;background:var(--a-muted);overflow:hidden;margin-top:5px;}
+.bar-prog i{display:block;height:100%;border-radius:99px;background:var(--a-pri);}
+
+.mnote{font-size:11px;color:var(--a-ink3);line-height:1.55;margin-top:8px;}
+.mnote b{color:var(--a-ink2);}
+.empty{text-align:center;padding:22px 12px;color:var(--a-ink3);font-size:12px;}
+
+/* modal mock */
+.mmodal{background:var(--a-card);border:1px solid var(--a-line);border-radius:12px;overflow:hidden;max-width:560px;}
+.mmodal .mh{padding:12px 15px;border-bottom:1px solid var(--a-line);display:flex;align-items:center;gap:9px;}
+.mmodal .mh h4{margin:0;font-size:14px;}
+.mmodal .mb{padding:14px 15px;}
+.mmodal .mf{padding:11px 15px;border-top:1px solid var(--a-line);display:flex;gap:8px;align-items:center;justify-content:flex-end;}
+.mrow{margin-bottom:11px;}
+.mrow:last-child{margin-bottom:0;}
+.mlab{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--a-ink3);margin-bottom:4px;}
+.minp{border:1px solid var(--a-line);background:var(--a-bg);border-radius:7px;padding:6px 9px;font-size:12px;color:var(--a-ink);}
+.minp.w{width:100%;}
+.mhint{font-size:10.5px;color:var(--a-ink3);margin-top:3px;}
+
+.pairs{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media(max-width:720px){.pairs{grid-template-columns:1fr;}}
+.plabel{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--pg-ink3);margin-bottom:6px;}
+.plabel.now{color:#b91c1c;}
+.plabel.next{color:#15803d;}
+html[data-theme="dark"] .plabel.now,html[data-theme="dark"] .plabel.next{filter:brightness(1.35);}
+
+.notes{margin-top:16px;border-left:3px solid var(--a-pri);background:var(--pg-bg);
+       border-radius:0 10px 10px 0;padding:11px 14px;font-size:12px;color:var(--pg-ink2);line-height:1.6;}
+.notes.risk{border-left-color:#b91c1c;}
+.notes b{color:var(--pg-ink);}
+.notes ul{margin:6px 0 0;padding-left:18px;}
+.notes li{margin-bottom:4px;}
+.notes li:last-child{margin-bottom:0;}
+
+.legend{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0 0;}
+.legend span{font-size:10.5px;font-weight:700;border:1px solid var(--pg-line);border-radius:999px;
+             padding:3px 9px;color:var(--pg-ink2);background:var(--pg-card);}
+</style>
+</head>
+<body>
+
+<div class="bar"><div class="inner">
+  <h1>Consolidaci&oacute;n de vistas duplicadas</h1>
+  <span class="lbl">8 grupos &middot; boceto, a&uacute;n sin tocar c&oacute;digo</span>
+  <div class="jumps">
+    <a href="#g1">G1 Camiones</a><a href="#g2">G2 Traza</a><a href="#g3">G3 Cierre</a><a href="#g4">G4 Tablero</a>
+    <a href="#g5">G5 Cartera</a><a href="#g6">G6 Desperdicios</a><a href="#g7">G7 Resumen</a><a href="#g8">G8 Ventas</a>
+  </div>
+  <div class="tgl"><button id="bL" class="on">Claro</button><button id="bD">Oscuro</button></div>
+</div></div>
+
+<div class="wrap">
+
+<p class="lede">
+  Boceto de <b>consolidaci&oacute;n de vistas duplicadas</b> de la app. Cada grupo muestra <b>c&oacute;mo est&aacute; hoy</b>
+  (las entradas que llegan al mismo dato) y <b>c&oacute;mo quedar&iacute;a</b> tras unificar. Ninguna de estas pantallas
+  es c&oacute;digo real: est&aacute;n dibujadas sobre los <b>mismos tokens V3</b> que ya aplicamos en
+  <code>src/index.css</code>, para que lo que veas sea lo que se va a construir.
+  Los mocks usan la paleta <b>data-dense operativa</b> (azul pizarra + &aacute;mbos) en claro y oscuro.
+</p>
+
+<table class="sum">
+  <thead><tr><th>Grupo</th><th>Hoy</th><th>Decisi&oacute;n</th><th>Qu&eacute; se pierde si no se hace</th></tr></thead>
+  <tbody>
+    <tr><td>G1</td><td class="g">Camiones en 3 sitios + rutas en 2</td><td><span class="vd v-fusionar">Fusionar</span></td><td>CRUD completo solo &ldquo;Admin&rdquo;; Comercial no puede editar flota</td></tr>
+    <tr><td>G2</td><td class="g">Traza de gu&iacute;a en 2 sitios</td><td><span class="vd v-simplificar">Simplificar</span></td><td>La merma y el stock se auditan fuera del flujo de despacho</td></tr>
+    <tr><td>G3</td><td class="g">Cierre de ruta en 4 sitios / 3 endpoints</td><td><span class="vd v-fusionar">Fusionar</span></td><td>Dos endpoints que no cierran la gu&iacute;a y otro que no existe en UI</td></tr>
+    <tr><td>G4</td><td class="g">Tablero vivo en 2 sitios</td><td><span class="vd v-compartir">Compartir</span></td><td>Bodega no ve alertas de custodia ni refresca</td></tr>
+    <tr><td>G5</td><td class="g">Cartera en 3 vistas</td><td><span class="vd v-fusionar">Fusionar</span></td><td>Registrar pago solo existe en Admin; Comercial no cobra</td></tr>
+    <tr><td>G6</td><td class="g">Desperdicios en 2 vistas</td><td><span class="vd v-compartir">Compartir</span></td><td>Socio/Comercial ven menos que Admin</td></tr>
+    <tr><td>G7</td><td class="g">Resumen que repite 5 KPIs</td><td><span class="vd v-compartir">Compartir</span></td><td>Mismo bloque escrito dos veces, con distinto manejo de error</td></tr>
+    <tr><td>G8</td><td class="g">Ventas por 2 canales</td><td><span class="vd v-notocar">No fusionar</span></td><td>Son flujos distintos (FAC vs TQ); fusionarlos rompe la caja</td></tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════ G1 ══════════════════════════════ -->
+<section class="grp" id="g1">
+  <div class="gh">
+    <h2><span class="g">G1</span>Flota: camiones y rutas</h2>
+    <span class="vd v-fusionar">Fusionar</span>
+  </div>
+  <p class="gdesc">
+    El CRUD de camiones est&aacute; <b>partido en dos vistas con endpoints distintos</b>
+    (<code>/api/camiones</code> vs <code>/api/logistica/camiones</code>), y el de rutas <b>est&aacute; duplicado</b>
+    entre <code>FlotaRutas</code> y un tab de <code>Logistica</code> que adem&aacute;s <b>nunca se puede abrir</b>.
+    Propuesta: <b>una sola vista &ldquo;Flota y Rutas&rdquo;</b> (la alcanzable por Admin <i>y</i> Comercial) con el CRUD completo.
+  </p>
+
+  <div class="panel">
+    <div class="ptitle">Hoy &mdash; 3 entradas + 1 tab muerto</div>
+    <div class="hoy">
+      <div class="entry">
+        <div class="et">AdminCamiones.tsx <span class="rpill adm">Admin</span></div>
+        <div class="ep">/api/camiones (GET/POST/PUT/DELETE)</div>
+        <div class="ecap"><b>&Uacute;nico</b> con editar, eliminar, estado y asignaci&oacute;n de camionero. Sin columnas de ruta ni gu&iacute;a activa.</div>
+      </div>
+      <div class="entry">
+        <div class="et">FlotaRutas.tsx <span class="rpill adm">Admin</span> <span class="rpill com">Comercial</span></div>
+        <div class="ep">/api/logistica/camiones + /api/rutas</div>
+        <div class="ecap">Alta + lectura. A&ntilde;ade <b>Ruta</b> y <b>Gu&iacute;a activa</b>. Es el &uacute;nico con CRUD de <b>rutas</b> (d&iacute;as, clientes geo, vendedores).</div>
+      </div>
+      <div class="entry dead">
+        <div class="et">Logistica.tsx &rarr; tab &ldquo;rutas&rdquo; <span class="deadlbl">c&oacute;digo muerto</span></div>
+        <div class="ep">/api/rutas</div>
+        <div class="ecap">No alcanzable: <code>Logistica</code> solo se monta con <code>soloVista</code>, que <b>oculta la fila de tabs</b>.</div>
+      </div>
+      <div class="entry">
+        <div class="et">Logistica.tsx (selector) <span class="rpill com">Comercial</span></div>
+        <div class="ep">/api/logistica/camiones</div>
+        <div class="ecap">Solo consume la lista para poblar un <code>select</code>. <b>No hay tabla ni CRUD de camiones.</b></div>
+      </div>
+    </div>
+
+    <div class="ptitle">Propuesta &mdash; una sola vista &ldquo;Flota y Rutas&rdquo;</div>
+
+    <div class="app">
+      <div class="mcrumb">Operaciones <b>&rsaquo;</b> Despacho <b>&rsaquo;</b> Flota y Rutas</div>
+      <div class="mtabs">
+        <div class="mtab">Gu&iacute;as</div>
+        <div class="mtab on">Flota y Rutas</div>
+        <div class="mtab">Conciliaci&oacute;n</div>
+      </div>
+
+      <div class="mhead">
+        <h3>Camiones</h3>
+        <span class="chip c-mut">3 registrados</span>
+        <span class="sp"></span>
+        <span class="msearch">Buscar por nombre o placa&hellip;</span>
+        <button class="mbtn p">+ Nuevo cami&oacute;n</button>
+      </div>
+
+      <div class="mcard">
+        <table class="mtbl">
+          <thead><tr>
+            <th>Nombre</th><th>Placa</th><th>Camionero</th><th>Ruta por defecto</th>
+            <th>Gu&iacute;a activa</th><th class="r">Capacidad</th><th>Estado</th><th></th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="n">Camion Ruta 1</td><td>1234-AB</td>
+              <td><span class="chip c-info">Carlos M.</span></td><td>San Jos&eacute; Centro</td>
+              <td><span class="chip c-pri">GD-20261015-179</span></td>
+              <td class="r">500 ct</td><td><span class="chip c-ok">Activo</span></td>
+              <td class="acts"><button class="mbtn s g">Editar</button><button class="mbtn s g">Eliminar</button></td>
+            </tr>
+            <tr>
+              <td class="n">Camion Ruta 2</td><td>5678-CD</td>
+              <td><span class="chip c-info">Jorge V.</span></td><td>Alajuela Norte</td>
+              <td><span class="chip c-mut">Sin gu&iacute;a</span></td>
+              <td class="r">400 ct</td><td><span class="chip c-ok">Activo</span></td>
+              <td class="acts"><button class="mbtn s g">Editar</button><button class="mbtn s g">Eliminar</button></td>
+            </tr>
+            <tr>
+              <td class="n">Camion Reparto</td><td>9012-EF</td>
+              <td><span class="chip c-mut">Sin asignar</span></td><td><span class="chip c-mut">Sin ruta</span></td>
+              <td><span class="chip c-mut">Sin gu&iacute;a</span></td>
+              <td class="r">250 ct</td><td><span class="chip c-mut">Inactivo</span></td>
+              <td class="acts"><button class="mbtn s g">Editar</button><button class="mbtn s g">Eliminar</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mnote">
+        <b>Lo que se absorbe de AdminCamiones:</b> editar (PUT), eliminar (DELETE), campo <b>estado</b>,
+        <b>asignaci&oacute;n de camionero</b> y b&uacute;squeda por nombre/placa.
+        <b>Lo que aporta FlotaRutas:</b> columnas <b>Ruta</b> y <b>Gu&iacute;a activa</b>, y que es alcanzable por <b>Comercial</b>.
+      </div>
+
+      <div class="mhead" style="margin-top:16px;">
+        <h3>Rutas</h3>
+        <span class="chip c-mut">2 rutas</span>
+        <span class="sp"></span>
+        <button class="mbtn p">+ Nueva ruta</button>
+      </div>
+
+      <div class="mgrid c2">
+        <div class="mcard">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <b style="font-size:13px;">San Jos&eacute; Centro</b>
+            <span class="chip c-pri">L M X J V</span>
+            <span class="chip c-mut">42 km</span>
+            <span class="chip c-ok">Activa</span>
+            <span style="flex:1"></span>
+            <button class="mbtn g">Editar</button>
+          </div>
+          <div class="mnote" style="margin-top:8px;">
+            Cami&oacute;n: <b>Camion Ruta 1</b> &middot; Vendedores: <b>2</b> &middot; Clientes: <b>14</b> (San Jos&eacute;&hellip;)
+          </div>
+        </div>
+        <div class="mcard">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <b style="font-size:13px;">Alajuela Norte</b>
+            <span class="chip c-pri">M J S</span>
+            <span class="chip c-mut">28 km</span>
+            <span class="chip c-ok">Activa</span>
+            <span style="flex:1"></span>
+            <button class="mbtn g">Editar</button>
+          </div>
+          <div class="mnote" style="margin-top:8px;">
+            Cami&oacute;n: <b>Camion Ruta 2</b> &middot; Vendedores: <b>1</b> &middot; Clientes: <b>9</b> (Alajuela&hellip;)
+          </div>
+        </div>
+      </div>
+
+      <div class="mnote" style="margin-top:10px;">
+        El formulario de ruta conserva <b>d&iacute;as como chips</b> (no texto libre como el tab muerto),
+        <b>clientes agrupados por provincia &rsaquo; cant&oacute;n &rsaquo; distrito</b> y bloqueo de clientes ya asignados.
+      </div>
+    </div>
+
+    <div class="notes">
+      <b>Decisiones.</b>
+      <ul>
+        <li><b>Ancla: <code>FlotaRutas.tsx</code></b> &mdash; es la &uacute;nica alcanzable por Comercial y la &uacute;nica con CRUD de rutas.</li>
+        <li><b>Se borra</b> el tab <code>rutas</code> de <code>Logistica.tsx:459-652</code>: es c&oacute;digo muerto verificado (los dos &uacute;nicos render sites pasan <code>soloVista</code>, <code>App.tsx:768-769</code>).</li>
+        <li><b>Se retira</b> la secci&oacute;n &ldquo;Infraestructura &rsaquo; Camiones&rdquo; de <code>Admin.tsx:80</code>; Admin mantiene el resto de infraestructura.</li>
+        <li><b>Unificaci&oacute;n de endpoint</b>: el CRUD pasa a <code>/api/logistica/camiones</code>. <code>/api/camiones</code> queda para lectura hacia atr&aacute;s y se marca deprecado.</li>
+        <li>Si se prefiere no tocar roles ahora, se puede dejar AdminCamiones como acceso directo a la misma vista en vez de duplicarla.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════ G2 ══════════════════════════════ -->
+<section class="grp" id="g2">
+  <div class="gh">
+    <h2><span class="g">G2</span>Trazabilidad de gu&iacute;a</h2>
+    <span class="vd v-simplificar">Simplificar</span>
+  </div>
+  <p class="gdesc">
+    Dos vistas muestran la misma gu&iacute;a con <b>conjuntos de datos que no se superponen</b>:
+    <code>Despacho</code> <b>crea</b> gu&iacute;as (wizard + IA de carga) y <code>Logistica</code> <b>audita</b>
+    (KPIs de carga/vendido/stock/<b>merma</b>). La propuesta: <b>Despacho absorbe la auditor&iacute;a</b>
+    y Logistica deja de tener pantalla propia.
+  </p>
+
+  <div class="panel">
+    <div class="ptitle">Hoy &mdash; 2 pantallas, listas de gu&iacute;a casi iguales</div>
+    <div class="hoy">
+      <div class="entry">
+        <div class="et">Despacho.tsx <span class="rpill adm">Admin</span> <span class="rpill com">Comercial</span></div>
+        <div class="ep">GET/POST /api/logistica/guias &middot; guias/:id/marcar-en-ruta &middot; cerrar</div>
+        <div class="ecap"><b>&Uacute;nico</b> con creaci&oacute;n (wizard 4 pasos), <b>IA &ldquo;Sugerir con IA&rdquo;</b>, selecci&oacute;n de etiquetas EnBodega, columna <b>Camión</b> y <b>Ruta</b>.</div>
+      </div>
+      <div class="entry">
+        <div class="et">Logistica.tsx &rarr; Auditor&iacute;a de Ruta <span class="rpill adm">Admin</span> <span class="rpill com">Comercial</span></div>
+        <div class="ep">GET /api/logistica/guias + /api/inventario &middot; cerrar</div>
+        <div class="ecap"><b>&Uacute;nico</b> con KPIs <b>Stock</b> y <b>Merma</b> (usa inventario), filtro por cami&oacute;n, columna <b>Fecha</b>, y detalle con etiquetas + <b>tiquetes en CRC</b>.</div>
+      </div>
+    </div>
+
+    <div class="merge">
+      <span class="from">2 listas de gu&iacute;a + 2 modales de cierre</span>
+      <span>&rarr;</span>
+      <span class="to">1 lista en Despacho + tira de auditor&iacute;a</span>
+    </div>
+
+    <div class="ptitle">Propuesta &mdash; Despacho con tira de auditor&iacute;a</div>
+
+    <div class="app">
+      <div class="mcrumb">Operaciones <b>&rsaquo;</b> Despacho <b>&rsaquo;</b> Gu&iacute;as de Despacho</div>
+      <div class="mtabs">
+        <div class="mtab on">Gu&iacute;as</div>
+        <div class="mtab">Flota y Rutas</div>
+        <div class="mtab">Conciliaci&oacute;n</div>
+      </div>
+
+      <div class="mgrid c5" style="margin-bottom:12px;">
+        <div class="mkpi pri"><div class="k">Carga en gu&iacute;as</div><div class="v">1 250 <span class="u">ct</span></div></div>
+        <div class="mkpi ok"><div class="k">Vendido</div><div class="v">1 080 <span class="u">ct</span></div></div>
+        <div class="mkpi info"><div class="k">Stock en cami&oacute;n</div><div class="v">120 <span class="u">ct</span></div></div>
+        <div class="mkpi bad"><div class="k">Merma</div><div class="v">50 <span class="u">ct</span></div><div class="sub">4.0 % del cargado</div></div>
+        <div class="mkpi warn"><div class="k">Filtro</div><div class="v" style="font-size:12.5px;line-height:1.5;">Camion Ruta 1<br><span class="u">todas las gu&iacute;as</span></div></div>
+      </div>
+
+      <div class="mhead">
+        <h3>Gu&iacute;as</h3>
+        <span class="chip c-mut">3</span>
+        <span class="sp"></span>
+        <button class="mbtn p">Crear Gu&iacute;a</button>
+      </div>
+
+      <div class="mcard">
+        <table class="mtbl">
+          <thead><tr>
+            <th>Consecutivo</th><th>Fecha</th><th>Camión</th><th>Ruta</th>
+            <th class="r">Cargado</th><th class="r">Vendido</th><th>Avance</th><th>Estado</th><th></th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="n" style="font-family:Consolas,monospace;">GD-20261015-179</td>
+              <td>15/10</td><td>Camion Ruta 1</td><td><span class="chip c-warn">San Jos&eacute;</span></td>
+              <td class="r">500</td><td class="r">430</td>
+              <td style="min-width:76px;">86%<div class="bar-prog"><i style="width:86%"></i></div></td>
+              <td><span class="chip c-pri">EnRuta</span></td>
+              <td class="acts"><button class="mbtn s g">Ver</button><button class="mbtn s g">Cuadrar</button></td>
+            </tr>
+            <tr>
+              <td class="n" style="font-family:Consolas,monospace;">GD-20261015-178</td>
+              <td>15/10</td><td>Camion Ruta 2</td><td><span class="chip c-warn">Alajuela</span></td>
+              <td class="r">400</td><td class="r">400</td>
+              <td style="min-width:76px;">100%<div class="bar-prog"><i style="width:100%"></i></div></td>
+              <td><span class="chip c-ok">Cerrada</span></td>
+              <td class="acts"><button class="mbtn s g">Ver</button></td>
+            </tr>
+            <tr>
+              <td class="n" style="font-family:Consolas,monospace;">GD-20261014-177</td>
+              <td>14/10</td><td>Camion Ruta 1</td><td><span class="chip c-warn">San Jos&eacute;</span></td>
+              <td class="r">350</td><td class="r">331</td>
+              <td style="min-width:76px;">95%<div class="bar-prog"><i style="width:95%"></i></div></td>
+              <td><span class="chip c-bad">CerradaConDiferencia</span></td>
+              <td class="acts"><button class="mbtn s g">Ver</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mnote">
+        <b>Nuevas columnas respecto a hoy:</b> <b>Fecha</b> y <b>Camión</b> en la misma tabla (antes estaban en pantallas distintas).
+        El filtro por cami&oacute;n pasa a ser el <b>selector del header</b> de la tira de KPIs, no una pesta&ntilde;a aparte.
+      </div>
+
+      <div class="mhead" style="margin-top:16px;">
+        <h3 style="font-size:13px;">Detalle de gu&iacute;a &mdash; lo que hoy solo muestra Auditor&iacute;a de Ruta</h3>
+      </div>
+      <div class="mgrid c3">
+        <div class="mcard">
+          <div class="mlab">Etiquetas cargadas</div>
+          <table class="mtbl">
+            <thead><tr><th>C&oacute;digo</th><th>Producto</th><th>Estado</th></tr></thead>
+            <tbody>
+              <tr><td class="n" style="font-family:Consolas,monospace;">TQ-401</td><td>Jumbo XL</td><td><span class="chip c-pri">EnRuta</span></td></tr>
+              <tr><td class="n" style="font-family:Consolas,monospace;">TQ-402</td><td>Jumbo XL</td><td><span class="chip c-pri">EnRuta</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mcard">
+          <div class="mlab">Tiquetes del d&iacute;a</div>
+          <table class="mtbl">
+            <thead><tr><th>Tiquete</th><th>Cobro</th><th class="r">Total</th></tr></thead>
+            <tbody>
+              <tr><td class="n" style="font-family:Consolas,monospace;">TQ-1</td><td>Efectivo</td><td class="r">₡ 68 400</td></tr>
+              <tr><td class="n" style="font-family:Consolas,monospace;">TQ-2</td><td><span class="chip c-warn">Cr&eacute;dito</span></td><td class="r">₡ 34 200</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mcard">
+          <div class="mlab">Orden de recorrido</div>
+          <table class="mtbl">
+            <thead><tr><th>#</th><th>Cliente</th><th>Ventana</th></tr></thead>
+            <tbody>
+              <tr><td class="n">1</td><td>Super La Granja</td><td>08:00</td></tr>
+              <tr><td class="n">2</td><td>Mercadito Norte</td><td><span class="chip c-bad">10:30 (atrasado)</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <b>Decisiones.</b>
+      <ul>
+        <li><b>Ancla: <code>Despacho.tsx</code></b> &mdash; es el creador; la auditor&iacute;a es lectura de lo que &eacute;l produce.</li>
+        <li>La pesta&ntilde;a <code>trazabilidad</code> de <code>Logistica</code> deja de existir como pantalla. Su <b>contenido &uacute;nico</b> (KPIs de stock/merma con <code>/api/inventario</code>, columna Fecha, etiquetas con estado, tiquetes en CRC, orden con ventana) <b>se muda a Despacho</b>.</li>
+        <li><b>No se pierde nada</b>: lo compartido (lista de gu&iacute;a, 5 hitos de timeline, cierre) ya est&aacute; en ambos.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════ G3 ══════════════════════════════ -->
+<section class="grp" id="g3">
+  <div class="gh">
+    <h2><span class="g">G3</span>Cierre y conciliaci&oacute;n de ruta</h2>
+    <span class="vd v-fusionar">Fusionar</span>
+  </div>
+  <p class="gdesc">
+    El cierre de ruta vive en <b>4 sitios de UI</b> y llama a <b>3 endpoints que NO son equivalentes</b>.
+    Uno ni siquiera cambia el estado de la gu&iacute;a y otro <b>no tiene ninguna pantalla que lo llame</b>.
+    Propuesta: <b>un solo bot&oacute;n &ldquo;Cuadrar en central&rdquo;</b> que use el endpoint completo.
+  </p>
+
+  <div class="panel">
+    <div class="ptitle">Hoy &mdash; 4 UI, 3 endpoints distintos</div>
+    <div class="hoy">
+      <div class="entry">
+        <div class="et">TableroRutas.tsx <span class="rpill adm">Admin</span> <span class="rpill com">Comercial</span></div>
+        <div class="ep">POST /api/logistica/cuadre-central &middot; GET preview</div>
+        <div class="ecap"><b>El completo:</b> preview, aprobaci&oacute;n, tolerancia de merma, motivo, genera <b>desperdicios</b> y <b>aprobaciones</b>, marca <b>CerradaConDiferencia</b>.</div>
+      </div>
+      <div class="entry">
+        <div class="et">Logistica.tsx &rarr; Cierre de Ruta <span class="rpill adm">Admin</span> <span class="rpill com">Comercial</span></div>
+        <div class="ep">POST /api/logistica/guias/:id/cerrar</div>
+        <div class="ecap"><b>Ligero:</b> solo pide <b>peso de llegada</b>. Cierra <b>siempre</b> como &ldquo;Cerrada&rdquo;, sin diferencia ni aprobaci&oacute;n.</div>
+      </div>
+      <div class="entry">
+        <div class="et">Despacho.tsx &rarr; modal Cerrar <span class="rpill adm">Admin</span> <span class="rpill com">Comercial</span></div>
+        <div class="ep">POST /api/logistica/guias/:id/cerrar</div>
+        <div class="ecap">Mismo endpoint que arriba: <b>dos botones distintos</b> que cierran igual, con distinta UI.</div>
+      </div>
+      <div class="entry dead">
+        <div class="et">server.ts <span class="deadlbl">sin consumidor</span></div>
+        <div class="ep">POST /api/logistica/cierre-ruta</div>
+        <div class="ecap"><b>Endpoint hu&eacute;rfano</b>: ninguna pantalla lo llama. Cierra <b>por cami&oacute;n</b>, calcula vendido por <b>fecha</b> y <b>no cambia el estado de la gu&iacute;a</b>.</div>
+      </div>
+    </div>
+
+    <div class="ptitle">Propuesta &mdash; preview antes de confirmar (hoy solo en Tablero)</div>
+
+    <div class="app">
+      <div class="mcrumb">Operaciones <b>&rsaquo;</b> Ventas <b>&rsaquo;</b> Tablero Vivo</div>
+      <div class="mtabs">
+        <div class="mtab on">Tablero Vivo</div>
+        <div class="mtab">Cierre y Conciliaci&oacute;n</div>
+        <div class="mtab">Trazabilidad / Merma</div>
+      </div>
+
+      <div class="mmodal">
+        <div class="mh">
+          <b style="font-size:14px;">Cuadrar en central</b>
+          <span class="chip c-pri" style="font-family:Consolas,monospace;">GD-20261015-179</span>
+          <span class="chip c-mut">Camion Ruta 1</span>
+          <span style="flex:1"></span>
+          <span class="chip c-ok">Caja cerrada 18:42</span>
+        </div>
+        <div class="mb">
+          <div class="mgrid c4" style="margin-bottom:12px;">
+            <div class="mkpi"><div class="k">Cargado</div><div class="v">500</div></div>
+            <div class="mkpi ok"><div class="k">Vendido</div><div class="v">430</div></div>
+            <div class="mkpi info"><div class="k">Retornado</div><div class="v">20</div></div>
+            <div class="mkpi bad"><div class="k">Merma</div><div class="v">50</div><div class="sub">4.0 %</div></div>
+          </div>
+
+          <div class="mgrid c2" style="margin-bottom:12px;">
+            <div class="mcard" style="background:var(--a-muted);">
+              <div class="mlab">Efectivo</div><div style="font-size:15px;font-weight:800;">₡ 186 400</div>
+              <div class="mlab" style="margin-top:8px;">Cr&eacute;dito</div><div style="font-size:15px;font-weight:800;">₡ 68 400</div>
+            </div>
+            <div class="mcard" style="background:var(--a-bad-soft);border-color:var(--a-bad);">
+              <div class="mlab" style="color:var(--a-bad);">Requiere aprobaci&oacute;n</div>
+              <div style="font-size:11.5px;color:var(--a-ink2);line-height:1.55;">
+                La merma supera la <b>tolerancia del 2 %</b>. Quedar&aacute; como
+                <b>CerradaConDiferencia</b> y se abre una solicitud.
+              </div>
+            </div>
+          </div>
+
+          <div class="mrow">
+            <div class="mlab">Peso de llegada (kg, opcional)</div>
+            <div class="minp w">&mdash;</div>
+          </div>
+          <div class="mrow">
+            <div class="mlab">Motivo de merma (opcional)</div>
+            <div class="minp w" style="color:var(--a-ink3);">Ej. Merma por descarte en ruta</div>
+            <div class="mhint">Si la merma requiere aprobaci&oacute;n, este motivo viaja en la solicitud.</div>
+          </div>
+        </div>
+        <div class="mf">
+          <button class="mbtn">Cancelar</button>
+          <button class="mbtn d">Confirmar cuadre</button>
+        </div>
+      </div>
+
+      <div class="mnote">
+        <b>Un solo modal para todas las entradas.</b> El bot&oacute;n &ldquo;Cerrar y Conciliar&rdquo; de Cierre de Ruta
+        y el &ldquo;Cerrar&rdquo; de Despacho <b>abren este mismo modal</b>, en vez de dos formularios distintos.
+        Antes de confirmar se pide <b>preview</b> al servidor: si no hay caja cerrada, no se puede cuadrar.
+      </div>
+    </div>
+
+    <div class="notes risk">
+      <b>Decisi&oacute;n pendiente (hay que resolver antes de codificar).</b>
+      <ul>
+        <li><code>/cuadre-central</code> <b>exige que la caja haya cerrado el d&iacute;a</b> (<code>finDiaFecha</code>, 409 si no).
+            <code>/guias/:id/cerrar</code> <b>no lo exige</b>. Hoy se puede cerrar una gu&iacute;a sin cerrar caja; con la propuesta <b>eso deja de existir</b>.</li>
+        <li>Opciones: <b>(a)</b> aceptar el flujo correcto (primero cierra caja, despu&eacute;s cuadra) y eliminar la ruta libre; o
+            <b>(b)</b> conservar un cierre &ldquo;sin cuadre&rdquo; pero marcado como pendiente de conciliar.</li>
+      </ul>
+    </div>
+
+    <div class="notes">
+      <b>Limpieza de backend propuesta.</b>
+      <ul>
+        <li><b>Borrar <code>POST /api/logistica/cierre-ruta</code></b> (server.ts:3684): sin consumidor, no cierra la gu&iacute;a y calcula el vendido solo por fecha.</li>
+        <li><b>Conservar <code>POST /api/logistica/guias/:id/cerrar</code></b> solo si se elige la opci&oacute;n (b) de arriba; si no, tambi&eacute;n se deprec&aacute;.</li>
+        <li><code>/cuadre-central</code> pasa a ser el <b>&uacute;nico</b> camino de cierre, usado por Tablero, Despacho y Cierre de Ruta.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════ G4 ══════════════════════════════ -->
+<section class="grp" id="g4">
+  <div class="gh">
+    <h2><span class="g">G4</span>Tablero vivo de log&iacute;stica</h2>
+    <span class="vd v-compartir">Compartir</span>
+  </div>
+  <p class="gdesc">
+    Dos pantallas leen <b>el mismo endpoint</b> (<code>/api/logistica/tablero</code>) pero con
+    <b>frecuencias y transformaciones distintas</b>. Bodega calcula en cliente un descuadre que el servidor
+    ya calcula de otra forma. Propuesta: <b>un hook compartido</b> y el descuadre <b>resuelto en el servidor</b>.
+  </p>
+
+  <div class="panel">
+    <div class="ptitle">Hoy &mdash; mismo endpoint, dos consumidores</div>
+    <div class="hoy">
+      <div class="entry">
+        <div class="et">TableroRutas.tsx <span class="rpill adm">Admin</span> <span class="rpill com">Comercial</span></div>
+        <div class="ep">GET /api/logistica/tablero &middot; polling 15 s</div>
+        <div class="ecap">Usa <b>todo</b> el payload: avance, dinero, clientes atendidos, atrasados, saltos de secuencia, merma preliminar.</div>
+      </div>
+      <div class="entry">
+        <div class="et">operaciones/BodegaAdmin.tsx &rarr; Control <span class="rpill adm">Admin</span></div>
+        <div class="ep">GET /api/logistica/tablero &middot; 1 sola vez al montar</div>
+        <div class="ecap">Usa <b>solo <code>guias[]</code></b> y <b>recalcula en cliente</b> un <code>descuadre</code> por gu&iacute;a. Sin refresco.</div>
+      </div>
+    </div>
+
+    <div class="ptitle">Propuesta &mdash; un payload, dos lecturas, un solo c&aacute;lculo</div>
+
+    <div class="pairs">
+      <div>
+        <div class="plabel next">Tablero Vivo &mdash; lectura completa</div>
+        <div class="app">
+          <div class="mhead"><h3 style="font-size:13px;">Camion Ruta 1</h3><span class="chip c-pri">GD-20261015-179</span><span class="chip c-pri">EnRuta</span></div>
+          <div class="mgrid c4">
+            <div class="mkpi ok"><div class="k">Vendido</div><div class="v">430</div></div>
+            <div class="mkpi pri"><div class="k">Efectivo</div><div class="v">₡186k</div></div>
+            <div class="mkpi warn"><div class="k">Retornados</div><div class="v">20</div></div>
+            <div class="mkpi bad"><div class="k">Merma preliminar</div><div class="v">50</div></div>
+          </div>
+          <div class="mnote">Cuadre en central, clientes atendidos, atrasados y saltos de secuencia.</div>
+        </div>
+      </div>
+      <div>
+        <div class="plabel next">Bodega &rsaquo; Control &mdash; solo custodia</div>
+        <div class="app">
+          <div class="mhead"><h3 style="font-size:13px;">Alertas de custodia</h3><span class="chip c-bad">2 alertas</span></div>
+          <div class="mcard">
+            <table class="mtbl">
+              <thead><tr><th>Gu&iacute;a</th><th class="r">Cargado</th><th class="r">Vendido</th><th class="r">Retornado</th><th class="r">Restante</th><th class="r">Descuadre</th></tr></thead>
+              <tbody>
+                <tr><td class="n" style="font-family:Consolas,monospace;">GD-179</td><td class="r">500</td><td class="r">430</td><td class="r">20</td><td class="r">40</td><td class="r"><span class="chip c-bad">+10</span></td></tr>
+                <tr><td class="n" style="font-family:Consolas,monospace;">GD-181</td><td class="r">300</td><td class="r">260</td><td class="r">15</td><td class="r">20</td><td class="r"><span class="chip c-warn">&minus;5</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="mnote">
+            <b>El descuadre ahora viene en el payload</b> (<code>descuadreCustodia</code>), no se recalcula en el componente.
+            <b>Refresca cada 15 s</b> igual que el tablero.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <b>Decisiones.</b>
+      <ul>
+        <li>Extraer un hook <b><code>useTablero()</code></b> con el fetch, el intervalo de 15 s y el parseo. Las dos pantallas lo usan; <b>una sola implementaci&oacute;n</b> del polling.</li>
+        <li>A&ntilde;adir al payload de <code>/api/logistica/tablero</code> el <b><code>descuadreCustodia</code></b> por gu&iacute;a (cargado &minus; vendido &minus; restante) para que Bodega deje de calcularlo en cliente.</li>
+        <li><b>Roles sin cambio</b>: Tablero sigue siendo Admin+Comercial, Control sigue siendo solo Admin. Lo que se comparte es el <b>datos</b>, no el acceso.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════ G5 ══════════════════════════════ -->
+<section class="grp" id="g5">
+  <div class="gh">
+    <h2><span class="g">G5</span>Cartera y cuentas por cobrar</h2>
+    <span class="vd v-fusionar">Fusionar</span>
+  </div>
+  <p class="gdesc">
+    La cobranza est&aacute; <b>repartida en tres vistas</b> y lo m&aacute;s cr&iacute;tico es que
+    <b>registrar un pago solo existe en una</b>, que adem&aacute;s <b>solo ve Admin</b>: hoy <b>Comercial no puede cobrar</b>.
+    Propuesta: anclar en <b>Clientes</b> (que ya contiene Cliente360) y absorber el cobro.
+  </p>
+
+  <div class="panel">
+    <div class="ptitle">Hoy &mdash; 3 vistas, 3 alcances</div>
+    <div class="hoy">
+      <div class="entry">
+        <div class="et">Cobranza.tsx <span class="rpill adm">Solo Admin</span></div>
+        <div class="ep">GET /api/facturas + /api/clientes &middot; POST /api/pagos</div>
+        <div class="ecap"><b>&Uacute;nico</b> que <b>registra el pago</b> (Efectivo / SINPE / Transferencia) y tiene &ldquo;Enviar recordatorio&rdquo; (hoy sin acci&oacute;n). Aging por factura.</div>
+      </div>
+      <div class="entry">
+        <div class="et">Clientes.tsx <span class="rpill adm">Admin</span> <span class="rpill com">Comercial</span></div>
+        <div class="ep">GET /api/clientes + /cartera + /analisis &middot; CRUD</div>
+        <div class="ecap"><b>Ancla.</b> &Uacute;nico con <b>CRUD de clientes</b>, <b>segmento A/B/C</b>, score, riesgo, <b>export CSV</b> y vista de <b>An&aacute;lisis</b> (DSO/CEI). Ya <b>embebe Cliente360</b>.</div>
+      </div>
+      <div class="entry">
+        <div class="et">Cliente360.tsx &rarr; tab Cr&eacute;dito <span class="rpill adm">Admin</span> <span class="rpill com">Comercial</span></div>
+        <div class="ep">GET /api/clientes/:id/360 &middot; CRUD excepciones</div>
+        <div class="ecap">Drill-down por cliente: pedidos, mix, tiquetes, docs, notas y <b>aging 1&ndash;30/31&ndash;60/60+</b>. Solo-lectura en dinero; <b>no cobra</b>.</div>
+      </div>
+    </div>
+
+    <div class="ptitle">Propuesta &mdash; Clientes con Cartera + cobro integrado</div>
+
+    <div class="app">
+      <div class="mcrumb">Clientes <b>&rsaquo;</b> Cartera</div>
+      <div class="mtabs">
+        <div class="mtab on">Cartera</div>
+        <div class="mtab">An&aacute;lisis</div>
+        <div class="mtab">Nuevos / en riesgo</div>
+      </div>
+
+      <div class="mgrid c4" style="margin-bottom:12px;">
+        <div class="mkpi info"><div class="k">Facturas pendientes</div><div class="v">14</div><div class="sub">4 vencidas</div></div>
+        <div class="mkpi pri"><div class="k">Por cobrar</div><div class="v">₡ 2.4 M</div></div>
+        <div class="mkpi bad"><div class="k">Vencido (&gt;30 d)</div><div class="v">₡ 480 k</div></div>
+        <div class="mkpi ok"><div class="k">Cobrado hoy</div><div class="v">₡ 684 k</div></div>
+      </div>
+
+      <div class="mcard">
+        <table class="mtbl">
+          <thead><tr>
+            <th>Cliente</th><th>Ruta</th><th>Factura</th><th>Emisi&oacute;n</th>
+            <th>Antig&uuml;edad</th><th>Saldo</th><th></th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="n">Super La Granja</td><td>San Jos&eacute;</td>
+              <td style="font-family:Consolas,monospace;">FAC-0123</td><td>01/10</td>
+              <td><span class="chip c-bad">15 d</span></td><td class="r">₡ 136 800</td>
+              <td class="acts"><button class="mbtn g">360</button><button class="mbtn p">Registrar pago</button></td>
+            </tr>
+            <tr>
+              <td class="n">Mercadito Norte</td><td>Alajuela</td>
+              <td style="font-family:Consolas,monospace;">FAC-0141</td><td>12/10</td>
+              <td><span class="chip c-warn">4 d</span></td><td class="r">₡ 68 400</td>
+              <td class="acts"><button class="mbtn g">360</button><button class="mbtn p">Registrar pago</button></td>
+            </tr>
+            <tr>
+              <td class="n">Distribuidora Central</td><td>Cartago</td>
+              <td style="font-family:Consolas,monospace;">FAC-0102</td><td>18/09</td>
+              <td><span class="chip c-bad">27 d &middot; Vencida</span></td><td class="r">₡ 273 600</td>
+              <td class="acts"><button class="mbtn g">360</button><button class="mbtn p">Registrar pago</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="app">
+      <div class="mhead"><h3 style="font-size:13px;">Registrar pago &mdash; FAC-0123 &middot; Super La Granja</h3></div>
+      <div class="mgrid c2">
+        <div class="mcard">
+          <div class="mlab">M&eacute;todo de pago</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;">
+            <button class="mbtn p">Efectivo</button>
+            <button class="mbtn">SINPE</button>
+            <button class="mbtn">Transferencia</button>
+          </div>
+          <div class="mrow" style="margin-top:12px;">
+            <div class="mlab">Monto</div>
+            <div class="minp w">₡ 136 800</div>
+            <div class="mhint">Saldo pendiente de la factura: ₡ 136 800.</div>
+          </div>
+        </div>
+        <div class="mcard" style="background:var(--a-muted);">
+          <div class="mlab">Resumen del cliente</div>
+          <table class="mtbl">
+            <tbody>
+              <tr><td>Saldo total</td><td class="r n">₡ 410 400</td></tr>
+              <tr><td>L&iacute;mite de cr&eacute;dito</td><td class="r n">₡ 1 000 000</td></tr>
+              <tr><td>Uso de l&iacute;nea</td><td class="r n">41 %</td></tr>
+              <tr><td>Antig&uuml;edad m&aacute;xima</td><td class="r n"><span class="chip c-bad">27 d</span></td></tr>
+            </tbody>
+          </table>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+            <button class="mbtn">Cancelar</button>
+            <button class="mbtn p">Confirmar pago</button>
+          </div>
+        </div>
+      </div>
+      <div class="mnote">
+        <b>Este es el formulario que hoy solo est&aacute; en <code>Cobranza.tsx</code></b>, que es <b>solo-Admin</b>.
+        Al mudarlo a Clientes, <b>Comercial tambi&eacute;n puede cobrar</b> &mdash; decisi&oacute;n de negocio a confirmar.
+      </div>
+    </div>
+
+    <div class="notes">
+      <b>Decisiones.</b>
+      <ul>
+        <li><b>Ancla: <code>Clientes.tsx</code></b> &mdash; ya embebe <code>Cliente360</code> y es la &uacute;nica con CRUD y an&aacute;lisis.</li>
+        <li><b>Se absorbe de Cobranza:</b> el modal de <b>registrar pago</b> (<code>POST /api/pagos</code>) y el recordatorio (que hay que implementarle l&oacute;gica; hoy es un bot&oacute;n sin handler).</li>
+        <li><b>Se retira</b> el tab &ldquo;Cobranza&rdquo; de Finanzas (<code>modulos.ts:263</code>). Su &ldquo;Panel de Finanzas&rdquo; es un placeholder de 5 tarjetas: lo cubre <b>Finanzas &rsaquo; Resumen</b>.</li>
+        <li>El aging 1&ndash;30/31&ndash;60/60+ pasa a estar <b>en el servidor</b>: hoy <code>Cliente360</code> lo calcula en cliente a partir de saldo y vencidas (riesgo de divergencia con la tabla de Cobranza).</li>
+        <li><b>Pregunta de negocio:</b> &iquest;Comercial debe poder cobrar? Si no, el bot&oacute;n se muestra pero deshabilitado por rol.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════ G6 ══════════════════════════════ -->
+<section class="grp" id="g6">
+  <div class="gh">
+    <h2><span class="g">G6</span>Desperdicios</h2>
+    <span class="vd v-compartir">Compartir</span>
+  </div>
+  <p class="gdesc">
+    Un <b>CRUD con an&aacute;lisis</b> (Admin, dentro de Bodega) y un <b>reporte de solo lectura</b>
+    (Admin + Socio + Comercial, en Finanzas &rsaquo; Anal&iacute;tica). Son la misma informaci&oacute;n con
+    <b>audiencias distintas</b>. Propuesta: <b>un solo componente con modo solo lectura</b>.
+  </p>
+
+  <div class="panel">
+    <div class="ptitle">Hoy &mdash; 2 componentes, 2 audiencias</div>
+    <div class="hoy">
+      <div class="entry">
+        <div class="et">Desperdicios.tsx <span class="rpill adm">Solo Admin</span></div>
+        <div class="ep">GET /api/desperdicios + /resumen + /patrones &middot; POST</div>
+        <div class="ecap"><b>Ancla.</b> &Uacute;nico con alta de registro y an&aacute;lisis por <b>ruta, cami&oacute;n, vendedor, motivo, producto y tendencia diaria</b>.</div>
+      </div>
+      <div class="entry">
+        <div class="et">Reportes.tsx &rarr; ReporteDesperdicios <span class="rpill adm">Admin</span> <span class="rpill com">Comercial</span> <span class="rpill soc">Socio</span></div>
+        <div class="ep">GET /api/reportes/desperdicios?fechaInicio&amp;fechaFin</div>
+        <div class="ecap">Solo lectura: tarjetas <b>origen &rarr; motivo</b> con unidades e impacto. Es el <b>&uacute;nico</b> que Socio y Comercial pueden abrir.</div>
+      </div>
+    </div>
+
+    <div class="ptitle">Propuesta &mdash; un componente, dos modos</div>
+
+    <div class="app">
+      <div class="mhead">
+        <h3 style="font-size:13px;">Registro de desperdicios</h3>
+        <span class="chip c-warn">Solo lectura &middot; vista Finanzas &rsaquo; Anal&iacute;tica</span>
+        <span class="sp"></span>
+        <span class="msearch">01/10 &ndash; 31/10</span>
+      </div>
+
+      <div class="mgrid c4" style="margin-bottom:12px;">
+        <div class="mkpi bad"><div class="k">Impacto 7 d&iacute;as</div><div class="v">₡ 214 600</div></div>
+        <div class="mkpi"><div class="k">Producci&oacute;n</div><div class="v">86 <span class="u">un</span></div></div>
+        <div class="mkpi"><div class="k">Bodega</div><div class="v">52 <span class="u">un</span></div></div>
+        <div class="mkpi"><div class="k">Ruta</div><div class="v">31 <span class="u">un</span></div></div>
+      </div>
+
+      <div class="mcard">
+        <table class="mtbl">
+          <thead><tr><th>Fecha</th><th>Origen</th><th>Producto</th><th>Motivo</th><th>Ruta</th><th class="r">Cartones</th><th class="r">Impacto</th></tr></thead>
+          <tbody>
+            <tr><td>15/10</td><td><span class="chip c-mut">Ruta</span></td><td class="n">Jumbo XL</td><td>Merma en descuento</td><td>San Jos&eacute;</td><td class="r">12</td><td class="r">₡ 68 400</td></tr>
+            <tr><td>14/10</td><td><span class="chip c-mut">Producci&oacute;n</span></td><td class="n">Mediano</td><td>Rotura en empaque</td><td>&mdash;</td><td class="r">8</td><td class="r">₡ 34 200</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mnote">
+        <b>En este modo se ocultan</b> &ldquo;Registrar P&eacute;rdida&rdquo;, los selectores de ruta/cami&oacute;n/vendedor
+        y la edici&oacute;n. <b>Se conservan</b> el filtro de fechas y el desglose por origen&rarr;motivo,
+        que son los que hoy solo tiene el reporte.
+      </div>
+    </div>
+
+    <div class="notes">
+      <b>Decisiones.</b>
+      <ul>
+        <li><b>Ancla: <code>Desperdicios.tsx</code></b> &mdash; es el completo y el &uacute;nico de edici&oacute;n.</li>
+        <li>Se le a&ntilde;ade un <b>prop <code>soloLectura</code></b>. Finanzas &rsaquo; Anal&iacute;tica monta el <b>mismo componente</b> en ese modo; se elimina <code>ReporteDesperdicios</code>.</li>
+        <li><b>Se unifican los endpoints</b>: el reporte usa <code>/api/reportes/desperdicios</code> y el CRUD <code>/api/desperdicios</code>. Con un solo componente, uno de los dos queda sin uso.</li>
+        <li>Lo que <b>no se pierde</b>: el acceso de Socio y Comercial, ni el filtro de fechas del encabezado.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════ G7 ══════════════════════════════ -->
+<section class="grp" id="g7">
+  <div class="gh">
+    <h2><span class="g">G7</span>Resumen del d&iacute;a</h2>
+    <span class="vd v-compartir">Compartir</span>
+  </div>
+  <p class="gdesc">
+    Dos vistas pintan <b>los mismos 5 KPIs</b> del mismo endpoint con el mismo parseo. Una es un
+    <b>subconjunto estricto</b> de la otra. No hay que borrar una: hay que <b>extraer el bloque</b>
+    y dejar de escribirlo dos veces.
+  </p>
+
+  <div class="panel">
+    <div class="ptitle">Hoy &mdash; 5 KPIs escritos en dos archivos</div>
+    <div class="hoy">
+      <div class="entry">
+        <div class="et">operaciones/ResumenDelDia.tsx <span class="rpill adm">Solo Admin</span></div>
+        <div class="ep">GET /api/dashboard/enterprise</div>
+        <div class="ecap"><b>5 claves:</b> cartones, stock, aves, rutas, desperdicios. &Uacute;nico con banner de <b>payload incompleto + Reintentar</b>.</div>
+      </div>
+      <div class="entry">
+        <div class="et">FinanzasResumen.tsx <span class="rpill adm">Admin</span> <span class="rpill soc">Socio</span></div>
+        <div class="ep">GET /api/finanzas/resumen + /api/dashboard/enterprise</div>
+        <div class="ecap"><b>7 claves</b> (las mismas 5 + clientes activos + impacto) + <b>alertas</b> + P&amp;L completo, ciclo del dinero y aging. Su bloque &ldquo;Salud del negocio&rdquo; <b>contiene las mismas 5 tarjetas</b>.</div>
+      </div>
+    </div>
+
+    <div class="ptitle">Propuesta &mdash; un bloque extra&iacute;do, usado por las dos</div>
+
+    <div class="pairs">
+      <div>
+        <div class="plabel next">ResumenDelDia &mdash; queda como envoltura</div>
+        <div class="app">
+          <div class="mcrumb">Operaciones <b>&rsaquo;</b> Resumen del d&iacute;a</div>
+          <div class="mgrid c5">
+            <div class="mkpi pri"><div class="k">Producci&oacute;n</div><div class="v">1 250</div></div>
+            <div class="mkpi info"><div class="k">En bodega</div><div class="v">8 400</div></div>
+            <div class="mkpi"><div class="k">Aves vivas</div><div class="v">12 k</div></div>
+            <div class="mkpi ok"><div class="k">Rutas</div><div class="v">4</div></div>
+            <div class="mkpi bad"><div class="k">Desperdicios</div><div class="v">17</div></div>
+          </div>
+          <div class="mnote">Mismo bloque, m&aacute;s el banner &ldquo;payload incompleto&rdquo; con Reintentar que hoy solo tiene &eacute;l.</div>
+        </div>
+      </div>
+      <div>
+        <div class="plabel next">Finanzas &rsaquo; Resumen &mdash; mismo bloque dentro</div>
+        <div class="app">
+          <div class="mcrumb">Finanzas <b>&rsaquo;</b> Resumen</div>
+          <div class="mlab" style="margin-bottom:6px;">Salud del negocio</div>
+          <div class="mgrid c5">
+            <div class="mkpi pri"><div class="k">Cartones</div><div class="v">1 250</div></div>
+            <div class="mkpi info"><div class="k">Huevos</div><div class="v">8 400</div></div>
+            <div class="mkpi"><div class="k">Aves</div><div class="v">12 k</div></div>
+            <div class="mkpi ok"><div class="k">Rutas</div><div class="v">4</div></div>
+            <div class="mkpi bad"><div class="k">Desperdicios</div><div class="v">17</div></div>
+          </div>
+          <div class="mnote">Encima: P&amp;L, ciclo del dinero y &ldquo;Requiere atenci&oacute;n&rdquo;.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <b>Decisiones.</b>
+      <ul>
+        <li>Extraer un componente <b><code>SaludDelNegocio</code></b> con las 7 claves y la regla de &ldquo;payload incompleto&rdquo;.</li>
+        <li><b>ResumenDelAdmin se queda</b> como envoltura fina (bloque + Reintentar), porque es el <b>landing de Admin</b> en Operaciones. Borrarlo cambiar&iacute;a la navegaci&oacute;n.</li>
+        <li><b>Se corrige la etiqueta inconsistente</b>: <code>stockBodegaCentral</code> hoy se llama &ldquo;En bodega central (cartones)&rdquo; en una y &ldquo;Huevos&rdquo; en la otra. Con un solo componente hay una sola etiqueta.</li>
+        <li>Se unifica el manejo de error: hoy FinanzasResumen muestra pantalla roja <b>sin</b> bot&oacute;n de reintento y ResumenDelDia s&iacute; lo tiene. El bloque compartido aporta el Reintentar a ambos.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════ G8 ══════════════════════════════ -->
+<section class="grp" id="g8">
+  <div class="gh">
+    <h2><span class="g">G8</span>Ventas por dos canales</h2>
+    <span class="vd v-notocar">No fusionar</span>
+  </div>
+  <p class="gdesc">
+    Investigado a fondo, <b>no son duplicados</b>: son dos flujos <b>distintos y en serie</b>.
+    Uno factura (FAC, con cadena fiscal), el otro vende en ruta (TQ-). Se las <b>separa con etiquetas</b>,
+    no se las fusiona. Lo &uacute;nico confuso hoy es que <b>&ldquo;tiquete&rdquo; significa dos cosas</b>.
+  </p>
+
+  <div class="panel">
+    <div class="ptitle">Hoy &mdash; dos flujos en serie, no en paralelo</div>
+
+    <div class="app">
+      <div style="display:flex;gap:12px;align-items:stretch;flex-wrap:wrap;">
+        <div class="mcard" style="flex:1;min-width:230px;">
+          <div class="mlab">1 &middot; En ruta</div>
+          <b style="font-size:14px;">CajaRuta</b>
+          <div class="mtbl" style="margin-top:8px;">
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--a-line);"><span>Endpoint</span><b>POST /api/logistica/caja/venta</b></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--a-line);"><span>Tabla</span><b>ventas_ruta</b></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--a-line);"><span>Consecutivo</span><b>TQ-####</b></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Exige</span><b>Gu&iacute;a activa</b></div>
+          </div>
+          <div class="mnote">POS en cami&oacute;n: producto, cantidad, descuento, efectivo/cr&eacute;dito, <b>devoluci&oacute;n</b> y <b>fin de d&iacute;a</b>.</div>
+        </div>
+
+        <div style="display:flex;align-items:center;font-size:22px;color:var(--a-ink3);font-weight:800;">
+          &rarr;
+        </div>
+
+        <div class="mcard" style="flex:1;min-width:230px;">
+          <div class="mlab">2 &middot; En mostrador / cierre</div>
+          <b style="font-size:14px;">Facturacion</b>
+          <div class="mtbl" style="margin-top:8px;">
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--a-line);"><span>Endpoint</span><b>POST /api/ventas</b></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--a-line);"><span>Tabla</span><b>facturas + detalles</b></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--a-line);"><span>Consecutivo</span><b>FAC-####</b></div>
+            <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>A&ntilde;ade</span><b>Cadena fiscal (XML/Hacienda)</b></div>
+          </div>
+          <div class="mnote">Wizard 3 pasos, l&iacute;mite de cr&eacute;dito, precio especial, borrador, <b>consolidar ruta</b>.</div>
+        </div>
+      </div>
+
+      <div class="mnote" style="margin-top:12px;">
+        <b>El puente ya existe</b>: el bot&oacute;n <b>&ldquo;Generar facturas&rdquo;</b> de Facturacion
+        (<code>POST /api/facturacion/consolidar-ruta</code>) convierte los tiquetes TQ de una gu&iacute;a en facturas FAC.
+        Fusionar los flujos romper&iacute;a la caja: CajaRuta <b>exige</b> gu&iacute;a abierta y Facturacion <b>no</b>.
+      </div>
+    </div>
+
+    <div class="notes">
+      <b>Decisiones &mdash; solo desambiguaci&oacute;n, sin fusionar.</b>
+      <ul>
+        <li><b>No se fusionan</b> vistas ni endpoints. Son dos flujos complementarios en serie (venta en ruta &rarr; facturaci&oacute;n).</li>
+        <li><b>Renombrar para quitar el hom&oacute;nimo:</b> en Facturacion, el tipo de documento &ldquo;Tiquete&rdquo; pasa a llamarse <b>&ldquo;Nota de venta&rdquo;</b>; en CajaRuta, TQ- se llama <b>tiquete de ruta</b>. Hoy ambas cosas se llaman &ldquo;tiquete&rdquo;.</li>
+        <li><b>Compartir solo primitivas</b> de presentaci&oacute;n (tarjetas, botones, toasts), no el formulario.</li>
+        <li>Aviso: la UI de Facturacion <b>nunca env&iacute;a <code>guiaId</code></b> en <code>POST /api/ventas</code>, aunque el backend lo usa para descontar inventario y cae a un <code>fallback 'Camión Ruta 1'</code>. Es un bug latente que conviene arreglar por separado.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function(){
+  var bL=document.getElementById('bL'), bD=document.getElementById('bD');
+  function set(t){document.documentElement.setAttribute('data-theme',t);
+    bL.className=(t==='light')?'on':''; bD.className=(t==='dark')?'on':'';}
+  bL.onclick=function(){set('light');}; bD.onclick=function(){set('dark');};
+  if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches){set('dark');}
+})();
+</script>
+</body>
+</html>

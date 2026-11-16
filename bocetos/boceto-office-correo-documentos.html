@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boceto — Office después de mover Vinculaciones a Admin (Correo + Documentos)</title>
+<style>
+/* ============================================================================
+   Tokens copiados de src/components/gcrm.css para que el boceto se vea igual
+   que la app. Si cambia el design system, este archivo se actualiza con él.
+   ========================================================================== */
+.gcrm {
+  --brand:#059669; --brand-dark:#065f46; --brand-soft:#d1fae5;
+  --amber:#d97706; --amber-soft:#fef3c7;
+  --orange:#ea580c; --orange-soft:#ffedd5;
+  --red:#dc2626; --red-soft:#fee2e2;
+  --blue:#2563eb; --blue-soft:#dbeafe;
+  --violet:#7c3aed; --violet-soft:#ede9fe;
+  --ink:#0f172a; --ink2:#475569; --ink3:#94a3b8;
+  --line:#e2e8f0; --bg:#f1f5f9; --card:#ffffff;
+  --shadow:0 1px 2px rgba(15,23,42,.05),0 1px 3px rgba(15,23,42,.06);
+  --shadow-lg:0 12px 32px rgba(15,23,42,.14);
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+  background:var(--bg); color:var(--ink); font-size:13px;
+}
+
+/* ===== chrome del boceto (no existe en la app; es solo para este archivo) ===== */
+:root{
+  --shell:#111827; --shell2:#1f2937; --shell-ink:#d1d5db; --shell-ink2:#6b7280;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:#e9edf2;}
+.docpane{max-width:1320px;margin:0 auto;padding:26px 24px 60px;}
+.doc-head h1{font-size:21px;font-weight:800;margin:0 0 6px;}
+.doc-head p{font-size:13.5px;color:#5b6675;margin:0 0 4px;max-width:900px;line-height:1.55;}
+.doc-head .tags{margin:12px 0 22px;display:flex;gap:7px;flex-wrap:wrap;}
+.tag{font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px;}
+.tag.ok{background:#d1fae5;color:#065f46;}
+.tag.info{background:#dbeafe;color:#1e40af;}
+.tag.warn{background:#fef3c7;color:#92400e;}
+.tag.neutral{background:#e2e8f0;color:#475569;}
+
+.frame{display:flex;height:760px;border:1px solid #cbd5e1;border-radius:14px;overflow:hidden;
+       box-shadow:0 18px 46px rgba(15,23,42,.16);background:var(--bg);}
+
+/* ===== sidebar (como la app) ===== */
+.side{width:212px;flex:0 0 212px;background:var(--shell);color:var(--shell-ink);
+      display:flex;flex-direction:column;overflow-y:auto;}
+.side-brand{padding:15px 16px;border-bottom:1px solid #374151;font-weight:800;color:#fff;font-size:14px;}
+.side-brand span{display:block;font-size:10.5px;color:var(--shell-ink2);font-weight:600;margin-top:2px;}
+.side-label{font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+            color:var(--shell-ink2);padding:14px 16px 5px;}
+.side a{display:flex;align-items:center;gap:9px;padding:8px 16px;font-size:13px;color:var(--shell-ink);
+        text-decoration:none;cursor:pointer;border-left:3px solid transparent;}
+.side a:hover{background:var(--shell2);}
+.side a.on{background:var(--shell2);border-left-color:var(--brand);color:#fff;font-weight:700;}
+.side a .ic{width:16px;text-align:center;opacity:.8;font-size:12px;}
+.side a.off{opacity:.34;}
+
+/* ===== main ===== */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg);}
+.main-top{background:var(--card);border-bottom:1px solid var(--line);padding:10px 16px;
+          display:flex;align-items:center;gap:12px;}
+.main-top .who{margin-left:auto;font-size:11.5px;color:var(--ink3);}
+.main-body{flex:1;overflow-y:auto;padding:16px;}
+
+/* ===== clases gcrm reales ===== */
+.gcrm .viewhead{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:4px;}
+.gcrm .viewhead h1{font-size:22px;font-weight:800;letter-spacing:-.01em;margin:0;}
+.gcrm .viewhead .sub{color:var(--ink3);font-size:12px;margin-top:4px;}
+.gcrm .crumb{font-size:12px;color:var(--ink3);display:flex;gap:7px;align-items:center;margin-bottom:12px;}
+.gcrm .crumb b{color:var(--ink2);}
+.gcrm .btn{border:1px solid var(--line);background:var(--card);padding:7px 12px;border-radius:8px;
+           font-size:12px;font-weight:700;color:var(--ink2);cursor:pointer;font-family:inherit;
+           display:inline-flex;align-items:center;gap:6px;}
+.gcrm .btn:hover{border-color:#cbd5e1;}
+.gcrm .btn.brand{background:var(--brand);border-color:var(--brand);color:#fff;}
+.gcrm .btn.sm{height:27px;padding:0 10px;font-size:11px;border-radius:7px;}
+.gcrm .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
+            background:var(--bg);color:var(--ink2);font-size:10.5px;font-weight:700;border:1px solid var(--line);}
+.gcrm .chip.green{background:var(--brand-soft);color:var(--brand-dark);border-color:transparent;}
+.gcrm .chip.amber{background:var(--amber-soft);color:var(--amber);border-color:transparent;}
+.gcrm .chip.blue{background:var(--blue-soft);color:var(--blue);border-color:transparent;}
+.gcrm .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;display:inline-block;}
+.gcrm .dot.green{background:var(--brand);box-shadow:0 0 0 3px var(--brand-soft);}
+.gcrm .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;
+             box-shadow:var(--shadow);overflow:hidden;}
+.gcrm .panelbar{display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);
+                align-items:center;background:var(--card);}
+.gcrm .panelbar input{padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;
+                      font-family:inherit;width:210px;background:#fff;color:var(--ink);}
+.gcrm .of-cols{display:grid;grid-template-columns:240px 1fr;gap:16px;align-items:start;}
+.gcrm .sect{margin-bottom:4px;}
+.gcrm .sect h4{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+               color:var(--ink3);margin:0 0 6px;padding-left:2px;}
+.gcrm .of-acct{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:8px;
+               font-size:12.5px;font-weight:600;cursor:pointer;border:0;background:none;
+               width:100%;text-align:left;font-family:inherit;color:var(--ink);}
+.gcrm .of-acct:hover{background:var(--bg);}
+.gcrm .of-acct.on{background:var(--brand-soft);color:var(--brand-dark);font-weight:800;}
+.gcrm .of-acct .b{margin-left:auto;font-size:10px;font-weight:700;color:var(--ink3);}
+.gcrm .of-acct.on .b{color:var(--brand-dark);}
+.gcrm .of-tree-f{display:flex;gap:7px;align-items:center;padding:6px 9px;border-radius:8px;
+                 font-size:12px;cursor:pointer;border:0;background:none;width:100%;text-align:left;
+                 font-family:inherit;color:var(--ink2);}
+.gcrm .of-tree-f:hover{background:var(--bg);}
+.gcrm .of-tree-f.on{background:var(--brand-soft);color:var(--brand-dark);font-weight:700;}
+.gcrm .of-tree-f.warn{color:var(--amber);font-weight:700;}
+.gcrm .of-row{display:flex;gap:9px;align-items:center;padding:9px 14px;border-bottom:1px solid #f1f5f9;}
+.gcrm .of-row.on{background:var(--brand-soft);box-shadow:inset 3px 0 0 var(--brand);}
+.gcrm .of-row .of-txt{min-width:0;flex:1;}
+.gcrm .of-row .of-who{font-weight:700;}
+.gcrm .of-row .of-subj{color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gcrm .of-row .of-ti{font-size:10px;color:var(--ink3);white-space:nowrap;}
+.gcrm .of-row .of-hact{display:flex;gap:4px;opacity:1;}
+.gcrm .av-mini{width:26px;height:26px;border-radius:7px;color:#fff;display:flex;align-items:center;
+              justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;}
+.gcrm .of-ic2{width:26px;height:26px;border-radius:7px;color:#fff;display:flex;align-items:center;
+              justify-content:center;font-size:8.5px;font-weight:800;flex-shrink:0;}
+.gcrm .of-meta{display:flex;gap:12px;padding:9px 14px;border-top:1px solid var(--line);
+               background:var(--bg);font-size:11px;color:var(--ink3);}
+.gcrm .of-meta b{color:var(--ink);}
+
+/* barra de espacios (la fila que se queda con 2) */
+.espacios{display:flex;gap:1px;padding:1px;background:var(--bg);border:1px solid var(--line);
+          border-radius:12px;margin-bottom:16px;}
+.espacios button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
+                 padding:9px 12px;border:0;background:transparent;border-radius:11px;
+                 font-size:13px;font-weight:700;color:var(--ink3);cursor:pointer;font-family:inherit;}
+.espacios button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow);}
+.espacios button .ic{font-size:13px;}
+
+/* aviso de lo que cambió */
+.changed{display:none;background:var(--blue-soft);border:1px solid #bfdbfe;color:#1e40af;
+         border-radius:10px;padding:10px 13px;font-size:12px;margin-bottom:14px;line-height:1.5;}
+.changed.show{display:block;}
+.changed b{font-weight:800;}
+
+/* tabla comparativa */
+.cmp{margin-top:34px;}
+.cmp h2{font-size:15px;font-weight:800;margin:0 0 10px;padding-bottom:7px;border-bottom:2px solid #d7dce2;}
+table.c{width:100%;border-collapse:collapse;background:#fff;border:1px solid #d7dce2;border-radius:12px;
+        overflow:hidden;font-size:12.5px;}
+table.c th{text-align:left;padding:9px 12px;background:#f4f6f9;font-size:10px;text-transform:uppercase;
+           letter-spacing:.06em;color:#5b6675;border-bottom:1px solid var(--line);}
+table.c td{padding:9px 12px;border-bottom:1px solid #f1f5f9;color:var(--ink2);vertical-align:top;}
+table.c td:first-child{font-weight:700;color:var(--ink);white-space:nowrap;}
+table.c tr:last-child td{border-bottom:0;}
+.yes{color:var(--brand-dark);font-weight:800;}
+.no{color:var(--ink3);}
+.notes{margin-top:22px;background:#fff;border:1px solid #d7dce2;border-left:3px solid var(--brand);
+       border-radius:0 10px 10px 0;padding:14px 16px;font-size:12.5px;color:#5b6675;line-height:1.6;}
+.notes b{color:var(--ink);}
+.notes ul{margin:8px 0 0 17px;padding:0;}
+.notes li{margin-bottom:4px;}
+
+@media (max-width:1000px){ .gcrm .of-cols{grid-template-columns:1fr;} .side{display:none;} }
+</style>
+</head>
+<body>
+<div class="docpane">
+
+  <div class="doc-head">
+    <h1>Boceto — Office con Correo y Documentos</h1>
+    <p>Simulación de cómo se ve el módulo Office después de mover <b>Vinculaciones</b> a Admin.
+       El marco, la fila de espacios y las dos pantallas usan las clases reales de
+       <code>gcrm.css</code> y los datos reales que siembra <code>Office.tsx</code>, así que lo que
+       se ve acá es lo que se ve en <code>localhost:5174</code> — no una interpretación.</p>
+    <div class="tags">
+      <span class="tag ok">Office: 2 espacios</span>
+      <span class="tag info">Admin: + Vinculaciones</span>
+      <span class="tag warn">El filtro por rol de Office desapareció</span>
+      <span class="tag neutral">Solo lectura — no llama a la API</span>
+    </div>
+  </div>
+
+  <div class="frame">
+    <!-- ================= sidebar ================= -->
+    <nav class="side">
+      <div class="side-brand">Granja Don Paco<span>Produce · Rionegro</span></div>
+      <div class="side-label">Módulos</div>
+      <a><span class="ic">◈</span>Operaciones</a>
+      <a><span class="ic">◷</span>Logística</a>
+      <a><span class="ic">$</span>Finanzas</a>
+      <a class="on"><span class="ic">✉</span>Office</a>
+      <a><span class="ic">⚙</span>Admin</a>
+      <div class="side-label">Sin acceso para este rol</div>
+      <a class="off"><span class="ic">▣</span>Etiquetas</a>
+      <a class="off"><span class="ic">◉</span>Salud Avícola</a>
+      <a class="off"><span class="ic">≡</span>Alimento</a>
+      <a class="off"><span class="ic">✂</span>Mantenimiento</a>
+      <a class="off"><span class="ic">⚑</span>Precios</a>
+    </nav>
+
+    <!-- ================= main ================= -->
+    <div class="main">
+      <div class="main-top">
+        <span style="font-size:12px;color:var(--ink3)">Granja Don Paco</span>
+        <span class="who">Ramón Jiménez · Admin</span>
+      </div>
+      <div class="main-body">
+
+        <div class="changed" id="changed">
+          <b>Qué cambió respecto a antes:</b> la fila de espacios ya no incluye Vinculaciones.
+          Un Socio o un Comercial entran a Office y ven exactamente estos dos espacios; antes el
+          Admin veía un tercer tab que los demás roles no veían, y el que lo veía por rol
+          secundario se comía un 403 al abrirlo.
+        </div>
+
+        <!-- fila de espacios -->
+        <div class="espacios">
+          <button class="on" data-espacio="correo"><span class="ic">✉</span>Correo</button>
+          <button data-espacio="documentos"><span class="ic">▤</span>Documentos</button>
+        </div>
+
+        <!-- ============ CORREO ============ -->
+        <section class="gcrm" id="v-correo">
+          <div class="crumb">Office <span>/</span> <b>Correo</b></div>
+
+          <div class="viewhead">
+            <div>
+              <h1>Correo</h1>
+              <div class="sub">4 cuentas conectadas · sincronizado hace 12 min · 3 sin leer</div>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button class="btn">↻ Actualizar</button>
+              <button class="btn sm">Con adjuntos ▾</button>
+            </div>
+          </div>
+
+          <div class="of-cols" style="margin-top:14px">
+            <div>
+              <div class="sect">
+                <h4>Cuentas</h4>
+                <button class="of-acct on"><span class="dot green"></span>Todas<span class="b">5</span></button>
+                <button class="of-acct"><span class="dot" style="background:#3D7A4A"></span>Gerencia<span class="b">1</span></button>
+                <button class="of-acct"><span class="dot" style="background:#B8860B"></span>Proveedores<span class="b">3</span></button>
+                <button class="of-acct"><span class="dot" style="background:#2980b9"></span>Contabilidad<span class="b">0</span></button>
+                <button class="of-acct"><span class="dot" style="background:#7C3AED"></span>Ventas<span class="b">1</span></button>
+              </div>
+              <div class="sect" style="margin-top:16px">
+                <h4>Vistas</h4>
+                <button class="of-acct on">Todos<span class="b"></span></button>
+                <button class="of-acct">Con documentos<span class="b">3</span></button>
+                <button class="of-acct">Sin responder<span class="b">3</span></button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panelbar">
+                <input type="text" value="" placeholder="Buscar en el correo…">
+                <span class="chip">Todos los remitentes</span>
+              </div>
+
+              <div class="of-row on">
+                <span class="av-mini" style="background:#B8860B">H</span>
+                <span class="of-txt"><span class="of-who">Huevos Pollo Feliz</span> <span class="of-subj">RE: Factura 0123 - cartones extra grandes</span></span>
+                <span class="chip blue">📎 2</span>
+                <span class="of-ti">hace 4 min</span>
+                <span class="of-hact"><button class="btn sm">Abrir</button><button class="btn sm">✓</button></span>
+              </div>
+              <div class="of-row on">
+                <span class="av-mini" style="background:#B8860B">B</span>
+                <span class="of-txt"><span class="of-who">Banco Nacional</span> <span class="of-subj">Estado de cuenta septiembre</span></span>
+                <span class="chip blue">📎 1</span>
+                <span class="of-ti">hace 70 min</span>
+                <span class="of-hact"><button class="btn sm">Abrir</button><button class="btn sm">✓</button></span>
+              </div>
+              <div class="of-row">
+                <span class="av-mini" style="background:#7C3AED">S</span>
+                <span class="of-txt"><span class="of-who">Super Chepe</span> <span class="of-subj">Pedido #410 - 50 cartones medianos</span></span>
+                <span class="of-ti">hace 25 h</span>
+                <span class="of-hact"><button class="btn sm">Abrir</button><button class="btn sm">○</button></span>
+              </div>
+              <div class="of-row on">
+                <span class="av-mini" style="background:#B8860B">G</span>
+                <span class="of-txt"><span class="of-who">Grupo Naco</span> <span class="of-subj">Cotizacion gallinaza a granel</span></span>
+                <span class="chip blue">📎 1</span>
+                <span class="of-ti">hace 3 d</span>
+                <span class="of-hact"><button class="btn sm">Abrir</button><button class="btn sm">✓</button></span>
+              </div>
+              <div class="of-row">
+                <span class="av-mini" style="background:#3D7A4A">C</span>
+                <span class="of-txt"><span class="of-who">CCSS</span> <span class="of-subj">Planilla setiembre</span></span>
+                <span class="of-ti">hace 3 d</span>
+                <span class="of-hact"><button class="btn sm">Abrir</button><button class="btn sm">○</button></span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ DOCUMENTOS ============ -->
+        <section class="gcrm" id="v-documentos" hidden>
+          <div class="crumb">Office <span>/</span> <b>Documentos</b></div>
+
+          <div class="viewhead">
+            <div>
+              <h1>Documentos</h1>
+              <div class="sub">Todas las carpetas · 5 archivos</div>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button class="btn">↻ Actualizar</button>
+              <button class="btn brand sm">⬆ Subir documento</button>
+            </div>
+          </div>
+
+          <div class="of-cols" style="margin-top:14px">
+            <div>
+              <div class="sect">
+                <h4>Carpetas</h4>
+                <button class="of-tree-f on">📁 Todas las carpetas</button>
+                <button class="of-tree-f">📁 Drive/Finanzas/Hacienda<span class="b" style="margin-left:auto;font-size:10px">1</span></button>
+                <button class="of-tree-f">📁 Drive/Finanzas/Proveedores<span class="b" style="margin-left:auto;font-size:10px">3</span></button>
+                <button class="of-tree-f warn" disabled>⚠ Sin carpeta (1)</button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panelbar">
+                <input type="text" value="" placeholder="Buscar en carpeta…">
+                <span class="chip">Todos los tipos</span>
+              </div>
+
+              <div class="of-row">
+                <span class="of-ic2" style="background:#dc2626">PDF</span>
+                <span class="of-txt"><span class="of-who">Factura 0123.pdf</span> <span class="of-subj">hace 4 min · 184 KB · Drive/Finanzas/Proveedores</span></span>
+                <span class="chip blue">de hilo</span>
+                <span class="of-hact"><button class="btn sm">👁 Vista previa</button></span>
+              </div>
+              <div class="of-row">
+                <span class="of-ic2" style="background:#dc2626">PDF</span>
+                <span class="of-txt"><span class="of-who">Acuse de recibo.pdf</span> <span class="of-subj">hace 4 min · 42 KB · Drive/Finanzas/Proveedores</span></span>
+                <span class="chip blue">de hilo</span>
+                <span class="of-hact"><button class="btn sm">👁 Vista previa</button></span>
+              </div>
+              <div class="of-row">
+                <span class="of-ic2" style="background:#dc2626">PDF</span>
+                <span class="of-txt"><span class="of-who">Cotizacion gallinaza.pdf</span> <span class="of-subj">hace 3 d · 96 KB · Drive/Finanzas/Proveedores</span></span>
+                <span class="chip blue">de hilo</span>
+                <span class="of-hact"><button class="btn sm">👁 Vista previa</button></span>
+              </div>
+              <div class="of-row">
+                <span class="of-ic2" style="background:#16a34a">XLS</span>
+                <span class="of-txt"><span class="of-who">Orden de precios Naco.xlsx</span> <span class="of-subj">hace 5 d · 41 KB · Drive/Finanzas/Proveedores</span></span>
+                <span class="chip amber">huérfano</span>
+                <span class="of-hact"><button class="btn sm">🔗 Vincular</button></span>
+              </div>
+              <div class="of-row">
+                <span class="of-ic2" style="background:#7c3aed">IMG</span>
+                <span class="of-txt"><span class="of-who">Foto etiqueta recibida.jpg</span> <span class="of-subj">hace 6 d · 1.2 MB · Drive/Finanzas/Hacienda</span></span>
+                <span class="chip amber">huérfano</span>
+                <span class="of-hact"><button class="btn sm">🔗 Vincular</button></span>
+              </div>
+
+              <div class="of-meta">
+                <span>Ubicación: <b>Drive/Finanzas/Proveedores</b></span>
+                <span>Vínculo: <b style="color:var(--brand)">mixto (algunos huérfanos)</b></span>
+                <span style="margin-left:auto">2 sin hilo</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= comparación ================= -->
+  <div class="cmp">
+    <h2>Qué ve cada rol ahora</h2>
+    <table class="c">
+      <thead><tr><th>Rol</th><th>¿Entra a Office?</th><th>Espacios que ve</th><th>Puede abrir las reglas</th></tr></thead>
+      <tbody>
+        <tr><td>Admin</td><td class="yes">Sí</td><td>Correo · Documentos</td><td>Sí, en <b>Admin › Vinculaciones</b></td></tr>
+        <tr><td>Socio</td><td class="yes">Sí</td><td>Correo · Documentos</td><td class="no">No — 403</td></tr>
+        <tr><td>Comercial</td><td class="yes">Sí</td><td>Correo · Documentos</td><td class="no">No — 403</td></tr>
+      </tbody>
+    </table>
+
+    <div class="notes">
+      <b>Lo que la mudanza arregla, más allá de la ubicación</b>
+      <ul>
+        <li><b>La fila de espacios ya no necesita filtro por rol.</b> Antes era el único de
+            Office con <code>roles: ['Admin']</code>, y ese filtro existía solo para compensar que
+            <code>/api/office/vinculaciones</code> responde 403 a un Socio. Sin Vinculaciones, los
+            tres roles ven los mismos dos espacios y ninguno abre una pantalla que le va a fallar.</li>
+        <li><b>Los dos espacios se ven iguales para todos.</b> El caso raro era un Comercial con
+            Admin como segundo rol: la fila le enseñaba el tab y el backend le devolvía 403, porque
+            <code>requireOfficeAdmin</code> mira solo el rol principal. Ese desajuste ya no tiene
+            dónde aparecer.</li>
+        <li><b>El backend no se movió.</b> <code>/api/office/vinculaciones</code> sigue igual, detrás
+            de <code>requireOfficeAdmin</code>. El prefijo <code>/api/office</code> describe el
+            dominio —vinculación de correo con Drive—, no dónde se administra la pantalla.</li>
+        <li><b>Cargar Correo y Documentos hace los mismos cinco requests.</b> Comparten bandeja, así
+            que cambiar de espacio no vuelve a pedir nada.</li>
+      </ul>
+    </div>
+
+    <div class="notes" style="border-left-color:var(--amber)">
+      <b>Lo que este boceto no demuestra</b>
+      <ul>
+        <li>Es una simulación estática: no llama a la API y los botones no hacen nada.</li>
+        <li>Los datos son los del <code>sembrarSiEstaVacio</code> de <code>Office.tsx</code>, con
+            marcas de tiempo relativas calculadas para que se lea bien. En la app real salen del
+            servidor.</li>
+        <li>Para ver el contraste contra la versión anterior, el diff está en
+            <code>src/nav/modulos.ts</code>, <code>src/components/Office.tsx</code> y
+            <code>src/components/Admin.tsx</code>.</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Solo la fila de espacios: alterna los dos paneles. Nada más es interactivo.
+  const botones = document.querySelectorAll('.espacios button');
+  const paneles = { correo: document.getElementById('v-correo'), documentos: document.getElementById('v-documentos') };
+
+  function mostrar(id, ocultarAviso) {
+    botones.forEach(b => b.classList.toggle('on', b.dataset.espacio === id));
+    Object.entries(paneles).forEach(([k, el]) => { el.hidden = k !== id; });
+    if (ocultarAviso) document.getElementById('changed').classList.remove('show');
+  }
+
+  botones.forEach(b => b.addEventListener('click', () => mostrar(b.dataset.espacio, true)));
+  mostrar('correo', false);
+  document.getElementById('changed').classList.add('show');
+</script>
+</body>
+</html>

@@ -220,15 +220,15 @@ async function main() {
     args: ['u-enc', 'Encargado', 'encargado@test.com', 'Encargado'],
   });
 
-  for (const [slug, nombre, precio, cat] of [
-    ['p-grande', 'Huevos - Grande', 16000, 'Huevos'],
-    ['p-chico', 'Huevos - Chico', 13500, 'Huevos'],
-    ['p-alimento', 'Alimento balanceado', 9000, 'Alimento'],
+  for (const [slug, nombre, precio, cat, kg] of [
+    ['p-grande', 'Huevos - Grande', 16000, 'Huevos', 1.9],
+    ['p-chico', 'Huevos - Chico', 13500, 'Huevos', 1.35],
+    ['p-alimento', 'Alimento balanceado', 9000, 'Alimento', 25],
   ] as const) {
     await client.execute({
-      sql: `INSERT INTO productos_catalogo (id, nombre, descripcion, unidad, precio_base, categoria, estado, fecha_creacion)
-            VALUES (?, ?, ?, ?, ?, ?, 'Activo', ?)`,
-      args: [slug, nombre, nombre, 'cartones', precio, cat, new Date().toISOString()],
+      sql: `INSERT INTO productos_catalogo (id, nombre, descripcion, unidad, kg_por_carton, precio_base, categoria, estado, fecha_creacion)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'Activo', ?)`,
+      args: [slug, nombre, nombre, 'cartones', kg, precio, cat, new Date().toISOString()],
     });
   }
 

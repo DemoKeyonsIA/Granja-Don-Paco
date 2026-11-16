@@ -18,13 +18,16 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  AlertTriangle, CheckCircle2, Clock, DollarSign, Egg, FileText,
-  Heart, Package, TrendingDown, TrendingUp, Truck, Users, Wallet,
+  AlertTriangle, CheckCircle2, Clock, DollarSign, FileText,
+  TrendingDown, TrendingUp, Wallet,
 } from 'lucide-react';
 import type { User } from '../types';
 import { fmtCRC, type NodoCiclo, type RangoPeriodo } from '../lib/finanzas';
 import { BloqueCarga } from './Spinner';
 import { TarjetaKpi } from './TarjetaKpi';
+import SaludDelNegocio, { operativoDe, type SaludNegocio } from './SaludDelNegocio';
+import { sessionHeaders } from '../lib/session';
+import ConciliacionDepositos from './ConciliacionDepositos';
 
 type Aging = { alDia: number; d1_30: number; d31_60: number; d60: number };
 
@@ -49,6 +52,19 @@ type ResumenFinanzas = {
   cicloDelDinero: NodoCiclo[];
   aging: Aging;
   documentosEmitidos: number;
+  conciliacionCaja?: {
+    cierres: number;
+    pendientesConteo: number;
+    diferenciasPendientes: number;
+    cierresCuadrados: number;
+    depositosPendientes: number;
+    depositosConciliados: number;
+    montoDepositado: number;
+    gastosEfectivo: number;
+    efectivoEsperado: number;
+    efectivoContado: number;
+    diferenciaNeta: number;
+  };
 };
 
 /** Respuesta de `/api/dashboard/enterprise`, tal cual la devuelve el server. */
@@ -69,56 +85,6 @@ type DashboardEnterprise = {
   desperdiciosHoy: number;
   impactoDesperdicioHoy: number;
   alertas: { tipo: string; detalle: string; nivel: string }[];
-};
-
-/**
- * Lo que se conserva de `DashboardEnterprise`: producción, bodega y logística.
- *
- * Se dejan fuera a propósito los cinco campos de dinero que el endpoint también
- * devuelve (`ingresosHoy`, `ingresosCobradosHoy`, `gastosHoy`, `utilidadNeta`,
- * `cuentasPorCobrar`) y `facturasEmitidas`. Esos los calcula mejor
- * `/api/finanzas/resumen`, y copiarlos acá volvería a abrir la brecha que la
- * Fase 3 cerró: el mismo número en dos pantallas con dos códigos. También
- * explica que `desperdiciosHoy` se renombre a 7 días: el campo se llama así
- * desde antes de que la ventana fuera de 7 días.
- */
-type SaludNegocio = {
-  cartonesProducidos: number;
-  stockBodegaCentral: number;
-  totalAvesVivas: number;
-  rutasActivas: number;
-  clientesActivos: number;
-  desperdicios7d: number;
-  impactoDesperdicio7d: number;
-};
-
-const OPERATIVO_NUMERICO = [
-  'cartonesProducidos', 'stockBodegaCentral', 'totalAvesVivas', 'rutasActivas',
-  'clientesActivos', 'desperdiciosHoy', 'impactoDesperdicioHoy',
-] as const;
-
-/**
- * Traduce la respuesta del endpoint al bloque "Salud del negocio".
- *
- * Devuelve `null` si falta cualquiera de los siete números, y no los rellena con
- * ceros: pintar "0 cartones" porque el endpoint vino incompleto es la misma
- * mentira que pintar "todo en cero" cuando el resumen da 404. Con `null` el
- * bloque se oculta y el resto de Resumen —que sí tiene los números que deciden—
- * sigue en pie.
- */
-const operativoDe = (d: Partial<DashboardEnterprise>): SaludNegocio | null => {
-  if (OPERATIVO_NUMERICO.some(k => typeof d[k] !== 'number' || !Number.isFinite(d[k]))) {
-    return null;
-  }
-  return {
-    cartonesProducidos: d.cartonesProducidos as number,
-    stockBodegaCentral: d.stockBodegaCentral as number,
-    totalAvesVivas: d.totalAvesVivas as number,
-    rutasActivas: d.rutasActivas as number,
-    clientesActivos: d.clientesActivos as number,
-    desperdicios7d: d.desperdiciosHoy as number,
-    impactoDesperdicio7d: d.impactoDesperdicioHoy as number,
-  };
 };
 
 /** Un aviso de la bandeja. `nivel` decide el color, no el orden. */
@@ -294,7 +260,7 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/finanzas/resumen');
+      const res = await fetch('/api/finanzas/resumen', { headers: sessionHeaders(currentUser.id) });
       if (!res.ok) {
         // Un 404 sin leer se renderiza como "todo en cero", que es peor que un
         // error: hace creer que el mes cerró sin ventas ni gastos.
@@ -320,10 +286,10 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
    */
   const cargarOperacion = useCallback(async () => {
     try {
-      const res = await fetch('/api/dashboard/enterprise');
+      const res = await fetch('/api/dashboard/enterprise', { headers: sessionHeaders(currentUser.id) });
       if (!res.ok) return;
       const datos: Partial<DashboardEnterprise> = await res.json();
-      setSalud(operativoDe(datos));
+      setSalud(operativoDe(datos as Record<string, unknown>));
       setAlertasOperacion(datos.alertas ?? []);
     } catch {
       // Red caída o JSON inválido: se deja el bloque fuera, sin rastro de error.
@@ -411,17 +377,35 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
           </span>
         </div>
         <ol className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3" data-testid="finanzas-ciclo">
-          {(resumen.cicloDelDinero ?? []).map((nodo, i) => (
+          {(resumen.cicloDelDinero ?? []).map((nodo) => (
             <li key={nodo.etapa} className="relative rounded-xl bg-neutral-50 dark:bg-neutral-900/60 p-3">
-              <span className="absolute -top-2 -left-2 flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black text-white" style={{ background: 'var(--brand-primary)' }}>
-                {i + 1}
-              </span>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 pl-4">{nodo.etapa.replace(/_/g, ' ')}</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">{nodo.etiqueta}</p>
               <p className="text-base font-black text-neutral-900 dark:text-white mt-1">{fmtCRC(nodo.monto)}</p>
             </li>
           ))}
         </ol>
       </section>
+
+      <section className="rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5" data-testid="finanzas-conciliacion-caja">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="font-bold text-neutral-900 dark:text-white">Conciliación de caja de ruta</h3>
+            <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">Conteo declarado por vendedor comparado con efectivo esperado por tiquetes.</p>
+          </div>
+          <span className={`rounded-full px-3 py-1 text-xs font-bold ${(resumen.conciliacionCaja?.pendientesConteo || resumen.conciliacionCaja?.diferenciasPendientes || resumen.conciliacionCaja?.depositosPendientes) ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+            {(resumen.conciliacionCaja?.pendientesConteo || resumen.conciliacionCaja?.diferenciasPendientes || resumen.conciliacionCaja?.depositosPendientes) ? `${(resumen.conciliacionCaja?.pendientesConteo || 0) + (resumen.conciliacionCaja?.diferenciasPendientes || 0) + (resumen.conciliacionCaja?.depositosPendientes || 0)} por revisar` : 'Sin diferencias pendientes'}
+          </span>
+        </div>
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
+          <div><p className="text-xs text-neutral-500">Cierres</p><p className="font-extrabold text-neutral-900 dark:text-white">{resumen.conciliacionCaja?.cierres ?? 0}</p></div>
+          <div><p className="text-xs text-neutral-500">Gastos en efectivo de ruta</p><p className="font-extrabold text-neutral-900 dark:text-white">{fmtCRC(resumen.conciliacionCaja?.gastosEfectivo ?? 0)}</p></div>
+          <div><p className="text-xs text-neutral-500">Efectivo esperado</p><p className="font-extrabold text-neutral-900 dark:text-white">{fmtCRC(resumen.conciliacionCaja?.efectivoEsperado ?? 0)}</p></div>
+          <div><p className="text-xs text-neutral-500">Efectivo contado</p><p className="font-extrabold text-neutral-900 dark:text-white">{fmtCRC(resumen.conciliacionCaja?.efectivoContado ?? 0)}</p></div>
+          <div><p className="text-xs text-neutral-500">Diferencia neta</p><p className="font-extrabold text-neutral-900 dark:text-white">{fmtCRC(resumen.conciliacionCaja?.diferenciaNeta ?? 0)}</p></div>
+          <div><p className="text-xs text-neutral-500">Depósitos conciliados</p><p className="font-extrabold text-neutral-900 dark:text-white">{resumen.conciliacionCaja?.depositosConciliados ?? 0} · {fmtCRC(resumen.conciliacionCaja?.montoDepositado ?? 0)}</p></div>
+        </div>
+      </section>
+      <ConciliacionDepositos currentUser={currentUser} />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* 3. Requiere atención */}
@@ -472,40 +456,7 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
               Producción, bodega y rutas de hoy.
             </p>
             {salud ? (
-              <ul className="grid grid-cols-2 gap-3">
-                {[
-                  { label: 'Cartones', valor: salud.cartonesProducidos, sufijo: 'hoy', icono: Package },
-                  { label: 'Aves vivas', valor: salud.totalAvesVivas, sufijo: 'en producción', icono: Heart },
-                  { label: 'Huevos', valor: salud.stockBodegaCentral, sufijo: 'en bodega central', icono: Egg },
-                  { label: 'Rutas', valor: salud.rutasActivas, sufijo: 'activas', icono: Truck },
-                  { label: 'Clientes', valor: salud.clientesActivos, sufijo: 'activos', icono: Users },
-                  {
-                    label: 'Desperdicios',
-                    valor: salud.desperdicios7d,
-                    sufijo: 'en 7 días',
-                    icono: AlertTriangle,
-                    monto: salud.impactoDesperdicio7d,
-                  },
-                ].map(k => (
-                  <li key={k.label} className="rounded-xl bg-neutral-50 dark:bg-neutral-900/60 p-3">
-                    <div className="flex items-center gap-1.5">
-                      <k.icono className="w-3.5 h-3.5 text-neutral-500 dark:text-neutral-400" />
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                        {k.label}
-                      </span>
-                    </div>
-                    <p className="text-xl font-black text-neutral-900 dark:text-white mt-1">
-                      {k.valor.toLocaleString('es-CR')}
-                    </p>
-                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{k.sufijo}</p>
-                    {k.monto != null && k.monto > 0 && (
-                      <p className="text-[11px] font-bold text-red-600 dark:text-red-400 mt-1">
-                        {fmtCRC(k.monto)} de impacto
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <SaludDelNegocio salud={salud} variante="finanzas" />
             ) : (
               <p className="text-xs text-neutral-500 dark:text-neutral-400 py-4" data-testid="finanzas-salud-negocio-no-disponible">
                 No se pudo cargar la operación de hoy. Las cifras de arriba siguen
