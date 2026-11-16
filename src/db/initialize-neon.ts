@@ -196,6 +196,19 @@ export async function initializeNeonDatabase(db: any) {
     });
   }
 
+  // Rehidrata los nombres en guías demo ya existentes (por ejemplo, si una
+  // versión previa las creó con solo el ID y el orden de cada parada).
+  for (const guiaDemo of guiasDemoVendedor) {
+    await db.update(schema.guias_despacho).set({
+      rutaOrdenJson: JSON.stringify(guiaDemo.clientes.map((clienteId, index) => ({
+        clienteId,
+        orden: index + 1,
+        nombre: clientesDemo.find((cliente: any) => cliente.id === clienteId)?.nombre || clienteId,
+      }))),
+      clientesIds: JSON.stringify(guiaDemo.clientes),
+    }).where(eq(schema.guias_despacho.id, guiaDemo.id));
+  }
+
   // Keep the initial administrator active for the demo after an interrupted seed.
   await db.update(schema.users).set({ activo: true }).where(eq(schema.users.email, 'admin@granja.com'));
 }
