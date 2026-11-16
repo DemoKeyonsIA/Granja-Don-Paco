@@ -882,7 +882,7 @@ svg[style*="color: var(--brand-primary)"] { color: var(--text-link) !important; 
   .route-pos-price-warning, .route-pos-total { grid-column: 1 / -1; }
 }
 @container route-pos (max-width: 760px) {
-  .route-pos-root { padding-bottom: 11rem !important; }
+  .route-pos-root.route-pos-has-action { padding-bottom: 11rem !important; }
   .route-pos-root .route-pos-mobile-action { display: block; }
 }
 

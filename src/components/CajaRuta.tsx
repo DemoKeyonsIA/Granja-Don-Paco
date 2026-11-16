@@ -281,7 +281,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   };
 
   return (
-    <div className="route-pos-root space-y-4 pb-4">
+    <div className={`route-pos-root space-y-4 pb-4${guia && !cajaCerrada && clienteId && producto ? ' route-pos-has-action' : ''}`}>
       {/* Cabecera: guía activa */}
       <div className="min-w-0 rounded-2xl p-4 sm:p-5 space-y-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
         <div className="flex items-start justify-between gap-3">
@@ -686,7 +686,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
         </div>
       )}
 
-      {guia && !cajaCerrada && (
+      {guia && !cajaCerrada && clienteId && producto && (
         <AccionFijaMovil etiquetaAccesible="Registrar venta" className="route-pos-mobile-action">
           <div className="mx-auto flex max-w-3xl items-center gap-3">
             <div className="min-w-0 flex-1">
