@@ -74,22 +74,22 @@ export async function initializeNeonDatabase(db: any) {
   await db.insert(schema.camiones).values([
     { id: 'DEMO-TRUCK-001', nombre: 'Camión Ruta Occidente', placa: 'DEMO-001', camioneroId: '3', ruta_defecto: 'Ruta Occidente', capacidad_cartones: 350, estado: 'Activo' },
     { id: 'DEMO-TRUCK-002', nombre: 'Camión Ruta Norte', placa: 'DEMO-002', camioneroId: '9', ruta_defecto: 'Ruta Norte', capacidad_cartones: 300, estado: 'Activo' },
-    { id: 'DEMO-TRUCK-003', nombre: 'Camión Ruta Palmares', placa: 'DEMO-003', camioneroId: '3', ruta_defecto: 'Ruta Palmares', capacidad_cartones: 200, estado: 'Activo' },
+    { id: 'DEMO-TRUCK-003', nombre: 'Camión Ruta Palmares', placa: 'DEMO-003', camioneroId: '9', ruta_defecto: 'Ruta Palmares', capacidad_cartones: 200, estado: 'Activo' },
   ]).onConflictDoNothing();
   await db.insert(schema.rutas).values([
     { id: 'DEMO-ROUTE-001', nombre: 'Ruta Occidente', vendedor_asignado: '3', camion_id: 'DEMO-TRUCK-001', cliente_ids: 'DEMO-CLI-001,DEMO-CLI-002,DEMO-CLI-005', dias_frecuencia: 'Lunes,Miércoles,Viernes', kilometraje_aprox: 68, estado: 'Activa', capacidad_max_cartones: 350 },
     { id: 'DEMO-ROUTE-002', nombre: 'Ruta Norte', vendedor_asignado: '9', camion_id: 'DEMO-TRUCK-002', cliente_ids: 'DEMO-CLI-004', dias_frecuencia: 'Martes,Jueves', kilometraje_aprox: 92, estado: 'Activa', capacidad_max_cartones: 300 },
-    { id: 'DEMO-ROUTE-003', nombre: 'Ruta Palmares', vendedor_asignado: '3', camion_id: 'DEMO-TRUCK-003', cliente_ids: 'DEMO-CLI-003', dias_frecuencia: 'Lunes a Sábado', kilometraje_aprox: 34, estado: 'Activa', capacidad_max_cartones: 200 },
+    { id: 'DEMO-ROUTE-003', nombre: 'Ruta Palmares', vendedor_asignado: '9', camion_id: 'DEMO-TRUCK-003', cliente_ids: 'DEMO-CLI-003', dias_frecuencia: 'Lunes a Sábado', kilometraje_aprox: 34, estado: 'Activa', capacidad_max_cartones: 200 },
   ]).onConflictDoNothing();
 
   // Asegura que las asignaciones demo sigan siendo coherentes aunque la ruta ya
   // existiera antes de este seed: el acceso de vendedor se filtra por camionero.
   await db.update(schema.camiones).set({ camioneroId: '3', ruta_defecto: 'Ruta Occidente' }).where(eq(schema.camiones.id, 'DEMO-TRUCK-001'));
   await db.update(schema.camiones).set({ camioneroId: '9', ruta_defecto: 'Ruta Norte' }).where(eq(schema.camiones.id, 'DEMO-TRUCK-002'));
-  await db.update(schema.camiones).set({ camioneroId: '3', ruta_defecto: 'Ruta Palmares' }).where(eq(schema.camiones.id, 'DEMO-TRUCK-003'));
+  await db.update(schema.camiones).set({ camioneroId: '9', ruta_defecto: 'Ruta Palmares' }).where(eq(schema.camiones.id, 'DEMO-TRUCK-003'));
   await db.update(schema.rutas).set({ vendedor_asignado: '3', camion_id: 'DEMO-TRUCK-001', cliente_ids: 'DEMO-CLI-001,DEMO-CLI-002,DEMO-CLI-005' }).where(eq(schema.rutas.id, 'DEMO-ROUTE-001'));
   await db.update(schema.rutas).set({ vendedor_asignado: '9', camion_id: 'DEMO-TRUCK-002', cliente_ids: 'DEMO-CLI-004' }).where(eq(schema.rutas.id, 'DEMO-ROUTE-002'));
-  await db.update(schema.rutas).set({ vendedor_asignado: '3', camion_id: 'DEMO-TRUCK-003', cliente_ids: 'DEMO-CLI-003' }).where(eq(schema.rutas.id, 'DEMO-ROUTE-003'));
+  await db.update(schema.rutas).set({ vendedor_asignado: '9', camion_id: 'DEMO-TRUCK-003', cliente_ids: 'DEMO-CLI-003' }).where(eq(schema.rutas.id, 'DEMO-ROUTE-003'));
 
   // Precios autorizados para que el vendedor pueda completar una venta demo.
   await db.insert(schema.listas_precios).values({
@@ -118,7 +118,7 @@ export async function initializeNeonDatabase(db: any) {
   const guiasDemoVendedor = [
     {
       id: 'DEMO-GUIA-VENDEDOR-OCCIDENTE', consecutivo: 'GD-DEMO-OCCIDENTE-001', camionId: 'DEMO-TRUCK-001', rutaId: 'DEMO-ROUTE-001',
-      vendedorId: '3', estado: 'Cargada', clientes: ['DEMO-CLI-001', 'DEMO-CLI-002', 'DEMO-CLI-005'],
+      vendedorId: '3', responsableTransporte: 'Comercial Ruta 1', estado: 'Cargada', clientes: ['DEMO-CLI-001', 'DEMO-CLI-002', 'DEMO-CLI-005'],
       cargas: [
         { etiquetaId: 'DEMO-ETQ-RUTA-OCC-GRANDE-01', codigo: 'DEMO-RUTA-OCC-GRANDE-01', producto: 'Huevos Grandes', kg: 20, lote: 'DEMO-OCC-GRANDE-20261116', caduca: '2026-12-14' },
         { etiquetaId: 'DEMO-ETQ-RUTA-OCC-MEDIANO-01', codigo: 'DEMO-RUTA-OCC-MEDIANO-01', producto: 'Huevos Medianos', kg: 12, lote: 'DEMO-OCC-MEDIANO-20261116', caduca: '2026-12-13' },
@@ -126,7 +126,7 @@ export async function initializeNeonDatabase(db: any) {
     },
     {
       id: 'DEMO-GUIA-VENDEDOR-PALMARES', consecutivo: 'GD-DEMO-PALMARES-001', camionId: 'DEMO-TRUCK-003', rutaId: 'DEMO-ROUTE-003',
-      vendedorId: '3', estado: 'EnRuta', clientes: ['DEMO-CLI-003'],
+      vendedorId: '9', responsableTransporte: 'Comercial Reparto Demo', estado: 'EnRuta', clientes: ['DEMO-CLI-003'],
       cargas: [
         { etiquetaId: 'DEMO-ETQ-RUTA-PAL-GRANDE-01', codigo: 'DEMO-RUTA-PAL-GRANDE-01', producto: 'Huevos Grandes', kg: 8, lote: 'DEMO-PAL-GRANDE-20261116', caduca: '2026-12-14' },
         { etiquetaId: 'DEMO-ETQ-RUTA-PAL-MEDIANO-01', codigo: 'DEMO-RUTA-PAL-MEDIANO-01', producto: 'Huevos Medianos', kg: 8, lote: 'DEMO-PAL-MEDIANO-20261116', caduca: '2026-12-13' },
@@ -141,7 +141,7 @@ export async function initializeNeonDatabase(db: any) {
       const creada = await tx.insert(schema.guias_despacho).values({
         id: guiaDemo.id, consecutivo: guiaDemo.consecutivo, camionId: guiaDemo.camionId, rutaId: guiaDemo.rutaId,
         fecha: ahora, horaCarga: ahora.slice(11, 19), responsableCarga: 'Bodeguero demo',
-        responsableTransporte: 'Comercial Ruta 1', vendedorId: guiaDemo.vendedorId,
+        responsableTransporte: guiaDemo.responsableTransporte, vendedorId: guiaDemo.vendedorId,
         clientesIds: JSON.stringify(guiaDemo.clientes), totalCartones: guiaDemo.cargas.reduce((s, c) => s + c.kg, 0),
         totalKg: guiaDemo.cargas.reduce((s, c) => s + c.kg, 0), pesoSalida: guiaDemo.cargas.reduce((s, c) => s + c.kg, 0),
         estado: guiaDemo.estado, recibidoEn: guiaDemo.estado === 'EnRuta' ? ahora : null,
@@ -200,6 +200,8 @@ export async function initializeNeonDatabase(db: any) {
   // versión previa las creó con solo el ID y el orden de cada parada).
   for (const guiaDemo of guiasDemoVendedor) {
     await db.update(schema.guias_despacho).set({
+      vendedorId: guiaDemo.vendedorId,
+      responsableTransporte: guiaDemo.responsableTransporte,
       rutaOrdenJson: JSON.stringify(guiaDemo.clientes.map((clienteId, index) => ({
         clienteId,
         orden: index + 1,

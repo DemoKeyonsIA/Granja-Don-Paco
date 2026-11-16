@@ -848,6 +848,42 @@ svg[style*="color: var(--brand-primary)"] { color: var(--text-link) !important; 
 .route-ticket-signature i { display: block; width: 250px; height: 1px; margin-bottom: 5px; background: #7c8798; }
 .route-ticket-signature small { color: #65738a; }
 
+/* La caja de ruta responde al ancho real de su panel (también con sidebar). */
+.route-pos-root { min-width: 0; container: route-pos / inline-size; }
+.route-pos-header-layout { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.route-pos-assignment { min-width: 0; }
+.route-pos-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.route-pos-status { flex: none; max-width: 45%; overflow: hidden; padding: 5px 9px; border-radius: 999px; background: var(--status-success-soft); color: var(--status-success); font-size: 10px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.route-pos-metrics { display: grid; min-width: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.route-pos-metric { overflow: hidden; padding: 9px !important; }
+.route-pos-metric p { overflow-wrap: anywhere; }
+.route-pos-layout { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.route-pos-main, .route-pos-sidebar { min-width: 0; }
+.route-pos-main { container: route-pos-main / inline-size; }
+.route-pos-choice-grid { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.route-pos-choice-grid > button { min-width: 0; overflow-wrap: anywhere; }
+.route-pos-sale-fields { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.route-pos-price-warning, .route-pos-total { min-width: 0; }
+@container route-pos (min-width: 980px) {
+  .route-pos-header-layout { grid-template-columns: minmax(220px, .9fr) minmax(0, 1.1fr); align-items: center; }
+}
+@container route-pos (min-width: 1080px) {
+  .route-pos-layout { grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr); }
+}
+@container route-pos-main (min-width: 720px) {
+  .route-pos-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .route-pos-sale-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .route-pos-price-warning, .route-pos-total { grid-column: 1 / -1; }
+}
+@container route-pos-main (min-width: 1020px) {
+  .route-pos-choice-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .route-pos-sale-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .route-pos-price-warning, .route-pos-total { grid-column: 1 / -1; }
+}
+@container route-pos (max-width: 760px) {
+  .route-pos-root .route-pos-mobile-action { display: block; }
+}
+
 @media (max-width: 640px) {
   .invoice-paper { padding: 22px 16px; }
   .invoice-paper-topline { margin: -22px -16px 16px; }

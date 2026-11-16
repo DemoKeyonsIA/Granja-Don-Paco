@@ -18,6 +18,8 @@ const fmtHora = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hou
 const fmtFechaHora = (iso: string) => new Date(iso).toLocaleString('es-CR', { dateStyle: 'medium', timeStyle: 'short' });
 
 export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaRutaProps) {
+  const rolesUsuario = currentUser.roles?.length ? currentUser.roles : [currentUser.role];
+  const puedeElegirGuia = rolesUsuario.some((role) => role === 'Admin' || role === 'Despachador');
   const [guias, setGuias] = useState<any[]>([]);
   const [camiones, setCamiones] = useState<any[]>([]);
   const [guiaId, setGuiaId] = useState<string>(initialGuideId || '');
@@ -61,16 +63,19 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
       setGuias(g);
       setCamiones(c);
 
-      // Auto-selecciona la guía del camión del vendedor (o la primera activa)
+      // El vendedor usa la guía que corresponde a su camión asignado. Solo
+      // Administración y Despacho pueden cambiar la guía desde esta pantalla.
       if (initialGuideId && g.some((gg: any) => gg.id === initialGuideId)) {
         setGuiaId(initialGuideId);
       } else if (g.length > 0) {
-          const camionVendedor = c.find((cam: any) => cam.camioneroId === currentUser.id || cam.camionero_id === currentUser.id || cam.vendedor_id === currentUser.id);
-        const elegida = camionVendedor ? g.find((gg: any) => gg.camionId === camionVendedor.id) : g[0];
+        const camionesAsignados = c.filter((cam: any) => cam.camioneroId === currentUser.id || cam.camionero_id === currentUser.id || cam.vendedor_id === currentUser.id);
+        const guiasVisibles = puedeElegirGuia ? g : g.filter((gg: any) => camionesAsignados.some((cam: any) => cam.id === gg.camionId));
+        const prioridadEstado: Record<string, number> = { EnRuta: 0, Cargada: 1, Preparada: 2 };
+        const elegida = guiasVisibles.slice().sort((a: any, b: any) => (prioridadEstado[a.estado] ?? 3) - (prioridadEstado[b.estado] ?? 3))[0];
         if (elegida) setGuiaId(elegida.id);
       }
     } catch { toast.error('Error al cargar datos de la caja.'); }
-  }, [currentUser.id, initialGuideId]);
+  }, [currentUser.id, initialGuideId, puedeElegirGuia]);
 
   const loadGuia = useCallback(async (id: string) => {
     if (!id) { setGuia(null); return; }
@@ -245,6 +250,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
     .reduce((s: number, i: any) => s + Number(i.cantidad || 0), 0);
   const clientesRuta = (guia?.rutaOrden || []).length > 0 ? guia.rutaOrden : (guia?.clientesRuta || []);
   const clienteSeleccionado = clientesRuta.find((c: any) => c.clienteId === clienteId);
+  const camionSeleccionado = camiones.find((cam: any) => cam.id === guia?.camionId);
+  const guiaListado = guias.find((g: any) => g.id === guia?.id);
+  const nombreRutaAsignada = guiaListado?.rutaNombre || camionSeleccionado?.ruta_defecto || guia?.rutaNombre || 'Ruta asignada';
+  const estadoRutaLabel = guia?.estado === 'EnRuta' ? 'En ruta' : guia?.estado === 'Cargada' ? 'Lista para iniciar' : guia?.estadoLogico || guia?.estado;
   const ventaDeshabilitada = loading || cajaCerrada || cargandoPrecio || !clienteId || !producto || !politicaPrecio?.precio || Boolean(politicaPrecio?.error) || precioVenta < precioMinimo || precioVenta > precioMaximo || cantidad <= 0 || cantidad > stockProducto || descuento < 0 || descuento > descuentoPermitido;
   const previsualizarTiquete = (muestraGeneral = false) => {
     if (!muestraGeneral && (!clienteId || !producto || !Number.isFinite(cantidad) || cantidad <= 0)) return toast.error('Seleccione cliente, producto y kilos para ver la muestra.');
@@ -272,7 +281,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   };
 
   return (
-    <div className="space-y-4 pb-28 lg:pb-4">
+    <div className="route-pos-root space-y-4 pb-28 lg:pb-4">
       {/* Cabecera: guía activa */}
       <div className="min-w-0 rounded-2xl p-4 sm:p-5 space-y-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
         <div className="flex items-start justify-between gap-3">
@@ -283,45 +292,54 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
           {onClose && <button type="button" onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Cerrar registro de venta"><X className="h-5 w-5" /></button>}
         </div>
         {guia && <button type="button" onClick={() => setRegistrarGastoAbierto(true)} disabled={!guiaId || cajaCerrada} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold disabled:opacity-50 sm:w-auto" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)', border: '1px solid var(--brand-primary-soft)' }}><Banknote className="h-5 w-5" /> Registrar gasto de esta ruta</button>}
-        <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(240px,1.2fr)_minmax(0,2fr)] xl:items-end">
-        <div className="min-w-0">
-          <label htmlFor={initialGuideId ? undefined : 'guia-activa'} className="text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>Ruta y camión</label>
-          {initialGuideId ? <div className="mt-1 flex min-h-12 items-center rounded-xl px-3 py-2 text-sm font-semibold" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}>{guia ? `${guia.consecutivo} · ${guia.camionNombre}` : 'Cargando guía…'}</div> : <select
-            id="guia-activa"
-            value={guiaId}
-            onChange={(e) => setGuiaId(e.target.value)}
-            className="mt-1 min-h-12 w-full rounded-xl px-3 py-2 text-base font-semibold focus:outline-none"
-            style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}
-          >
-            <option value="">Seleccione guía…</option>
-            {guias.map((g: any) => (
-              <option key={g.id} value={g.id}>
-                {g.consecutivo} — {g.camionNombre} ({g.estado})
-              </option>
-            ))}
-          </select>}
-        </div>
-        {guia && (
-          <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
-            <div className="rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
-              <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Camión · {guia.consecutivo}</p>
-              <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{guia.camionNombre}</p>
+        <div className="route-pos-header-layout">
+          <div className="route-pos-assignment">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+                {puedeElegirGuia ? 'Ruta de trabajo' : 'Ruta asignada por Administración'}
+              </p>
+              <div className="route-pos-title-row">
+                <p className="mt-1 min-w-0 truncate text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>
+                  {guia ? nombreRutaAsignada : 'Cargando ruta asignada…'}
+                </p>
+                {guia && <span className="route-pos-status">{estadoRutaLabel}</span>}
+              </div>
+              <p className="mt-1 break-words text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                {guia ? `${guia.consecutivo} · ${guia.camionNombre}` : 'El administrador debe asignar un camión y una guía activa.'}
+              </p>
             </div>
-            <div className="rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
-              <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Cargado</p>
-              <p className="text-xl font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{Number(guia.totalKg ?? guia.totalCartones).toFixed(2)} {guia.totalKg != null ? 'kg' : 'ct'}</p>
-              {Number(guia.colchonKg ?? guia.colchonCartones) > 0 && <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Extra de ruta: {Number(guia.colchonKg ?? guia.colchonCartones).toFixed(2)} {guia.totalKg != null ? 'kg' : 'ct'}</p>}
-            </div>
-            <div className="rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
-              <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Vendido</p>
-              <p className="text-xl font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{vendidoKg.toFixed(2)} kg</p>
-            </div>
-            <div className="rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
-              <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Disponible en camión</p>
-              <p className="text-xl font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{inventarioKgCamion.toFixed(2)} kg</p>
-            </div>
+            {guia && puedeElegirGuia && !initialGuideId && (
+              <label className="mt-3 block min-w-0 text-xs font-bold" htmlFor="guia-activa" style={{ color: 'var(--text-secondary)' }}>
+                Cambiar guía
+                <select
+                  id="guia-activa"
+                  value={guiaId}
+                  onChange={(e) => setGuiaId(e.target.value)}
+                  className="mt-1 min-h-11 w-full min-w-0 rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none"
+                  style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}
+                >
+                  {guias.map((g: any) => <option key={g.id} value={g.id}>{g.consecutivo} · {g.camionNombre} ({g.estado})</option>)}
+                </select>
+              </label>
+            )}
           </div>
-        )}
+          {guia && (
+            <div className="route-pos-metrics">
+              <div className="route-pos-metric rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Cargado</p>
+                <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{Number(guia.totalKg ?? guia.totalCartones).toFixed(2)} {guia.totalKg != null ? 'kg' : 'ct'}</p>
+                {Number(guia.colchonKg ?? guia.colchonCartones) > 0 && <p className="text-[10px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Extra: {Number(guia.colchonKg ?? guia.colchonCartones).toFixed(2)} kg</p>}
+              </div>
+              <div className="route-pos-metric rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Vendido</p>
+                <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{vendidoKg.toFixed(2)} kg</p>
+              </div>
+              <div className="route-pos-metric rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Disponible</p>
+                <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{inventarioKgCamion.toFixed(2)} kg</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -382,16 +400,16 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
           </button>
         </div>
       ) : (
-      <div className="grid min-w-0 gap-4 lg:grid-cols-5">
+      <div className="route-pos-layout">
           {/* Columna izquierda: cliente + producto */}
-          <div className="min-w-0 space-y-4 lg:col-span-3">
+          <div className="route-pos-main min-w-0 space-y-4">
             {/* Clientes */}
             <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-base font-extrabold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                 <span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>1</span>
                 <UserIcon className="w-4 h-4" /> Elija el cliente
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              <div className="route-pos-choice-grid">
                 {clientesRuta.map((c: any) => (
                   <button
                     key={c.clienteId}
@@ -418,7 +436,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 <span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>2</span>
                 <PackageOpen className="w-4 h-4" /> Elija qué va a vender
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+              <div className="route-pos-choice-grid mb-4">
                 {productosDisponibles.map((i: any) => (
                   <button
                     key={i.id}
@@ -465,9 +483,9 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 </div>
               )}
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="route-pos-sale-fields">
                 {clienteId && producto && (cargandoPrecio || !precioAutorizado) && (
-                  <div role="status" className="rounded-xl px-3 py-2.5 text-sm sm:col-span-2 lg:col-span-3" style={{ background: 'var(--status-warning-soft)', color: 'var(--status-warning)', border: '1px solid var(--status-warning)' }}>
+                  <div role="status" className="route-pos-price-warning rounded-xl px-3 py-2.5 text-sm" style={{ background: 'var(--status-warning-soft)', color: 'var(--status-warning)', border: '1px solid var(--status-warning)' }}>
                     <strong className="block">{cargandoPrecio ? 'Consultando precio autorizado…' : 'Precio autorizado pendiente'}</strong>
                     {!cargandoPrecio && <span>Administración debe configurar el precio de este producto para el cliente antes de emitir la venta.</span>}
                   </div>
@@ -515,7 +533,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                   />
                   <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>Máximo permitido: {fmtCRC(descuentoPermitido)}</p>
                 </div>
-                <div className="sm:col-span-2 lg:col-span-3 rounded-xl p-3 sm:flex sm:items-center sm:justify-between" style={{ background: 'var(--bg-muted)' }}>
+                <div className="route-pos-total rounded-xl p-3 sm:flex sm:items-center sm:justify-between" style={{ background: 'var(--bg-muted)' }}>
                   <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Total a cobrar</p>
                   <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{fmtCRC(total)}</p>
                 </div>
@@ -579,7 +597,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
           </div>
 
           {/* Columna derecha: tiquetes del día + terminar día */}
-          <div className="min-w-0 space-y-4 lg:col-span-2">
+          <div className="route-pos-sidebar min-w-0 space-y-4">
             <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>Tiquetes de ruta del día</p>
               {emitidas.length === 0 ? (
@@ -669,7 +687,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
       )}
 
       {guia && !cajaCerrada && (
-        <AccionFijaMovil etiquetaAccesible="Registrar venta">
+        <AccionFijaMovil etiquetaAccesible="Registrar venta" className="route-pos-mobile-action">
           <div className="mx-auto flex max-w-3xl items-center gap-3">
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
