@@ -1,5 +1,5 @@
 import { eq, and, gt } from "drizzle-orm";
-import * as schema from "./schema";
+import * as schema from "./schema.sqlite";
 import { CREATE_TABLES } from "./ddl";
 import { clasificarDiferencia } from "../lib/opcionesRecepcion";
 import { hashPassword } from "../lib/password";

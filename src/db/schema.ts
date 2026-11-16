@@ -1,16 +1,16 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { pgTable, text, integer, doublePrecision, boolean } from 'drizzle-orm/pg-core';
 
-export const users = sqliteTable('users', {
+export const users = pgTable('users', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull(),
   role: text('role').notNull(),
   roles: text('roles').notNull().default(''), // CSV: 'Despachador,Camionero'
   password_hash: text('password_hash'),
-  activo: integer('activo', { mode: 'boolean' }).default(true),
+  activo: boolean('activo').default(true),
 });
 
-export const sesiones = sqliteTable('sesiones', {
+export const sesiones = pgTable('sesiones', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(),
   token: text('token').notNull(),
@@ -18,7 +18,7 @@ export const sesiones = sqliteTable('sesiones', {
   expiresAt: text('expires_at').notNull(),
 });
 
-export const clientes = sqliteTable('clientes', {
+export const clientes = pgTable('clientes', {
   id: text('id').primaryKey(),
   nombre: text('nombre').notNull(),
   tipo_documento: text('tipo_documento').default('Fisica'),
@@ -29,13 +29,13 @@ export const clientes = sqliteTable('clientes', {
   provincia: text('provincia'),
   canton: text('canton'),
   distrito: text('distrito'),
-  latitud: real('latitud'),
-  longitud: real('longitud'),
+  latitud: doublePrecision('latitud'),
+  longitud: doublePrecision('longitud'),
   ruta: text('ruta'),
   condicion_pago: text('condicion_pago').notNull().default('Contado'),
-  precio_especial: real('precio_especial'),
-  limite_credito: real('limite_credito').default(0),
-  saldo_pendiente: real('saldo_pendiente').default(0),
+  precio_especial: doublePrecision('precio_especial'),
+  limite_credito: doublePrecision('limite_credito').default(0),
+  saldo_pendiente: doublePrecision('saldo_pendiente').default(0),
   promedio_compra: integer('promedio_compra').default(0),
   estado: text('estado').default('Activo'),
   notas: text('notas'),
@@ -47,7 +47,7 @@ export const clientes = sqliteTable('clientes', {
   demanda_promedio_cartones: integer('demanda_promedio_cartones').default(0),
 });
 
-export const rutas = sqliteTable('rutas', {
+export const rutas = pgTable('rutas', {
   id: text('id').primaryKey(),
   nombre: text('nombre').notNull(),
   vendedor_asignado: text('vendedor_asignado'),
@@ -55,14 +55,14 @@ export const rutas = sqliteTable('rutas', {
   camion_id: text('camion_id').references(() => camiones.id),
   cliente_ids: text('cliente_ids'),
   dias_frecuencia: text('dias_frecuencia'),
-  kilometraje_aprox: real('kilometraje_aprox'),
+  kilometraje_aprox: doublePrecision('kilometraje_aprox'),
   estado: text('estado').default('Activa'),
   capacidad_max_cartones: integer('capacidad_max_cartones'),
-  centroide_lat: real('centroide_lat'),
-  centroide_lng: real('centroide_lng'),
+  centroide_lat: doublePrecision('centroide_lat'),
+  centroide_lng: doublePrecision('centroide_lng'),
 });
 
-export const camiones = sqliteTable('camiones', {
+export const camiones = pgTable('camiones', {
   id: text('id').primaryKey(),
   nombre: text('nombre').notNull().unique(),
   placa: text('placa'),
@@ -73,7 +73,7 @@ export const camiones = sqliteTable('camiones', {
   estado: text('estado').default('Activo'),
 });
 
-export const guias_despacho = sqliteTable('guias_despacho', {
+export const guias_despacho = pgTable('guias_despacho', {
   id: text('id').primaryKey(),
   consecutivo: text('consecutivo').notNull().unique(),
   camionId: text('camion_id').references(() => camiones.id),
@@ -86,10 +86,10 @@ export const guias_despacho = sqliteTable('guias_despacho', {
   clientesIds: text('clientes_ids'),
   /** Etiquetas reservadas como colchón extra, con producto y cantidad capturados al cargar. */
   colchonExtraJson: text('colchon_extra_json'),
-  totalCartones: real('total_cartones').notNull().default(0), // cantidad almacenada en kg para guías nuevas
-  totalKg: real('total_kg'), // null en guías históricas; peso neto confirmado de cargas nuevas
-  pesoSalida: real('peso_salida'),
-  pesoLlegada: real('peso_llegada'),
+  totalCartones: doublePrecision('total_cartones').notNull().default(0), // cantidad almacenada en kg para guías nuevas
+  totalKg: doublePrecision('total_kg'), // null en guías históricas; peso neto confirmado de cargas nuevas
+  pesoSalida: doublePrecision('peso_salida'),
+  pesoLlegada: doublePrecision('peso_llegada'),
   estado: text('estado').notNull().default('Preparada'), // Preparada, Cargada, EnRuta, Cerrada, Anulada
   firmasJson: text('firmas_json'),
   rutaOrdenJson: text('ruta_orden_json'),
@@ -97,20 +97,20 @@ export const guias_despacho = sqliteTable('guias_despacho', {
   finDiaFecha: text('fin_dia_fecha'),
 });
 
-export const guias_despacho_detalle = sqliteTable('guias_despacho_detalle', {
+export const guias_despacho_detalle = pgTable('guias_despacho_detalle', {
   id: text('id').primaryKey(),
   guiaId: text('guia_id').notNull().references(() => guias_despacho.id),
   etiquetaId: text('etiqueta_id').references(() => etiquetas.id),
   producto: text('producto').notNull(),
-  cartones: real('cartones').notNull(), // cantidad en kg; nombre legado de columna
-  cantidadKg: real('cantidad_kg'), // null en detalles históricos
-  pesoAnden: real('peso_anden'),
+  cartones: doublePrecision('cartones').notNull(), // cantidad en kg; nombre legado de columna
+  cantidadKg: doublePrecision('cantidad_kg'), // null en detalles históricos
+  pesoAnden: doublePrecision('peso_anden'),
   estadoSalida: text('estado_salida').default('checked'),
 });
 
 // ==================== PHASE F3 — CAJA DEL VENDEDOR ====================
 
-export const consecutivos = sqliteTable('consecutivos', {
+export const consecutivos = pgTable('consecutivos', {
   id: text('id').primaryKey(),
   tipo: text('tipo').notNull(), // 'TIQUETE'
   entidad: text('entidad'), // camionId (null = global)
@@ -120,7 +120,7 @@ export const consecutivos = sqliteTable('consecutivos', {
   ultimo: integer('ultimo').notNull().default(0),
 });
 
-export const ventas_ruta = sqliteTable('ventas_ruta', {
+export const ventas_ruta = pgTable('ventas_ruta', {
   id: text('id').primaryKey(),
   tiqueteConsecutivo: text('tiquete_consecutivo').notNull().unique(),
   camionId: text('camion_id').notNull().references(() => camiones.id),
@@ -130,24 +130,24 @@ export const ventas_ruta = sqliteTable('ventas_ruta', {
   clienteId: text('cliente_id').references(() => clientes.id),
   etiquetaId: text('etiqueta_id').references(() => etiquetas.id),
   producto: text('producto').notNull(),
-  cartones: real('cartones').notNull(), // nombre histórico de columna; a partir de F7 almacena kg
+  cartones: doublePrecision('cartones').notNull(), // nombre histórico de columna; a partir de F7 almacena kg
   unidad: text('unidad').notNull().default('kg'),
-  cantidadInventario: real('cantidad_inventario'),
-  precioUnitario: real('precio_unitario').notNull(),
-  subtotal: real('subtotal').notNull(),
-  descuento: real('descuento').notNull().default(0),
-  total: real('total').notNull(),
+  cantidadInventario: doublePrecision('cantidad_inventario'),
+  precioUnitario: doublePrecision('precio_unitario').notNull(),
+  subtotal: doublePrecision('subtotal').notNull(),
+  descuento: doublePrecision('descuento').notNull().default(0),
+  total: doublePrecision('total').notNull(),
   cobro: text('cobro').notNull().default('Efectivo'), // Efectivo, Credito
   estado: text('estado').notNull().default('Emitida'), // Emitida, Anulada
   facturaId: text('factura_id'),
   resolucionPrecioJson: text('resolucion_precio_json'),
-  imprimido: integer('imprimido', { mode: 'boolean' }).notNull().default(false),
+  imprimido: boolean('imprimido').notNull().default(false),
   anuladoEn: text('anulado_en'),
   anuladoPor: text('anulado_por'),
 });
 
 /** Tiquetes de ruta en kg. La tabla histórica ventas_ruta conserva cartones. */
-export const ventas_ruta_kg = sqliteTable('ventas_ruta_kg', {
+export const ventas_ruta_kg = pgTable('ventas_ruta_kg', {
   id: text('id').primaryKey(),
   tiqueteConsecutivo: text('tiquete_consecutivo').notNull().unique(),
   camionId: text('camion_id').notNull().references(() => camiones.id),
@@ -157,13 +157,13 @@ export const ventas_ruta_kg = sqliteTable('ventas_ruta_kg', {
   clienteId: text('cliente_id').references(() => clientes.id),
   etiquetaId: text('etiqueta_id').references(() => etiquetas.id),
   producto: text('producto').notNull(),
-  cantidadKg: real('cantidad_kg').notNull(),
-  cantidadInventario: real('cantidad_inventario').notNull(),
+  cantidadKg: doublePrecision('cantidad_kg').notNull(),
+  cantidadInventario: doublePrecision('cantidad_inventario').notNull(),
   unidadInventario: text('unidad_inventario').notNull(),
-  precioKg: real('precio_kg').notNull(),
-  subtotal: real('subtotal').notNull(),
-  descuento: real('descuento').notNull().default(0),
-  total: real('total').notNull(),
+  precioKg: doublePrecision('precio_kg').notNull(),
+  subtotal: doublePrecision('subtotal').notNull(),
+  descuento: doublePrecision('descuento').notNull().default(0),
+  total: doublePrecision('total').notNull(),
   cobro: text('cobro').notNull().default('Efectivo'),
   estado: text('estado').notNull().default('Emitida'),
   facturaId: text('factura_id'),
@@ -172,7 +172,7 @@ export const ventas_ruta_kg = sqliteTable('ventas_ruta_kg', {
   anuladoPor: text('anulado_por'),
 });
 
-export const retornos_camion = sqliteTable('retornos_camion', {
+export const retornos_camion = pgTable('retornos_camion', {
   id: text('id').primaryKey(),
   guiaId: text('guia_id').notNull().references(() => guias_despacho.id),
   etiquetaId: text('etiqueta_id').references(() => etiquetas.id),
@@ -180,11 +180,11 @@ export const retornos_camion = sqliteTable('retornos_camion', {
   fecha: text('fecha').notNull(),
   responsable: text('responsable').notNull(),
   producto: text('producto').notNull(),
-  cartones: real('cartones').notNull(), // cantidad en unidad declarada en etiquetas_json
+  cartones: doublePrecision('cartones').notNull(), // cantidad en unidad declarada en etiquetas_json
   unidad: text('unidad').notNull().default('cartones'),
-  cantidadAceptada: real('cantidad_aceptada'),
+  cantidadAceptada: doublePrecision('cantidad_aceptada'),
   etiquetasJson: text('etiquetas_json'), // JSON array de [{etiquetaId, codigoUnico, producto, cartones}]
-  peso: real('peso'),
+  peso: doublePrecision('peso'),
   estado: text('estado').notNull().default('Registrado'), // Registrado | PendienteBodega | AceptadoBodega | RechazadoBodega | Recibido | Cerrado
   aceptadoPor: text('aceptado_por'),
   aceptadoEn: text('aceptado_en'),
@@ -192,10 +192,10 @@ export const retornos_camion = sqliteTable('retornos_camion', {
   tipo: text('tipo').default('sobrante'), // parcial | completo | sobrante
 });
 
-export const inventario = sqliteTable('inventario', {
+export const inventario = pgTable('inventario', {
   id: text('id').primaryKey(),
   producto: text('producto').notNull(),
-  cantidad: real('cantidad').notNull(),
+  cantidad: doublePrecision('cantidad').notNull(),
   unidad: text('unidad').notNull(),
   ubicacion: text('ubicacion').notNull(),
   lote: text('lote'),
@@ -204,25 +204,25 @@ export const inventario = sqliteTable('inventario', {
 });
 
 /** Conteo físico en cuarentena separado del stock disponible y del saldo libro. */
-export const inventario_cuarentena = sqliteTable('inventario_cuarentena', {
+export const inventario_cuarentena = pgTable('inventario_cuarentena', {
   id: text('id').primaryKey(),
   aprobacionId: text('aprobacion_id').notNull().references(() => aprobaciones.id),
   guiaId: text('guia_id').notNull().references(() => guias_despacho.id),
   producto: text('producto').notNull(),
-  cantidadSistema: real('cantidad_sistema').notNull(),
-  cantidad: real('cantidad').notNull(),
+  cantidadSistema: doublePrecision('cantidad_sistema').notNull(),
+  cantidad: doublePrecision('cantidad').notNull(),
   unidad: text('unidad').notNull(),
   estado: text('estado').notNull().default('PendienteAprobacion'),
   creadoPor: text('creado_por').notNull(),
   creadoEn: text('creado_en').notNull(),
-  liberado: real('liberado').notNull().default(0),
+  liberado: doublePrecision('liberado').notNull().default(0),
   liberadoPor: text('liberado_por'),
   liberadoEn: text('liberado_en'),
   motivoResolucion: text('motivo_resolucion'),
   etiquetasReemplazoJson: text('etiquetas_reemplazo_json'),
 });
 
-export const facturas = sqliteTable('facturas', {
+export const facturas = pgTable('facturas', {
   id: text('id').primaryKey(),
   consecutivo: text('consecutivo').notNull(),
   fecha: text('fecha').notNull(),
@@ -235,9 +235,9 @@ export const facturas = sqliteTable('facturas', {
   fechaVencimiento: text('fecha_vencimiento'),
   clienteId: text('cliente_id').notNull().references(() => clientes.id),
   vendedorId: text('vendedor_id').notNull().references(() => users.id),
-  subtotal: real('subtotal').notNull(),
-  descuento: real('descuento').notNull(),
-  total: real('total').notNull(),
+  subtotal: doublePrecision('subtotal').notNull(),
+  descuento: doublePrecision('descuento').notNull(),
+  total: doublePrecision('total').notNull(),
   condicion_pago: text('condicion_pago').notNull(),
   metodo_pago: text('metodo_pago'),
   estado: text('estado').notNull(),
@@ -245,13 +245,13 @@ export const facturas = sqliteTable('facturas', {
   camionId: text('camion_id'),
 });
 
-export const detallesFactura = sqliteTable('detalles_factura', {
+export const detallesFactura = pgTable('detalles_factura', {
   id: text('id').primaryKey(),
   facturaId: text('factura_id').notNull().references(() => facturas.id),
   producto: text('producto').notNull(),
-  cantidad: real('cantidad').notNull(),
-  precio_unitario: real('precio_unitario').notNull(),
-  subtotal: real('subtotal').notNull(),
+  cantidad: doublePrecision('cantidad').notNull(),
+  precio_unitario: doublePrecision('precio_unitario').notNull(),
+  subtotal: doublePrecision('subtotal').notNull(),
   resolucionPrecioJson: text('resolucion_precio_json'),
 });
 
@@ -262,11 +262,11 @@ export const detallesFactura = sqliteTable('detalles_factura', {
  * parcial marcaba la factura entera como pagada y no quedaba rastro. El saldo
  * pendiente es ahora `facturas.total - SUM(pagos.monto)`, no `facturas.total`.
  */
-export const pagos = sqliteTable('pagos', {
+export const pagos = pgTable('pagos', {
   id: text('id').primaryKey(),
   facturaId: text('factura_id').notNull().references(() => facturas.id),
   fecha: text('fecha').notNull(),
-  monto: real('monto').notNull(),
+  monto: doublePrecision('monto').notNull(),
   metodo: text('metodo'),
   /** Usuario que registró el pago. Sin FK: el registro de pagos es append-only. */
   usuarioId: text('usuario_id'),
@@ -275,11 +275,11 @@ export const pagos = sqliteTable('pagos', {
   idempotencyKey: text('idempotency_key'),
 });
 
-export const gastos = sqliteTable('gastos', {
+export const gastos = pgTable('gastos', {
   id: text('id').primaryKey(),
   fecha: text('fecha').notNull(),
   categoria: text('categoria').notNull(),
-  monto: real('monto').notNull(),
+  monto: doublePrecision('monto').notNull(),
   descripcion: text('descripcion').notNull(),
   usuarioId: text('usuario_id').notNull().references(() => users.id),
   idempotencyKey: text('idempotency_key'),
@@ -289,26 +289,26 @@ export const gastos = sqliteTable('gastos', {
 
 /** Cierre monetario de cada guía. Conserva el valor esperado, el conteo físico
  * del efectivo y la diferencia para que el cierre de ruta sea auditable. */
-export const cierres_caja_ruta = sqliteTable('cierres_caja_ruta', {
+export const cierres_caja_ruta = pgTable('cierres_caja_ruta', {
   id: text('id').primaryKey(),
   guiaId: text('guia_id').notNull().unique().references(() => guias_despacho.id),
   vendedorId: text('vendedor_id').notNull(),
   fecha: text('fecha').notNull(),
-  efectivoEsperado: real('efectivo_esperado').notNull().default(0),
-  gastosEfectivo: real('gastos_efectivo').notNull().default(0),
-  efectivoContado: real('efectivo_contado'),
-  creditoDocumentado: real('credito_documentado').notNull().default(0),
-  diferencia: real('diferencia'),
+  efectivoEsperado: doublePrecision('efectivo_esperado').notNull().default(0),
+  gastosEfectivo: doublePrecision('gastos_efectivo').notNull().default(0),
+  efectivoContado: doublePrecision('efectivo_contado'),
+  creditoDocumentado: doublePrecision('credito_documentado').notNull().default(0),
+  diferencia: doublePrecision('diferencia'),
   estado: text('estado').notNull().default('PendienteConteo'),
   aprobacionId: text('aprobacion_id'),
   creadoEn: text('creado_en').notNull(),
 });
 
-export const depositos_caja = sqliteTable('depositos_caja', {
+export const depositos_caja = pgTable('depositos_caja', {
   id: text('id').primaryKey(),
   cierreId: text('cierre_id').notNull().unique().references(() => cierres_caja_ruta.id),
-  montoEsperado: real('monto_esperado').notNull(),
-  montoDepositado: real('monto_depositado').notNull(),
+  montoEsperado: doublePrecision('monto_esperado').notNull(),
+  montoDepositado: doublePrecision('monto_depositado').notNull(),
   referencia: text('referencia').notNull(),
   comprobante: text('comprobante'),
   registradoPor: text('registrado_por').notNull(),
@@ -318,7 +318,7 @@ export const depositos_caja = sqliteTable('depositos_caja', {
   idempotencyKey: text('idempotency_key'),
 });
 
-export const granjas = sqliteTable('granjas', {
+export const granjas = pgTable('granjas', {
   id: text('id').primaryKey(),
   nombre: text('nombre').notNull(),
   ubicacion: text('ubicacion').notNull(),
@@ -327,7 +327,7 @@ export const granjas = sqliteTable('granjas', {
   estado: text('estado').default('Activo'),
 });
 
-export const galerones = sqliteTable('galerones', {
+export const galerones = pgTable('galerones', {
   id: text('id').primaryKey(),
   granjaId: text('granja_id').notNull().references(() => granjas.id),
   nombre: text('nombre').notNull(),
@@ -340,7 +340,7 @@ export const galerones = sqliteTable('galerones', {
   estado: text('estado').default('Activo'),
 });
 
-export const lotes_aves = sqliteTable('lotes_aves', {
+export const lotes_aves = pgTable('lotes_aves', {
   id: text('id').primaryKey(),
   galeronId: text('galeron_id').notNull().references(() => galerones.id),
   fecha_ingreso: text('fecha_ingreso').notNull(),
@@ -349,7 +349,7 @@ export const lotes_aves = sqliteTable('lotes_aves', {
   estado: text('estado').notNull(), // Activo / Finalizado
 });
 
-export const mantenimientos = sqliteTable('mantenimientos', {
+export const mantenimientos = pgTable('mantenimientos', {
   id: text('id').primaryKey(),
   galeronId: text('galeron_id').notNull().references(() => galerones.id),
   fecha: text('fecha').notNull(),
@@ -358,10 +358,10 @@ export const mantenimientos = sqliteTable('mantenimientos', {
   estado: text('estado').notNull(), // Pendiente/Completado
 });
 
-export const movimientosInventario = sqliteTable('movimientos_inventario', {
+export const movimientosInventario = pgTable('movimientos_inventario', {
   id: text('id').primaryKey(),
   producto: text('producto').notNull(),
-  cantidad: real('cantidad').notNull(),
+  cantidad: doublePrecision('cantidad').notNull(),
   unidad: text('unidad').notNull().default('kg'),
   tipo: text('tipo').notNull(), // 'Entrada Producción' o 'Traslado' o 'Venta' o 'Ajuste'
   origen: text('origen').notNull(),
@@ -370,7 +370,7 @@ export const movimientosInventario = sqliteTable('movimientos_inventario', {
   referencia_id: text('referencia_id'),
 });
 
-export const produccion_diaria = sqliteTable('produccion_diaria', {
+export const produccion_diaria = pgTable('produccion_diaria', {
   id: text('id').primaryKey(),
   loteId: text('lote_id').notNull().references(() => lotes_aves.id),
   granjaId: text('granja_id').references(() => granjas.id),
@@ -382,7 +382,7 @@ export const produccion_diaria = sqliteTable('produccion_diaria', {
   estado: text('estado').default('Disponible'), // Disponible, EnTransito, Recibido, Facturado
 });
 
-export const traslados = sqliteTable('traslados', {
+export const traslados = pgTable('traslados', {
   id: text('id').primaryKey(),
   cargaId: text('carga_id'),
   vehiculo: text('vehiculo'),
@@ -400,7 +400,7 @@ export const traslados = sqliteTable('traslados', {
   observaciones: text('observaciones'),
 });
 
-export const recepciones = sqliteTable('recepciones', {
+export const recepciones = pgTable('recepciones', {
   id: text('id').primaryKey(),
   trasladoId: text('traslado_id').references(() => traslados.id),
   guiaRemisionId: text('guia_remision_id'),
@@ -408,10 +408,10 @@ export const recepciones = sqliteTable('recepciones', {
   cantidadEsperada: integer('cantidad_esperada').notNull(),
   cantidadRecibida: integer('cantidad_recibida').notNull(),
   diferencia: integer('diferencia').default(0),
-  pesoBruto: real('peso_bruto'),
-  cantidadKgEsperada: real('cantidad_kg_esperada'),
-  cantidadKgRecibida: real('cantidad_kg_recibida'),
-  diferenciaKg: real('diferencia_kg'),
+  pesoBruto: doublePrecision('peso_bruto'),
+  cantidadKgEsperada: doublePrecision('cantidad_kg_esperada'),
+  cantidadKgRecibida: doublePrecision('cantidad_kg_recibida'),
+  diferenciaKg: doublePrecision('diferencia_kg'),
   motivoDiferencia: text('motivo_diferencia'),
   tipoDiferencia: text('tipo_diferencia'), // 'desperdicio' | 'alerta' (diferencia por investigar)
   responsableRecepcion: text('responsable_recepcion'),
@@ -420,7 +420,7 @@ export const recepciones = sqliteTable('recepciones', {
 
 // Borradores de recepción para permitir pausar y retomar el conteo sin alterar
 // inventario; el stock solo cambia al confirmar la recepción final.
-export const bodega_recepcion_borradores = sqliteTable('bodega_recepcion_borradores', {
+export const bodega_recepcion_borradores = pgTable('bodega_recepcion_borradores', {
   id: text('id').primaryKey(),
   tipo: text('tipo').notNull(),
   referenciasJson: text('referencias_json').notNull(),
@@ -430,7 +430,7 @@ export const bodega_recepcion_borradores = sqliteTable('bodega_recepcion_borrado
   actualizadoEn: text('actualizado_en').notNull(),
 });
 
-export const incidentes = sqliteTable('incidentes', {
+export const incidentes = pgTable('incidentes', {
   id: text('id').primaryKey(),
   granjaId: text('granja_id').references(() => granjas.id),
   galeronId: text('galeron_id').references(() => galerones.id),
@@ -449,14 +449,14 @@ export const incidentes = sqliteTable('incidentes', {
   resumen: text('resumen'),
 });
 
-export const guias_remision = sqliteTable('guias_remision', {
+export const guias_remision = pgTable('guias_remision', {
   id: text('id').primaryKey(),
   consecutivo: text('consecutivo').notNull().unique(),
   granjaId: text('granja_id').references(() => granjas.id),
   fecha: text('fecha').notNull(),
   producto: text('producto').notNull(),
   cartonesEsperados: integer('cartones_esperados').notNull(),
-  cantidadKgEsperada: real('cantidad_kg_esperada'),
+  cantidadKgEsperada: doublePrecision('cantidad_kg_esperada'),
   unidad: text('unidad').notNull().default('cartones'),
   lote: text('lote'),
   responsable: text('responsable').notNull(),
@@ -465,7 +465,7 @@ export const guias_remision = sqliteTable('guias_remision', {
   recibidoEn: text('recibido_en'),
 });
 
-export const traza_etiqueta = sqliteTable('traza_etiqueta', {
+export const traza_etiqueta = pgTable('traza_etiqueta', {
   id: text('id').primaryKey(),
   etiquetaId: text('etiqueta_id').notNull().references(() => etiquetas.id),
   tipoEvento: text('tipo_evento').notNull(),
@@ -476,15 +476,15 @@ export const traza_etiqueta = sqliteTable('traza_etiqueta', {
   observaciones: text('observaciones'),
 });
 
-export const etiquetas = sqliteTable('etiquetas', {
+export const etiquetas = pgTable('etiquetas', {
   id: text('id').primaryKey(),
   codigoUnico: text('codigo_unico').notNull().unique(),
   producto: text('producto').notNull(),
-  cantidad: real('cantidad').notNull(),
+  cantidad: doublePrecision('cantidad').notNull(),
   unidad: text('unidad').notNull().default('cartones'),
-  pesoBruto: real('peso_bruto'),
-  pesoNeto: real('peso_neto'),
-  saldoKg: real('saldo_kg'), // saldo medido bajo custodia; null en etiquetas históricas
+  pesoBruto: doublePrecision('peso_bruto'),
+  pesoNeto: doublePrecision('peso_neto'),
+  saldoKg: doublePrecision('saldo_kg'), // saldo medido bajo custodia; null en etiquetas históricas
   pesoOrigen: text('peso_origen'), // Manual por ahora; reservado para integración de báscula
   pesoRegistradoPor: text('peso_registrado_por'),
   pesoRegistradoEn: text('peso_registrado_en'),
@@ -494,18 +494,18 @@ export const etiquetas = sqliteTable('etiquetas', {
   granjaOrigen: text('granja_origen'),
   galeronOrigen: text('galeron_origen'),
   clasificacion: text('clasificacion'), // Grade A, Grade B, etc.
-  tara: real('tara'),
+  tara: doublePrecision('tara'),
   estado: text('estado').default('Generada'), // Generada, EnBodega, Cargada, Entregada, Retornada, Merma
   ubicacionActual: text('ubicacion_actual'),
   lote: text('lote'),
   guiaRemisionId: text('guia_remision_id'),
-  pesoBodega: real('peso_bodega'),
+  pesoBodega: doublePrecision('peso_bodega'),
   guiaDespachoId: text('guia_despacho_id'),
   fechaRecepcion: text('fecha_recepcion'),
   tipoCarton: text('tipo_carton'),
 });
 
-export const tiposCarton = sqliteTable('tipos_carton', {
+export const tiposCarton = pgTable('tipos_carton', {
   id: text('id').primaryKey(),
   nombre: text('nombre').notNull(),
   unidades: integer('unidades').notNull(),
@@ -513,7 +513,7 @@ export const tiposCarton = sqliteTable('tipos_carton', {
   fechaCreacion: text('fecha_creacion').notNull(),
 });
 
-export const facturas_electronicas = sqliteTable('facturas_electronicas', {
+export const facturas_electronicas = pgTable('facturas_electronicas', {
   id: text('id').primaryKey(),
   facturaId: text('factura_id').notNull().references(() => facturas.id),
   tipoDocumento: text('tipo_documento').notNull(), // Factura, Tiquete, NotaCredito
@@ -526,10 +526,10 @@ export const facturas_electronicas = sqliteTable('facturas_electronicas', {
   receptorNombre: text('receptor_nombre'),
   receptorCedula: text('receptor_cedula'),
   receptorCorreo: text('receptor_correo'),
-  subtotal: real('subtotal').notNull(),
-  descuento: real('descuento').default(0),
-  impuestos: real('impuestos').default(0),
-  total: real('total').notNull(),
+  subtotal: doublePrecision('subtotal').notNull(),
+  descuento: doublePrecision('descuento').default(0),
+  impuestos: doublePrecision('impuestos').default(0),
+  total: doublePrecision('total').notNull(),
   condicionPago: text('condicion_pago').notNull(),
   medioPago: text('medio_pago'),
   estado: text('estado').notNull().default('Borrador'), // Borrador, Pendiente, Enviado, Aceptado, Rechazado, Error
@@ -547,16 +547,16 @@ export const facturas_electronicas = sqliteTable('facturas_electronicas', {
   idempotencyPayload: text('idempotency_payload'),
 });
 
-export const pesos_por_punto = sqliteTable('pesos_por_punto', {
+export const pesos_por_punto = pgTable('pesos_por_punto', {
   id: text('id').primaryKey(),
   referenciaId: text('referencia_id'), // ID del traslado, recepcion, carga, venta, etc.
   tipoReferencia: text('tipo_referencia').notNull(), // Traslado, Recepcion, Carga, Venta, Retorno
   producto: text('producto').notNull(),
   cantidadUnidades: integer('cantidad_unidades').notNull(),
   unidad: text('unidad').notNull(), // cartones, kg, etc.
-  pesoEsperado: real('peso_esperado').notNull(),
-  pesoReal: real('peso_real').notNull(),
-  diferencia: real('diferencia').default(0),
+  pesoEsperado: doublePrecision('peso_esperado').notNull(),
+  pesoReal: doublePrecision('peso_real').notNull(),
+  diferencia: doublePrecision('diferencia').default(0),
   basculaUtilizada: text('bascula_utilizada'),
   responsable: text('responsable').notNull(),
   fecha: text('fecha').notNull(),
@@ -567,7 +567,7 @@ export const pesos_por_punto = sqliteTable('pesos_por_punto', {
 
 // ==================== PHASE 4 — SALUD AVÍCOLA ====================
 
-export const vacunaciones = sqliteTable('vacunaciones', {
+export const vacunaciones = pgTable('vacunaciones', {
   id: text('id').primaryKey(),
   granjaId: text('granja_id').notNull().references(() => granjas.id),
   galeronId: text('galeron_id').references(() => galerones.id),
@@ -589,29 +589,29 @@ export const vacunaciones = sqliteTable('vacunaciones', {
 
 // ==================== PHASE 4 — ALIMENTO / SILOS ====================
 
-export const inventario_alimento = sqliteTable('inventario_alimento', {
+export const inventario_alimento = pgTable('inventario_alimento', {
   id: text('id').primaryKey(),
   tipoAlimento: text('tipo_alimento').notNull(), // Inicial, Crecimiento, Producción, Premix
   proveedor: text('proveedor'),
   loteAlimento: text('lote_alimento'),
   siloUbicacion: text('silo_ubicacion'), // Silo 1, Silo 2, Bodega Alimento
-  cantidadRecibida: real('cantidad_recibida').notNull(),
-  cantidadActual: real('cantidad_actual').notNull(),
+  cantidadRecibida: doublePrecision('cantidad_recibida').notNull(),
+  cantidadActual: doublePrecision('cantidad_actual').notNull(),
   unidad: text('unidad').notNull(), // kg, sacos
   galeronAsociado: text('galeron_asociado'),
   loteAvesAsociado: text('lote_aves_asociado'),
   fechaIngreso: text('fecha_ingreso').notNull(),
   responsable: text('responsable').notNull(),
-  merma: real('merma').default(0),
+  merma: doublePrecision('merma').default(0),
   estado: text('estado').default('Activo'), // Activo, Agotado, Vencido
 });
 
-export const consumo_alimento = sqliteTable('consumo_alimento', {
+export const consumo_alimento = pgTable('consumo_alimento', {
   id: text('id').primaryKey(),
   inventarioAlimentoId: text('inventario_alimento_id').references(() => inventario_alimento.id),
   galeronId: text('galeron_id').references(() => galerones.id),
   loteAvesId: text('lote_aves_id').references(() => lotes_aves.id),
-  cantidadConsumida: real('cantidad_consumida').notNull(),
+  cantidadConsumida: doublePrecision('cantidad_consumida').notNull(),
   unidad: text('unidad').notNull(),
   fecha: text('fecha').notNull(),
   responsable: text('responsable').notNull(),
@@ -620,7 +620,7 @@ export const consumo_alimento = sqliteTable('consumo_alimento', {
 
 // ==================== PHASE 4 — MANTENIMIENTO MEJORADO ====================
 
-export const activos_mantenimiento = sqliteTable('activos_mantenimiento', {
+export const activos_mantenimiento = pgTable('activos_mantenimiento', {
   id: text('id').primaryKey(),
   nombre: text('nombre').notNull(),
   tipo: text('tipo').notNull(), // Galerón, Silo, Sistema Agua, Eléctrico, Ventilación, Cerca, Equipo Recolect, Vehículo, Herramienta, Báscula, Estante, Andén
@@ -633,7 +633,7 @@ export const activos_mantenimiento = sqliteTable('activos_mantenimiento', {
   responsable: text('responsable'),
 });
 
-export const ordenes_mantenimiento = sqliteTable('ordenes_mantenimiento', {
+export const ordenes_mantenimiento = pgTable('ordenes_mantenimiento', {
   id: text('id').primaryKey(),
   activoId: text('activo_id').notNull().references(() => activos_mantenimiento.id),
   tipo: text('tipo').notNull(), // Preventivo, Correctivo, Limpieza, Inspección, Calibración
@@ -642,7 +642,7 @@ export const ordenes_mantenimiento = sqliteTable('ordenes_mantenimiento', {
   responsable: text('responsable').notNull(),
   estado: text('estado').notNull().default('Pendiente'), // Pendiente, EnProgreso, Completado, Vencido
   insumosUsados: text('insumos_usados'), // JSON array of items
-  costo: real('costo').default(0),
+  costo: doublePrecision('costo').default(0),
   evidencia: text('evidencia'),
   observaciones: text('observaciones'),
   proximaFecha: text('proxima_fecha'),
@@ -651,7 +651,7 @@ export const ordenes_mantenimiento = sqliteTable('ordenes_mantenimiento', {
 
 // ==================== PHASE 4 — DESPERDICIO / MERMA ====================
 
-export const desperdicios = sqliteTable('desperdicios', {
+export const desperdicios = pgTable('desperdicios', {
   id: text('id').primaryKey(),
   origen: text('origen').notNull(), // Granja, Bodega, Camión, Cliente
   producto: text('producto').notNull(),
@@ -659,14 +659,14 @@ export const desperdicios = sqliteTable('desperdicios', {
   lote: text('lote'),
   cantidad: integer('cantidad').notNull(),
   unidad: text('unidad').notNull().default('cartones'),
-  factorKgPorCarton: real('factor_kg_por_carton'),
-  cantidadCartones: real('cantidad_cartones'),
-  peso: real('peso'),
+  factorKgPorCarton: doublePrecision('factor_kg_por_carton'),
+  cantidadCartones: doublePrecision('cantidad_cartones'),
+  peso: doublePrecision('peso'),
   motivo: text('motivo').notNull(), // Quebrado Granja, Quebrado Bodega, Quebrado Camión, Rechazo Cliente, Vencido, Sucio, Diferencia Peso, Ajuste Administrativo
   responsable: text('responsable').notNull(),
   evidencia: text('evidencia'),
   aprobacion: text('aprobacion'),
-  impactoFinanciero: real('impacto_financiero').default(0),
+  impactoFinanciero: doublePrecision('impacto_financiero').default(0),
   fecha: text('fecha').notNull(),
   observaciones: text('observaciones'),
   rutaId: text('ruta_id').references(() => rutas.id),
@@ -677,7 +677,7 @@ export const desperdicios = sqliteTable('desperdicios', {
 
 // ==================== PHASE 4 — PRECIOS / POLÍTICAS COMERCIALES ====================
 
-export const listas_precios = sqliteTable('listas_precios', {
+export const listas_precios = pgTable('listas_precios', {
   id: text('id').primaryKey(),
   nombre: text('nombre').notNull(), // Lista Global, Lista Ruta X, etc.
   tipo: text('tipo').notNull(), // Global, Ruta, Cliente
@@ -689,22 +689,22 @@ export const listas_precios = sqliteTable('listas_precios', {
   aprobadoPor: text('aprobado_por'),
 });
 
-export const precios_detalle = sqliteTable('precios_detalle', {
+export const precios_detalle = pgTable('precios_detalle', {
   id: text('id').primaryKey(),
   listaId: text('lista_id').notNull().references(() => listas_precios.id),
   producto: text('producto').notNull(),
-  precioUnitario: real('precio_unitario').notNull(),
-  precioMinimo: real('precio_minimo'),
-  precioMaximo: real('precio_maximo'),
-  descuentoMaximo: real('descuento_maximo').default(0),
+  precioUnitario: doublePrecision('precio_unitario').notNull(),
+  precioMinimo: doublePrecision('precio_minimo'),
+  precioMaximo: doublePrecision('precio_maximo'),
+  descuentoMaximo: doublePrecision('descuento_maximo').default(0),
   unidad: text('unidad').default('cartones'),
 });
 
-export const historial_precios = sqliteTable('historial_precios', {
+export const historial_precios = pgTable('historial_precios', {
   id: text('id').primaryKey(),
   producto: text('producto').notNull(),
-  precioAnterior: real('precio_anterior'),
-  precioNuevo: real('precio_nuevo').notNull(),
+  precioAnterior: doublePrecision('precio_anterior'),
+  precioNuevo: doublePrecision('precio_nuevo').notNull(),
   tipoLista: text('tipo_lista').notNull(),
   listaId: text('lista_id'),
   cambioPor: text('cambio_por').notNull(),
@@ -714,7 +714,7 @@ export const historial_precios = sqliteTable('historial_precios', {
 
 // ==================== PHASE 5 — APROBACIONES ====================
 
-export const aprobaciones = sqliteTable('aprobaciones', {
+export const aprobaciones = pgTable('aprobaciones', {
   id: text('id').primaryKey(),
   tipo: text('tipo').notNull(), // DiferenciaPeso, NotaCredito, AjusteInventario, CambioPrecio, DescuentoNoAutorizado, AnulacionFactura
   modulo: text('modulo').notNull(),
@@ -729,7 +729,7 @@ export const aprobaciones = sqliteTable('aprobaciones', {
   fechaResolucion: text('fecha_resolucion'),
 });
 
-export const auditoria = sqliteTable('auditoria', {
+export const auditoria = pgTable('auditoria', {
   id: text('id').primaryKey(),
   usuarioId: text('usuario_id').notNull(),
   accion: text('accion').notNull(), // Crear, Editar, Anular, Aprobar
@@ -741,13 +741,13 @@ export const auditoria = sqliteTable('auditoria', {
   fecha: text('fecha').notNull(),
 });
 
-export const productosCatalogo = sqliteTable('productos_catalogo', {
+export const productosCatalogo = pgTable('productos_catalogo', {
   id: text('id').primaryKey(),
   nombre: text('nombre').notNull(),
   descripcion: text('descripcion').notNull().default(''),
     unidad: text('unidad').notNull().default('kg'),
-    kgPorCarton: real('kg_por_carton').notNull().default(0),
-    precioBase: real('precio_base').notNull().default(0),
+    kgPorCarton: doublePrecision('kg_por_carton').notNull().default(0),
+    precioBase: doublePrecision('precio_base').notNull().default(0),
   categoria: text('categoria').notNull().default('Huevos'),
   estado: text('estado').notNull().default('Activo'),
   fechaCreacion: text('fecha_creacion').notNull(),
@@ -755,11 +755,11 @@ export const productosCatalogo = sqliteTable('productos_catalogo', {
   diasAvisoVencimiento: integer('dias_aviso_vencimiento').default(7),
 });
 
-export const precioExcepcionesCliente = sqliteTable('precio_excepciones_cliente', {
+export const precioExcepcionesCliente = pgTable('precio_excepciones_cliente', {
   id: text('id').primaryKey(),
   clienteId: text('cliente_id').notNull().references(() => clientes.id),
   productoId: text('producto_id').notNull().references(() => productosCatalogo.id),
-  precioExcepcion: real('precio_excepcion').notNull(),
+  precioExcepcion: doublePrecision('precio_excepcion').notNull(),
   justificacion: text('justificacion').notNull().default(''),
   aprobadoPor: text('aprobado_por').notNull().default(''),
   fechaCreacion: text('fecha_creacion').notNull(),
@@ -773,7 +773,7 @@ export const precioExcepcionesCliente = sqliteTable('precio_excepciones_cliente'
 // mismo que usaría el provider 'google' (boceto §7), de modo que cambiar de
 // proveedor no obliga a tocar la UI.
 
-export const officeAccounts = sqliteTable('office_accounts', {
+export const officeAccounts = pgTable('office_accounts', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id),
   email: text('email').notNull(),
@@ -785,7 +785,7 @@ export const officeAccounts = sqliteTable('office_accounts', {
   lastSync: text('last_sync'),
 });
 
-export const officeMessages = sqliteTable('office_messages', {
+export const officeMessages = pgTable('office_messages', {
   id: text('id').primaryKey(),
   accountId: text('account_id').notNull().references(() => officeAccounts.id),
   threadId: text('thread_id').notNull(),
@@ -800,7 +800,7 @@ export const officeMessages = sqliteTable('office_messages', {
   fecha: text('fecha').notNull(),
 });
 
-export const officeLinks = sqliteTable('office_links', {
+export const officeLinks = pgTable('office_links', {
   id: text('id').primaryKey(),
   accountId: text('account_id').references(() => officeAccounts.id),
   nombreCuenta: text('nombre_cuenta').notNull().default(''),
@@ -814,7 +814,7 @@ export const officeLinks = sqliteTable('office_links', {
   fechaCreacion: text('fecha_creacion').notNull(),
 });
 
-export const officeDriveIndex = sqliteTable('office_drive_index', {
+export const officeDriveIndex = pgTable('office_drive_index', {
   id: text('id').primaryKey(),
   archivoNombre: text('archivo_nombre').notNull(),
   archivoTipo: text('archivo_tipo').notNull().default('PDF'),

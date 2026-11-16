@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/libsql';
 import { createClient, type Client } from '@libsql/client';
-import * as schema from './schema';
+import * as schema from './schema.sqlite';
 import path from 'path';
 
 let _client: Client | null = null;

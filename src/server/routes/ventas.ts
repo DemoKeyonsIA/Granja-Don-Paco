@@ -425,7 +425,7 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
         // El saldo del cliente baja por lo efectivamente pagado, no por el total.
         if (factura.condicion_pago === 'Credito') {
           await tx.update(clientes).set({
-            saldo_pendiente: sql`MAX(0, COALESCE(saldo_pendiente, 0) - ${montoPago})`,
+          saldo_pendiente: sql`GREATEST(0, COALESCE(saldo_pendiente, 0) - ${montoPago})`,
           }).where(eq(clientes.id, factura.clienteId));
         }
       });

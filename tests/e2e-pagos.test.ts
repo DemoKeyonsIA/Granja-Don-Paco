@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { drizzle } from 'drizzle-orm/libsql';
 import type { LibSQLDatabase } from 'drizzle-orm/libsql';
-import * as schema from '../src/db/schema';
+import * as schema from '../src/db/schema.sqlite';
 import type { Express } from 'express';
 import fs from 'fs';
 import path from 'path';

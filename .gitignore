@@ -1,6 +1,8 @@
 node_modules/
 build/
 dist/
+server.bundle.cjs
+server.bundle.cjs.map
 coverage/
 .DS_Store
 *.log
@@ -15,3 +17,6 @@ coverage/
 # Base de datos de desarrollo (contiene datos reales, no versionable)
 local.db
 local.db-journal
+
+.vercel
+.env*

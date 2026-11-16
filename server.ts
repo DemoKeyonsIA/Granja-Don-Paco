@@ -3,8 +3,6 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
-import { drizzle } from "drizzle-orm/libsql";
-import { createClient } from "@libsql/client";
 import * as schema from "./src/db/schema";
 import { eq } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./src/lib/password";
@@ -43,10 +41,14 @@ import { registrarRutasClientes } from "./src/server/routes/clientes";
 import { registrarRutasCrmClientes } from "./src/server/routes/clientes-crm";
 import { registrarRutasComerciales } from "./src/server/routes/ventas";
 import { registrarRutasGastos } from "./src/server/routes/gastos";
-import { initializeDatabase } from "./src/db/initialize";
+import { getNeonDatabase } from "./src/db/neon";
+import { initializeNeonDatabase } from "./src/db/initialize-neon";
+export { getNeonDatabase } from "./src/db/neon";
+export { initializeNeonDatabase } from "./src/db/initialize-neon";
 import { normalizarRol, permisosParaRoles } from "./src/lib/role-permissions";
 export { backfillRecepcionesDesperdicio } from "./src/db/initialize";
 
+dotenv.config({ path: ".env.local" });
 dotenv.config();
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -104,7 +106,7 @@ export function estadoVencimiento(dias: number | null, diasAviso: number): 'venc
   return 'ok';
 }
 
-export async function createApp(testMode = false, testDb?: any) {
+export async function createApp(testMode = false, testDb?: any, serveFrontend = true) {
   const app = express();
   app.use(express.json());
 
@@ -112,8 +114,7 @@ export async function createApp(testMode = false, testDb?: any) {
   if (testDb) {
     db = testDb;
   } else {
-    const client = createClient({ url: `file:${path.resolve(process.cwd(), 'local.db')}` });
-    db = drizzle(client, { schema });
+    db = getNeonDatabase().db;
   }
 
   const { pesos_por_punto, auditoria, sesiones, traza_etiqueta } = schema;
@@ -406,7 +407,7 @@ export async function createApp(testMode = false, testDb?: any) {
   registrarRutasOffice(app, db, requirePermission, resolveUsuario);
 
   // ==================== VITE / STATIC (al final para no eclipsar rutas API) ====================
-  if (!testMode) {
+  if (!testMode && serveFrontend) {
     if (process.env.NODE_ENV !== "production") {
       const vite = await createViteServer({
         server: { middlewareMode: true },
@@ -430,10 +431,8 @@ export async function createApp(testMode = false, testDb?: any) {
 // no generaron desperdicio. Se procesan al arrancar (solo producción), de forma idempotente:
 // se salta cualquier recepción que ya tenga su movimiento 'Pérdida en Tránsito'.
 async function startServer() {
-  const client = createClient({ url: `file:${path.resolve(process.cwd(), 'local.db')}` });
-  const dbInstance = drizzle(client, { schema });
-  
-  await initializeDatabase(client, dbInstance);
+  const { db: dbInstance } = getNeonDatabase();
+  await initializeNeonDatabase(dbInstance);
 
   const app = await createApp();
   const PORT = Number(process.env.PORT) || 5174;
@@ -446,6 +445,6 @@ async function startServer() {
 // y `scripts/generar-fixtures-vistas.ts` necesitan la app sin un puerto abierto: con
 // él abierto, la base del fixture queda bloqueada por el proceso y el script no
 // puede borrarla al terminar.
-if (process.argv[1] && !process.argv[1].includes('vitest') && !process.env.GDP_NO_LISTEN) {
+if (!process.env.VERCEL && process.argv[1] && !process.argv[1].includes('vitest') && !process.env.GDP_NO_LISTEN) {
   startServer();
 }

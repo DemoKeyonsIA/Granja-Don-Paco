@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/libsql';
 import type { Express } from 'express';
 import fs from 'fs';
 import path from 'path';
-import * as schema from '../src/db/schema';
+import * as schema from '../src/db/schema.sqlite';
 import { abrirClienteDePrueba, ejecutarDdl } from './helpers/db';
 
 let app: Express;
