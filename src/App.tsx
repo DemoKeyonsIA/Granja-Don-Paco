@@ -405,6 +405,17 @@ const nuevoItems = useMemo(() => {
 
   const modulos = useMemo(() => modulosVisibles(userRoles), [userRoles]);
 
+  const navegarComoComercial = (destino: 'ruta' | 'facturas' | 'clientes') => {
+    subTabManual.current = true;
+    if (destino === 'clientes') {
+      setActiveTab('clientes');
+      setSubTab('');
+      return;
+    }
+    setActiveTab('operaciones');
+    setSubTab(destino === 'facturas' ? 'facturar-movil' : 'venta-movil');
+  };
+
   // Las búsquedas antiguas podían seleccionar un módulo aunque el rol no lo
   // viera en el menú. Corrige también pestañas restauradas de una sesión previa.
   useEffect(() => {
@@ -507,6 +518,24 @@ const nuevoItems = useMemo(() => {
             </button>
           );
         })}
+        {userRoles.includes('Comercial') && (
+          <button
+            data-modulo-id="facturas-comercial"
+            aria-current={activeTab === 'operaciones' && subTab === 'facturar-movil' ? 'page' : undefined}
+            onClick={() => {
+              navegarComoComercial('facturas');
+              if (isMobile) setIsMenuOpen(false);
+            }}
+            className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-150 text-[13px] font-semibold"
+            style={{
+              background: activeTab === 'operaciones' && subTab === 'facturar-movil' ? 'var(--brand-action)' : 'transparent',
+              color: activeTab === 'operaciones' && subTab === 'facturar-movil' ? 'var(--text-nav-active)' : 'var(--text-secondary)',
+            }}
+          >
+            <FileText className="w-[18px] h-[18px]" style={{ color: activeTab === 'operaciones' && subTab === 'facturar-movil' ? 'var(--text-nav-active)' : 'var(--text-muted)' }} />
+            <span>Facturas</span>
+          </button>
+        )}
       </div>
 
       <div className="px-3 pb-4 mt-auto shrink-0 space-y-2 border-t" style={{ borderColor: 'var(--border-default)' }}>
@@ -799,9 +828,12 @@ const nuevoItems = useMemo(() => {
           {activeTab === 'operaciones' && esRolMovil(userRoles) && (() => {
             const subTabs = subTabsOperacionesMovil(userRoles);
             const effectiveSub = subTabMovilEfectivo(userRoles, subTab);
+            const tabsVisibles = userRoles.includes('Comercial')
+              ? subTabs.filter(tab => tab.id !== 'facturar-movil')
+              : subTabs;
             return (
               <div className="space-y-6">
-                {subTabs.length > 1 && renderFilaTabs(subTabs, 'primario')}
+                {effectiveSub !== 'facturar-movil' && tabsVisibles.length > 1 && renderFilaTabs(tabsVisibles, 'primario')}
                 <Suspense fallback={<ModuleLoading />}><div className="max-w-md mx-auto">
                   {effectiveSub === 'carga' && <DespachoMovil currentUser={currentUser} />}
                   {effectiveSub === 'incidencias' && <IncidentesMovil currentUser={currentUser} />}
@@ -912,7 +944,26 @@ const nuevoItems = useMemo(() => {
       {/* Mobile Bottom Nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 backdrop-blur-lg z-40 px-2 py-1 safe-area-pb" style={{ background: 'var(--bg-card)', borderTop: '1px solid var(--border-default)' }}>
         <div className="flex items-center justify-around">
-          {modulos.map((item) => {
+          {userRoles.includes('Comercial') ? ([
+            { id: 'ruta', label: 'Mi Ruta', icon: 'PackageOpen', active: activeTab === 'operaciones' && subTab !== 'facturar-movil', onClick: () => navegarComoComercial('ruta') },
+            { id: 'facturas', label: 'Facturas', icon: 'FileText', active: activeTab === 'operaciones' && subTab === 'facturar-movil', onClick: () => navegarComoComercial('facturas') },
+            { id: 'clientes', label: 'Clientes', icon: 'Users', active: activeTab === 'clientes', onClick: () => navegarComoComercial('clientes') },
+          ] as const).map(item => {
+            const Icon = iconoDe(item.icon);
+            return (
+              <button
+                key={item.id}
+                onClick={item.onClick}
+                aria-current={item.active ? 'page' : undefined}
+                aria-label={item.label}
+                className="flex flex-col items-center justify-center py-2 px-3 rounded-lg transition-all min-w-[60px]"
+                style={item.active ? { color: 'var(--brand-primary)' } : { color: 'var(--text-muted)' }}
+              >
+                <Icon className={cn("w-5 h-5 mb-1", item.active && "scale-110")} />
+                <span className="text-[10px] font-bold leading-tight truncate max-w-[60px]">{item.label}</span>
+              </button>
+            );
+          }) : modulos.map((item) => {
             const Icon = iconoDe(item.icon);
             const isActive = activeTab === item.id;
             return (
