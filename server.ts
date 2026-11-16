@@ -108,7 +108,7 @@ export function estadoVencimiento(dias: number | null, diasAviso: number): 'venc
 
 export async function createApp(testMode = false, testDb?: any, serveFrontend = true) {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '1mb' }));
 
   let db: any;
   if (testDb) {

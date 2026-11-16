@@ -23,6 +23,23 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo);
+    // Un deploy nuevo elimina los chunks del build anterior. Una pestaña que
+    // llevaba horas abierta puede pedir ese hash viejo y la lazy import queda
+    // rechazada de forma permanente; resetear el boundary no vuelve a pedirlo.
+    // Recargar una vez obtiene el app shell vigente; el límite evita bucles si
+    // el chunk también falta en el build actual.
+    const message = String(error?.message || '');
+    const esChunkObsoleto = /failed to fetch dynamically imported module|importing a module script failed|chunkloaderror|loading chunk [\w-]+ failed/i.test(message);
+    if (esChunkObsoleto && typeof window !== 'undefined') {
+      try {
+        const key = `gdp:chunk-refresh:${window.location.pathname}`;
+        const anterior = Number(window.sessionStorage.getItem(key) || 0);
+        if (!anterior || Date.now() - anterior > 30_000) {
+          window.sessionStorage.setItem(key, String(Date.now()));
+          window.location.reload();
+        }
+      } catch { /* Si el navegador bloquea sessionStorage queda disponible Reintentar. */ }
+    }
   }
 
   render() {
@@ -39,7 +56,14 @@ export class ErrorBoundary extends React.Component<Props, State> {
               {this.state.error?.message || 'Error inesperado'}
             </p>
             <button
-              onClick={() => this.setState({ hasError: false, error: null })}
+              onClick={() => {
+                const error = this.state.error;
+                if (/failed to fetch dynamically imported module|importing a module script failed|chunkloaderror|loading chunk [\w-]+ failed/i.test(String(error?.message || ''))) {
+                  window.location.reload();
+                } else {
+                  this.setState({ hasError: false, error: null });
+                }
+              }}
               className="btn-danger"
             >
               <RefreshCw className="h-4 w-4" />

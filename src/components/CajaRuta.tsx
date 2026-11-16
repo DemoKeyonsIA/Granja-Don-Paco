@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { sessionHeaders } from '../lib/session';
 import AccionFijaMovil from './AccionFijaMovil';
+import RegistroGasto from './RegistroGasto';
 
 interface CajaRutaProps {
   currentUser: User;
@@ -37,6 +38,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   const [tiquete, setTiquete] = useState<any>(null);
   const [previewTiqueteAbierto, setPreviewTiqueteAbierto] = useState(false);
   const [ventas, setVentas] = useState<any[]>([]);
+  const [gastosRuta, setGastosRuta] = useState<any[]>([]);
   const [modoDevolucion, setModoDevolucion] = useState(false);
   const [devSel, setDevSel] = useState<any>(null);
   const [modoMerma, setModoMerma] = useState(false);
@@ -46,6 +48,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   const [motivoMerma, setMotivoMerma] = useState('Quebrado Camión');
   const [cuadre, setCuadre] = useState<any>(null);
   const [efectivoContado, setEfectivoContado] = useState('');
+  const [registrarGastoAbierto, setRegistrarGastoAbierto] = useState(false);
 
   const fetchBase = useCallback(async () => {
     try {
@@ -81,6 +84,8 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
         setGuia(det);
         setVentas((det.ventas || []).slice().sort((a: any, b: any) => String(a.tiqueteConsecutivo).localeCompare(String(b.tiqueteConsecutivo))));
         setStockCamion((await invRes.json()).filter((i: any) => i.ubicacion === det.camionNombre));
+        const gastosRes = await fetch(`/api/gastos/guia/${id}`, { headers: sessionHeaders(currentUser.id) }).catch(() => null);
+        setGastosRuta(gastosRes?.ok ? await gastosRes.json() : []);
       }
     } catch { toast.error('Error al cargar la guía.'); }
   }, [currentUser.id]);
@@ -277,6 +282,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
           </div>
           {onClose && <button type="button" onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Cerrar registro de venta"><X className="h-5 w-5" /></button>}
         </div>
+        {guia && <button type="button" onClick={() => setRegistrarGastoAbierto(true)} disabled={!guiaId || cajaCerrada} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold disabled:opacity-50 sm:w-auto" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)', border: '1px solid var(--brand-primary-soft)' }}><Banknote className="h-5 w-5" /> Registrar gasto de esta ruta</button>}
         <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(240px,1.2fr)_minmax(0,2fr)] xl:items-end">
         <div className="min-w-0">
           <label htmlFor={initialGuideId ? undefined : 'guia-activa'} className="text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>Ruta y camión</label>
@@ -593,6 +599,11 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
               )}
             </div>
 
+            <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>Gastos de esta ruta</p><p className="text-xs" style={{ color: 'var(--text-muted)' }}>{gastosRuta.length} registros · asociados a {guia?.consecutivo || 'la guía'}</p></div><p className="text-sm font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{fmtCRC(gastosRuta.reduce((sum: number, gasto: any) => sum + Number(gasto.monto || 0), 0))}</p></div>
+              {gastosRuta.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Aún no hay gastos registrados para esta ruta.</p> : <div className="space-y-2">{gastosRuta.slice().sort((a: any, b: any) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 4).map((gasto: any) => <div key={gasto.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2" style={{ background: 'var(--bg-muted)' }}><div><p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{gasto.categoria} · {fmtCRC(Number(gasto.monto))}</p><p className="text-xs" style={{ color: 'var(--text-muted)' }}>{gasto.descripcion} · {fmtHora(gasto.fecha)}</p>{gasto.motivoRevision && <p className="text-xs font-semibold" style={{ color: 'var(--status-danger)' }}>Observación: {gasto.motivoRevision}</p>}</div><span className="rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: gasto.estadoRevision === 'Aprobado' ? 'var(--status-success-soft)' : gasto.estadoRevision === 'Observado' ? 'var(--status-danger-soft)' : 'var(--status-warning-soft)', color: gasto.estadoRevision === 'Aprobado' ? 'var(--status-success)' : gasto.estadoRevision === 'Observado' ? 'var(--status-danger)' : 'var(--status-warning)' }}>{gasto.estadoRevision === 'Aprobado' ? 'Revisado' : gasto.estadoRevision}</span></div>)}</div>}
+            </div>
+
             {!cajaCerrada && (
               <label className="block mt-3 space-y-1.5">
                 <span className="text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>Efectivo contado en caja (₡)</span>
@@ -758,6 +769,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
           </div>
         </div>
       )}
+      {registrarGastoAbierto && guiaId && <RegistroGasto currentUser={currentUser} initialGuideId={guiaId} onClose={() => { setRegistrarGastoAbierto(false); void loadGuia(guiaId); }} />}
     </div>
   );
 }

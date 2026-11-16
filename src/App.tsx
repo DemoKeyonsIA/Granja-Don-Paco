@@ -22,6 +22,7 @@ const BodegaMovil = lazy(() => import("./components/BodegaMovil"));
 const CamioneroMovil = lazy(() => import("./components/CamioneroMovil"));
 const IncidentesMovil = lazy(() => import("./components/IncidentesMovil"));
 const FinanzasResumen = lazy(() => import("./components/FinanzasResumen"));
+const GastosRutaAdmin = lazy(() => import("./components/GastosRutaAdmin"));
 const Etiquetas = lazy(() => import("./components/Etiquetas"));
 const Pesos = lazy(() => import("./components/Pesos"));
 const SaludAvicola = lazy(() => import("./components/SaludAvicola"));
@@ -856,6 +857,7 @@ const nuevoItems = useMemo(() => {
               <Suspense fallback={<ModuleLoading />}><div className="animate-in fade-in">
                 {subTab === 'resumen' && <FinanzasResumen currentUser={currentUser} />}
                 {subTab === 'documentos' && <Facturacion currentUser={currentUser} />}
+                {subTab === 'gastos-ruta' && <GastosRutaAdmin currentUser={currentUser} />}
                 {subTab === 'cobranza' && <Cobranza currentUser={currentUser} />}
                 {tipoReporteDe(subTab) && (
                   <Reportes currentUser={currentUser} tipo={tipoReporteDe(subTab)!} />

@@ -292,7 +292,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
 
   return (
     <div className="gcrm min-h-full" style={{ padding: '18px 22px 60px' }}>
-      <div style={{ maxWidth: 1120, margin: '0 auto' }}>
+      <div className="clientes-content">
         <div className="viewhead">
           <div>
             <div className="crumb">Clientes / <b>{view === 'analisis' ? `Análisis · ${analisis?.periodo?.etiqueta || ''}` : 'Cartera'}</b></div>
@@ -402,10 +402,10 @@ export default function Clientes({ currentUser }: ClientesProps) {
               ) : filtrarCartera.length === 0 ? (
                 <div className="empty">No se encontraron clientes que coincidan con la búsqueda.</div>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
+                <div className="cartera-table-scroll" style={{ overflowX: 'auto' }}>
                   <table className="gcrm-table">
                     <thead>
-                      <tr><th>Cliente</th><th>Ruta</th><th>Segmento</th><th>Pedidos 90d</th><th className="num" title="Compra promedio por pedido">Ticket prom.</th><th>Crédito (uso)</th><th>Riesgo</th><th className="num">Saldo</th>{canEdit && <th style={{ textAlign: 'center' }}>Acciones</th>}</tr>
+                      <tr><th>Cliente</th><th>Ruta</th><th>Segmento</th><th>Pedidos 90d</th><th className="num" title="Compra promedio por pedido">Ticket prom.</th><th>Crédito (uso)</th><th>Riesgo</th><th className="num">Saldo</th><th className="client-actions-head">Acciones</th></tr>
                     </thead>
                     <tbody>
                       {filtrarCartera.map((c) => {
@@ -472,14 +472,15 @@ export default function Clientes({ currentUser }: ClientesProps) {
                                 <span className="chip blue">al día</span>
                               )}
                             </td>
-                            {canEdit && (
-                              <td style={{ textAlign: 'center' }}>
-                                <span className="row-actions">
-                                  <button className="btn sm ico" title="Editar" onClick={(e) => { e.stopPropagation(); startEdit(clientes.find(x => x.id === c.id) || toCliente(c)); }}><span style={{ fontSize: 12 }}>✎</span></button>
-                                  <button className="btn sm ico" title="Archivar" onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }}><span style={{ color: 'var(--red)', fontSize: 12 }}>🗑</span></button>
-                                </span>
-                              </td>
-                            )}
+                            <td className="client-actions-cell" onClick={e => e.stopPropagation()}>
+                              <span className="row-actions">
+                                <button className="btn sm" title="Abrir perfil 360" aria-label={`Abrir perfil de ${c.nombre}`} onClick={() => setDrawerCliente(clientes.find(x => x.id === c.id) || toCliente(c))}>Ver perfil</button>
+                                {canEdit && <>
+                                  <button className="btn sm ico" title="Editar" aria-label={`Editar ${c.nombre}`} onClick={() => startEdit(clientes.find(x => x.id === c.id) || toCliente(c))}><span style={{ fontSize: 12 }}>✎</span></button>
+                                  <button className="btn sm ico" title="Archivar" aria-label={`Archivar ${c.nombre}`} onClick={() => handleDelete(c.id)}><span style={{ color: 'var(--red)', fontSize: 12 }}>🗑</span></button>
+                                </>}
+                              </span>
+                            </td>
                           </tr>
                         );
                       })}

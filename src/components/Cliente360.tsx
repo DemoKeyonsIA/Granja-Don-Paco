@@ -174,7 +174,7 @@ export default function Cliente360({ cliente, currentUser, open, onClose, onEdit
             </div>
           </div>
 
-          <div className="drawer-body" style={{ paddingTop: 14, flex: '0 0 auto', overflow: 'visible' }}>
+          <div className="drawer-actions">
             <div className="upnext">
               <span className="tag">Próxima acción</span>
               <span className="act">{proximaAccion[0]}</span>
@@ -190,12 +190,18 @@ export default function Cliente360({ cliente, currentUser, open, onClose, onEdit
             ))}
           </div>
 
-          <div className="drawer-body" style={{ paddingTop: 14, flex: '0 0 auto', overflow: 'visible' }}>
+          <div className="drawer-body">
             {isLoading && (
               <div className="empty">Cargando perfil 360…</div>
             )}
             {!isLoading && activeTab === 'resumen' && (
               <div className="a-panel on" data-a="resumen">
+                <section className="client-facts" aria-label="Información del cliente">
+                  <div><span>Identificación</span><b>{c.tipoDocumento || c.tipo_documento || 'Física'} · {c.documentoId || c.documento_id || 'Sin registrar'}</b></div>
+                  <div><span>Ubicación</span><b>{ubicacionCliente || 'Sin dirección registrada'}</b></div>
+                  <div><span>Ruta / vendedor</span><b>{c.ruta || 'Sin ruta asignada'}</b></div>
+                  <div><span>Condición de pago</span><b>{c.condicionPago || c.condicion_pago || 'Contado'}{(c.condicionPago === 'Credito' || c.condicion_pago === 'Credito') ? ` · límite ${fmt(c.limiteCredito || c.limite_credito)}` : ''}</b></div>
+                </section>
                 <div className="kpis" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
                   <div className="kpi"><div className="l">Pedidos 30d</div><div className="v">{k.pedidos30d ?? 0}</div><div className="ins">facturas del mes</div></div>
                   <div className="kpi"><div className="l">Ticket prom.</div><div className="v">{fmt(k.ticketProm)}</div><div className="ins">compra prom. por pedido</div></div>

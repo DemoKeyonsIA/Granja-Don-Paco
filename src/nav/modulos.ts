@@ -248,13 +248,13 @@ export const SUBTABS_ADMIN: SubTabDef[] = [
 ];
 
 /**
- * Sub-tabs de Finanzas: Resumen · Documentos · Cobranza · Analítica.
+ * Sub-tabs de Finanzas: Resumen · Documentos · Gastos de ruta · Cobranza · Analítica.
  *
  * La matriz por rol es explícita y no se deriva de "si no tiene `roles`, lo ve
  * todo", porque ese default ya causó el bug 2 del plan: un Comercial sin filtro
  * heredaba un tab que no tenía seleccionado y veía contenido de otro.
  *
- *   Admin    → los 4
+ *   Admin    → todos
  *   Socio    → Resumen + Analítica
  *   Comercial→ Documentos
  *
@@ -264,6 +264,7 @@ export const SUBTABS_ADMIN: SubTabDef[] = [
 export const SUBTABS_FINANZAS: SubTabDef[] = [
   { id: 'resumen', label: 'Resumen', roles: ['Admin', 'Socio'] },
   { id: 'documentos', label: 'Documentos', roles: ['Admin', 'Comercial'] },
+  { id: 'gastos-ruta', label: 'Gastos de ruta', roles: ['Admin'] },
   { id: 'cobranza', label: 'Cobranza', roles: ['Admin'] },
   { id: 'analitica', label: 'Analítica', roles: ['Admin', 'Socio'] },
 ];
