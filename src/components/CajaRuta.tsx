@@ -25,6 +25,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   const [guia, setGuia] = useState<any>(null);
   const [stockCamion, setStockCamion] = useState<any[]>([]);
   const [politicaPrecio, setPoliticaPrecio] = useState<any>(null);
+  const [preciosProductos, setPreciosProductos] = useState<Record<string, any>>({});
   const [precioNegociado, setPrecioNegociado] = useState(0);
   const [cargandoPrecio, setCargandoPrecio] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -97,17 +98,49 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   useEffect(() => { fetchBase(); }, [fetchBase]);
   useEffect(() => { loadGuia(guiaId); }, [guiaId, loadGuia]);
   useEffect(() => {
-    if (!producto || !clienteId) { setPoliticaPrecio(null); setPrecioNegociado(0); return; }
+    if (!clienteId) {
+      setPreciosProductos({});
+      setPoliticaPrecio(null);
+      setPrecioNegociado(0);
+      setCargandoPrecio(false);
+      return;
+    }
     const controller = new AbortController();
+    const productos = Array.from(new Set(stockCamion.filter((item: any) => Number(item.cantidad) > 0).map((item: any) => String(item.producto))));
+    if (productos.length === 0) {
+      setPreciosProductos({});
+      setCargandoPrecio(false);
+      return;
+    }
     setCargandoPrecio(true);
-    setPoliticaPrecio(null);
-    setPrecioNegociado(0);
-    fetch(`/api/precios/lookup?producto=${encodeURIComponent(producto)}&clienteId=${encodeURIComponent(clienteId)}`, { signal: controller.signal, headers: sessionHeaders(currentUser.id) })
-      .then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Precio no configurado'); setPoliticaPrecio(data); setPrecioNegociado(Number(data.precio) || 0); })
-      .catch(error => { if (error.name !== 'AbortError') setPoliticaPrecio({ error: error.message }); })
+    setPreciosProductos({});
+    fetch('/api/precios/lookup-multiple', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: sessionHeaders(currentUser.id, true),
+      body: JSON.stringify({ productos, clienteId }),
+    })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'No fue posible consultar los precios');
+        setPreciosProductos(data || {});
+      })
+      .catch(error => { if (error.name !== 'AbortError') setPreciosProductos(Object.fromEntries(productos.map(nombre => [nombre, { error: error.message }]))); })
       .finally(() => { if (!controller.signal.aborted) setCargandoPrecio(false); });
     return () => controller.abort();
-  }, [producto, clienteId, currentUser.id]);
+  }, [clienteId, currentUser.id, stockCamion]);
+
+  useEffect(() => {
+    if (!clienteId || !producto) {
+      setPoliticaPrecio(null);
+      setPrecioNegociado(0);
+      return;
+    }
+    const precio = preciosProductos[producto];
+    if (!precio) return;
+    setPoliticaPrecio(precio);
+    setPrecioNegociado(Number(precio.precio) || 0);
+  }, [clienteId, producto, preciosProductos]);
   useEffect(() => {
     if (!tiquete) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setTiquete(null); };
@@ -466,6 +499,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 <span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>2</span>
                 <PackageOpen className="w-4 h-4" /> Elija qué va a vender
               </p>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2.5" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}>
+                <p className="text-sm">Cliente: <strong>{clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || 'Seleccione un cliente'}</strong></p>
+                <button type="button" onClick={() => setPasoVenta(1)} className="min-h-10 rounded-lg border px-3 text-sm font-bold" style={{ background: 'var(--bg-card)', color: 'var(--brand-primary)', borderColor: 'var(--border-default)' }}>{clienteId ? 'Cambiar cliente' : 'Elegir cliente'}</button>
+              </div>
               <div className="route-pos-choice-grid mb-4">
                 {productosDisponibles.map((i: any) => (
                   <button
@@ -479,10 +516,20 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                   >
                     {i.producto}
                     <span className="block mt-1 text-sm font-medium opacity-90">{i.unidad === 'kg' ? `Quedan ${Number(i.cantidad).toFixed(2)} kg` : `Unidad de inventario incompatible: ${i.unidad || 'sin definir'}`}</span>
-                    <span className="block text-xs font-medium opacity-80">{producto === i.producto && politicaPrecio?.precio ? `${fmtCRC(precioVenta)} por kg` : 'Elija cliente para ver precio'}</span>
+                    <span className="block text-xs font-medium opacity-80">
+                      {!clienteId ? 'Elija cliente para ver precio' : cargandoPrecio ? 'Consultando precio…' : Number(preciosProductos[i.producto]?.precio) > 0
+                        ? `${fmtCRC(Number(preciosProductos[i.producto].precio))} por kg · ${fmtCRC(Number(preciosProductos[i.producto].precioMinimo ?? preciosProductos[i.producto].precio))}–${fmtCRC(Number(preciosProductos[i.producto].precioMaximo ?? preciosProductos[i.producto].precio))}`
+                        : preciosProductos[i.producto]?.error ? 'No se pudo consultar el precio' : 'Precio no configurado'}</span>
                   </button>
                 ))}
               </div>
+
+              {!clienteId && (
+                <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl px-3 py-3 text-sm" style={{ background: 'var(--status-warning-soft)', color: 'var(--text-primary)', border: '1px solid var(--status-warning)' }}>
+                  <span>Primero elija el cliente para cargar su precio y calcular el total.</span>
+                  <button type="button" onClick={() => setPasoVenta(1)} className="min-h-10 rounded-lg px-4 font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Elegir cliente</button>
+                </div>
+              )}
 
               {producto && clienteId && (
                 <div className="mb-4 rounded-xl border px-3 py-2.5 text-sm" style={{ background: politicaPrecio?.error ? 'var(--status-danger-soft)' : 'var(--status-success-soft)', borderColor: politicaPrecio?.error ? 'var(--status-danger)' : 'var(--status-success)', color: politicaPrecio?.error ? 'var(--status-danger)' : 'var(--status-success)' }}>
@@ -530,7 +577,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                     style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}
                     aria-label="Precio por kilo"
                   />
-                  <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>{precioAutorizado ? `Puede cobrar entre ${fmtCRC(precioMinimo)} y ${fmtCRC(precioMaximo)}` : 'Rango autorizado: —'}</p>
+                  <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>{precioAutorizado ? `Puede cobrar entre ${fmtCRC(precioMinimo)} y ${fmtCRC(precioMaximo)} por kg. El total se calcula automáticamente.` : clienteId ? 'No hay un precio autorizado para este cliente y producto. Solicite a Administración que configure la lista.' : 'Seleccione un cliente para cargar el precio autorizado.'}</p>
                 </div>
                 <div>
                   <label htmlFor="descuento-venta" className="mb-1 block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>Descuento total (₡)</label>
