@@ -47,16 +47,13 @@ export async function initializeNeonDatabase(db: any) {
 
   // Small, clearly synthetic operating dataset so the hosted demo opens with
   // useful screens. Never copy the local SQLite database into the demo.
-  const hasDemoClients = await db.select({ id: schema.clientes.id }).from(schema.clientes).where(eq(schema.clientes.id, 'DEMO-CLI-001')).limit(1);
-  if (!hasDemoClients.length) {
-    await db.insert(schema.clientes).values([
+  await db.insert(schema.clientes).values([
       { id: 'DEMO-CLI-001', nombre: 'Mini Súper La Esquina', tipo_documento: 'Juridica', documento_id: '3-101-900001', telefono: '8888-0101', email: 'esquina@example.test', direccion: 'Centro de Naranjo', provincia: 'Alajuela', canton: 'Naranjo', ruta: 'Ruta Occidente', condicion_pago: 'Contado', limite_credito: 0, saldo_pendiente: 0, estado: 'Activo', fecha_creacion: now },
       { id: 'DEMO-CLI-002', nombre: 'Abastecedor El Molino', tipo_documento: 'Juridica', documento_id: '3-101-900002', telefono: '8888-0102', email: 'molino@example.test', direccion: 'San Ramón', provincia: 'Alajuela', canton: 'San Ramón', ruta: 'Ruta Occidente', condicion_pago: 'Crédito', limite_credito: 250000, saldo_pendiente: 78000, estado: 'Activo', fecha_creacion: now },
       { id: 'DEMO-CLI-003', nombre: 'Soda La Granja', tipo_documento: 'Fisica', documento_id: '1-1111-0003', telefono: '8888-0103', direccion: 'Palmares', provincia: 'Alajuela', canton: 'Palmares', ruta: 'Ruta Palmares', condicion_pago: 'Contado', limite_credito: 0, saldo_pendiente: 0, estado: 'Activo', fecha_creacion: now },
       { id: 'DEMO-CLI-004', nombre: 'Pulpería San Miguel', tipo_documento: 'Fisica', documento_id: '1-1111-0004', telefono: '8888-0104', direccion: 'San Carlos', provincia: 'Alajuela', canton: 'San Carlos', ruta: 'Ruta Norte', condicion_pago: 'Crédito', limite_credito: 180000, saldo_pendiente: 42000, estado: 'Activo', fecha_creacion: now },
       { id: 'DEMO-CLI-005', nombre: 'Restaurante Buen Día', tipo_documento: 'Juridica', documento_id: '3-101-900005', telefono: '8888-0105', direccion: 'Grecia', provincia: 'Alajuela', canton: 'Grecia', ruta: 'Ruta Occidente', condicion_pago: 'Contado', limite_credito: 0, saldo_pendiente: 0, estado: 'Activo', fecha_creacion: now },
-    ]).onConflictDoNothing();
-  }
+  ]).onConflictDoNothing();
 
   const hasDemoFarm = await db.select({ id: schema.granjas.id }).from(schema.granjas).where(eq(schema.granjas.id, 'DEMO-FARM-001')).limit(1);
   if (!hasDemoFarm.length) {
@@ -136,6 +133,7 @@ export async function initializeNeonDatabase(db: any) {
       ],
     },
   ];
+  const clientesDemo = await db.query.clientes.findMany();
   for (const guiaDemo of guiasDemoVendedor) {
     await db.transaction(async (tx: any) => {
       const ahora = new Date().toISOString();
@@ -147,7 +145,11 @@ export async function initializeNeonDatabase(db: any) {
         clientesIds: JSON.stringify(guiaDemo.clientes), totalCartones: guiaDemo.cargas.reduce((s, c) => s + c.kg, 0),
         totalKg: guiaDemo.cargas.reduce((s, c) => s + c.kg, 0), pesoSalida: guiaDemo.cargas.reduce((s, c) => s + c.kg, 0),
         estado: guiaDemo.estado, recibidoEn: guiaDemo.estado === 'EnRuta' ? ahora : null,
-        rutaOrdenJson: JSON.stringify(guiaDemo.clientes.map((clienteId, index) => ({ clienteId, orden: index + 1 }))),
+        rutaOrdenJson: JSON.stringify(guiaDemo.clientes.map((clienteId, index) => ({
+          clienteId,
+          orden: index + 1,
+          nombre: clientesDemo.find((cliente: any) => cliente.id === clienteId)?.nombre || clienteId,
+        }))),
       }).onConflictDoNothing().returning({ id: schema.guias_despacho.id });
       if (!creada.length) return;
       if (!truck) throw new Error(`No existe el camión demo ${guiaDemo.camionId}`);
