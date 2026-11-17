@@ -120,7 +120,9 @@ export function registrarRutasCajaCustodia(
       const precio = precioUnitario == null ? precioLista : Number(precioUnitario);
       const precioMinimo = Number(politicaPrecio.precioMinimo);
       const precioMaximo = Number(politicaPrecio.precioMaximo);
-      if (!Number.isFinite(precio) || precio < precioMinimo - 0.01 || precio > precioMaximo + 0.01) {
+      // El rango administrativo es vinculante: no se admite tolerancia monetaria
+      // fuera de los límites, ni siquiera por un céntimo.
+      if (!Number.isFinite(precio) || precio < precioMinimo || precio > precioMaximo) {
         return res.status(409).json({ error: `Precio fuera del rango autorizado. Puede vender entre ₡${precioMinimo.toLocaleString('es-CR')} y ₡${precioMaximo.toLocaleString('es-CR')} (${politicaPrecio.listaUsada}).` });
       }
       const subtotal = cantidadKg * precio;
@@ -130,7 +132,7 @@ export function registrarRutasCajaCustodia(
       const descuentoPorPiso = Math.max(0, subtotal - cantidadKg * precioMinimo);
       const descuentoPorPorcentaje = Math.max(0, subtotal * Math.max(0, Number(politicaPrecio.descuentoMaximo || 0)) / 100);
       const descuentoMaximo = Math.min(descuentoPorPiso, descuentoPorPorcentaje);
-      if (!Number.isFinite(descuentoNum) || descuentoNum < 0 || descuentoNum - descuentoMaximo > 0.01) {
+      if (!Number.isFinite(descuentoNum) || descuentoNum < 0 || descuentoNum > descuentoMaximo) {
         return res.status(409).json({ error: `Descuento fuera del rango autorizado. Máximo permitido: ₡${Math.floor(descuentoMaximo).toLocaleString('es-CR')}.` });
       }
       const total = subtotal - descuentoNum;

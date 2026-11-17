@@ -170,6 +170,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   const total = Math.max(0, subtotal - Number(descuento || 0));
   const precioMinimo = Number(politicaPrecio?.precioMinimo ?? politicaPrecio?.precio ?? 0);
   const precioMaximo = Number(politicaPrecio?.precioMaximo ?? politicaPrecio?.precio ?? 0);
+  const precioFueraDeRango = precioAutorizado && (precioVenta < precioMinimo || precioVenta > precioMaximo);
   const descuentoPorPiso = Math.max(0, subtotal - Number(cantidad) * precioMinimo);
   const descuentoPorcentaje = Math.max(0, subtotal * Math.max(0, Number(politicaPrecio?.descuentoMaximo || 0)) / 100);
   const descuentoPermitido = Math.min(descuentoPorPiso, descuentoPorcentaje);
@@ -185,6 +186,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
     if (!guiaId) return toast.error('Seleccione una guía activa');
     if (!producto) return toast.error('Seleccione un producto');
     if (!clienteId) return toast.error('Seleccione un cliente');
+    if (!precioAutorizado || precioVenta < precioMinimo || precioVenta > precioMaximo) return toast.error(`El precio debe estar entre ${fmtCRC(precioMinimo)} y ${fmtCRC(precioMaximo)} por kg.`);
     if (!cantidad || cantidad <= 0) return toast.error('Indique una cantidad');
     if (cantidad > stockProducto) return toast.error(`Solo quedan ${stockProducto.toFixed(2)} kg de ${producto} en el camión.`);
     setLoading(true);
@@ -575,22 +577,24 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                     onChange={(e) => setPrecioNegociado(Number(e.target.value) || 0)}
                     inputMode="decimal"
                     className="h-12 w-full rounded-xl px-3 py-2 text-base font-bold focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                    style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}
+                    style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: `1px solid ${precioFueraDeRango ? 'var(--status-danger)' : 'var(--border-default)'}` }}
                     aria-label="Precio por kilo"
+                    aria-invalid={precioFueraDeRango}
+                    aria-describedby="precio-venta-ayuda"
                   />
-                  <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>{precioAutorizado ? `Puede cobrar entre ${fmtCRC(precioMinimo)} y ${fmtCRC(precioMaximo)} por kg. El total se calcula automáticamente.` : clienteId ? 'No hay un precio autorizado para este cliente y producto. Solicite a Administración que configure la lista.' : 'Seleccione un cliente para cargar el precio autorizado.'}</p>
+                  <p id="precio-venta-ayuda" className="mt-1 text-xs" role={precioFueraDeRango ? 'alert' : undefined} style={{ color: precioFueraDeRango ? 'var(--status-danger)' : 'var(--text-muted)' }}>{precioFueraDeRango ? `Fuera del rango autorizado. Ajuste el precio entre ${fmtCRC(precioMinimo)} y ${fmtCRC(precioMaximo)}; no se podrá registrar la venta así.` : precioAutorizado ? `Puede cobrar entre ${fmtCRC(precioMinimo)} y ${fmtCRC(precioMaximo)} por kg. El total se calcula automáticamente.` : clienteId ? 'No hay un precio autorizado para este cliente y producto. Solicite a Administración que configure la lista.' : 'Seleccione un cliente para cargar el precio autorizado.'}</p>
                 </div>
                 <div>
                   <label htmlFor="descuento-venta" className="mb-1 block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>Descuento total (₡)</label>
                   <input
                     id="descuento-venta"
-                    type="number" min={0} value={descuento} disabled={!producto || !precioAutorizado}
+                    type="number" min={0} max={descuentoPermitido} value={descuento} disabled={!producto || !precioAutorizado}
                     onChange={(e) => setDescuento(Number(e.target.value) || 0)}
                     inputMode="decimal"
                     className="h-12 w-full rounded-xl px-3 py-2 text-base font-bold focus:outline-none"
                     style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}
                   />
-                  <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>Máximo permitido: {fmtCRC(descuentoPermitido)}</p>
+                  <p className="mt-1 text-xs" role={descuento > descuentoPermitido ? 'alert' : undefined} style={{ color: descuento > descuentoPermitido ? 'var(--status-danger)' : 'var(--text-muted)' }}>{descuento > descuentoPermitido ? `Descuento fuera del límite. Redúzcalo a ${fmtCRC(descuentoPermitido)} o menos.` : `Máximo permitido: ${fmtCRC(descuentoPermitido)}`}</p>
                 </div>
                 <div className="route-pos-total rounded-xl p-3 sm:flex sm:items-center sm:justify-between" style={{ background: 'var(--bg-muted)' }}>
                   <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Total a cobrar</p>
