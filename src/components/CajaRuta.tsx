@@ -467,8 +467,11 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
       <div className="route-pos-layout">
           {/* Columna izquierda: cliente + producto */}
           <div className="route-pos-main min-w-0 space-y-4">
-            <div className="grid grid-cols-3 gap-2" aria-label="Pasos de la venta">
-              {[['1', 'Cliente'], ['2', 'Producto y kg'], ['3', 'Cobro y documento']].map(([numero, etiqueta], index) => <button key={numero} type="button" onClick={() => { if (index === 0 || (index === 1 && clienteId) || (index === 2 && clienteId && producto)) setPasoVenta(index + 1); }} aria-current={pasoVenta === index + 1 ? 'step' : undefined} className="rounded-xl px-2 py-3 text-center text-xs font-bold" style={{ background: pasoVenta === index + 1 ? 'var(--brand-primary)' : 'var(--bg-muted)', color: pasoVenta === index + 1 ? 'var(--text-on-action)' : 'var(--text-secondary)' }}><span className="mr-1">{numero}</span>{etiqueta}</button>)}
+            <div className="grid grid-cols-4 gap-2" aria-label="Pasos de la venta">
+              {[['1', 'Cliente'], ['2', 'Producto'], ['3', 'Cantidad y precio'], ['4', 'Cobro y factura']].map(([numero, etiqueta], index) => {
+                const puedeAbrir = index === 0 || (index === 1 && Boolean(clienteId)) || (index === 2 && Boolean(clienteId && producto)) || (index === 3 && Boolean(clienteId && producto && cantidad > 0 && cantidad <= stockProducto && precioAutorizado && !precioFueraDeRango && descuento >= 0 && descuento <= descuentoPermitido));
+                return <button key={numero} type="button" onClick={() => { if (puedeAbrir) setPasoVenta(index + 1); }} disabled={!puedeAbrir} aria-current={pasoVenta === index + 1 ? 'step' : undefined} className="rounded-xl px-1.5 py-3 text-center text-[11px] font-bold disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:text-xs" style={{ background: pasoVenta === index + 1 ? 'var(--brand-primary)' : 'var(--bg-muted)', color: pasoVenta === index + 1 ? 'var(--text-on-action)' : 'var(--text-secondary)' }}><span className="mr-1">{numero}</span>{etiqueta}</button>;
+              })}
             </div>
             {/* Clientes */}
             {pasoVenta === 1 && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
@@ -497,11 +500,11 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
               )}
             </div>}
 
-            {/* Producto + cantidad */}
+            {/* Selección de producto */}
             {pasoVenta === 2 && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-base font-extrabold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                 <span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>2</span>
-                <PackageOpen className="w-4 h-4" /> Elija qué va a vender
+                <PackageOpen className="w-4 h-4" /> Elija el producto
               </p>
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2.5" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}>
                 <p className="text-sm">Cliente: <strong>{clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || 'Seleccione un cliente'}</strong></p>
@@ -535,16 +538,27 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 </div>
               )}
 
-              {producto && clienteId && (
+              {!producto && <p role="status" className="rounded-xl px-3 py-2 text-sm" style={{ background: 'var(--bg-muted)', color: 'var(--text-muted)' }}>Seleccione un producto para continuar a la cantidad y el precio.</p>}
+              {producto && <p className="rounded-xl px-3 py-2 text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}><strong>{producto}</strong> seleccionado · {stockProducto.toFixed(2)} kg disponibles en el camión.</p>}
+            </div>}
+
+            {/* Cantidad y precio */}
+            {pasoVenta === 3 && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+              <p className="text-base font-extrabold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>3</span>
+                <PackageOpen className="w-4 h-4" /> Cantidad y precio
+              </p>
+              <div className="mb-4 rounded-xl px-3 py-3" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}>
+                <p className="text-sm">Cliente: <strong>{clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || '—'}</strong></p>
+                <p className="mt-1 text-sm">Producto: <strong>{producto || '—'}</strong> · Disponible: <strong>{stockProducto.toFixed(2)} kg</strong></p>
+              </div>
+              {clienteId && producto && (
                 <div className="mb-4 rounded-xl border px-3 py-2.5 text-sm" style={{ background: politicaPrecio?.error ? 'var(--status-danger-soft)' : 'var(--status-success-soft)', borderColor: politicaPrecio?.error ? 'var(--status-danger)' : 'var(--status-success)', color: politicaPrecio?.error ? 'var(--status-danger)' : 'var(--status-success)' }}>
                   {cargandoPrecio ? 'Consultando precio autorizado…' : politicaPrecio?.error ? politicaPrecio.error : politicaPrecio?.precio ? (
                     <><strong>Rango autorizado: {fmtCRC(precioMinimo)} a {fmtCRC(precioMaximo)} por kg</strong><span className="block text-xs">{politicaPrecio.listaUsada} · precio sugerido {fmtCRC(politicaPrecio.precio)} por kg</span></>
-                  ) : 'Seleccione el cliente y el producto para ver el precio autorizado.'}
+                  ) : 'Administración aún no configuró el precio para este producto y cliente.'}
                 </div>
               )}
-
-              {producto && <p className="mb-4 rounded-xl px-3 py-2 text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}>Disponible en el camión: <strong>{stockProducto.toFixed(2)} kg</strong>. El sistema escogerá automáticamente los lotes que vencen primero.</p>}
-              {!producto && <p role="status" className="mb-4 rounded-xl px-3 py-2 text-sm" style={{ background: 'var(--bg-muted)', color: 'var(--text-muted)' }}>Primero seleccione un producto. Después podrá indicar los kilos y revisar el precio.</p>}
 
               <div className="route-pos-sale-fields">
                 {clienteId && producto && (cargandoPrecio || !precioAutorizado) && (
@@ -554,7 +568,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                   </div>
                 )}
                 <div>
-                  <label htmlFor="cantidad-venta" className="mb-1 block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>3 · ¿Cuántos kilos?</label>
+                  <label htmlFor="cantidad-venta" className="mb-1 block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>¿Cuántos kilos?</label>
                   <div className="flex min-h-14 items-center gap-2">
                     <button type="button" onClick={() => setCantidadTexto(String(Math.max(0.1, Math.round(((Number(cantidadTexto) || 0) - 1) * 100) / 100)))} disabled={!producto} aria-label="Quitar un kilo" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border disabled:cursor-not-allowed disabled:opacity-45" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}><Minus className="h-5 w-5" /></button>
                   <input
@@ -608,7 +622,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
             </div>}
 
             {/* Cobro + accion */}
-            {pasoVenta === 3 && <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+            {pasoVenta === 4 && <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-base font-extrabold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}><span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>4</span>¿Cómo paga?</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button onClick={() => setCobro('Efectivo')}
@@ -635,6 +649,13 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 >
                   <CreditCard className="w-5 h-5" /> Crédito
                 </button>
+              </div>
+              <div className="rounded-xl p-3 text-sm" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
+                <div className="flex justify-between gap-3"><span style={{ color: 'var(--text-muted)' }}>Cliente</span><strong className="text-right" style={{ color: 'var(--text-primary)' }}>{clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || '—'}</strong></div>
+                <div className="mt-2 flex justify-between gap-3"><span style={{ color: 'var(--text-muted)' }}>Producto y cantidad</span><strong className="text-right" style={{ color: 'var(--text-primary)' }}>{producto} · {cantidad.toFixed(2)} kg</strong></div>
+                <div className="mt-2 flex justify-between gap-3"><span style={{ color: 'var(--text-muted)' }}>Precio por kg</span><strong style={{ color: 'var(--text-primary)' }}>{fmtCRC(precioVenta)}</strong></div>
+                {descuento > 0 && <div className="mt-2 flex justify-between gap-3"><span style={{ color: 'var(--text-muted)' }}>Descuento</span><strong style={{ color: 'var(--text-primary)' }}>− {fmtCRC(descuento)}</strong></div>}
+                <div className="mt-3 flex justify-between gap-3 border-t pt-3 font-extrabold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><span>Total</span><span>{fmtCRC(total)}</span></div>
               </div>
               <div className="rounded-xl p-3" style={{ background: 'var(--brand-primary-soft)' }}><p className="text-sm font-bold" style={{ color: 'var(--brand-primary-dark)' }}>Se emitirá la factura con esta venta</p><p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>El documento fiscal queda en borrador de pruebas. En Documentos se completa el envío y se consulta la respuesta.</p></div>
               <button onClick={vender} disabled={ventaDeshabilitada}
@@ -664,18 +685,19 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
             </div>}
             <div className="flex gap-2">
               {pasoVenta > 1 && <button type="button" onClick={() => setPasoVenta(v => Math.max(1, v - 1))} className="min-h-12 flex-1 rounded-xl border px-4 text-sm font-bold" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }}>Volver</button>}
-              {pasoVenta < 3 && <button type="button" onClick={() => {
+              {pasoVenta < 4 && <button type="button" onClick={() => {
                 if (pasoVenta === 1 && !clienteId) return toast.error('Seleccione el cliente de la ruta.');
-                if (pasoVenta === 2 && (!producto || cantidad <= 0 || cantidad > stockProducto)) return toast.error('Seleccione el producto e indique kilos dentro del saldo disponible.');
-                if (pasoVenta === 2 && (!precioAutorizado || cargandoPrecio || precioFueraDeRango)) return toast.error(`El precio debe respetar el rango autorizado de ${fmtCRC(precioMinimo)} a ${fmtCRC(precioMaximo)} por kg.`);
-                if (pasoVenta === 2 && (descuento < 0 || descuento > descuentoPermitido)) return toast.error(`El descuento máximo permitido es ${fmtCRC(descuentoPermitido)}.`);
+                if (pasoVenta === 2 && !producto) return toast.error('Seleccione el producto que va a vender.');
+                if (pasoVenta === 3 && (!producto || cantidad <= 0 || cantidad > stockProducto)) return toast.error('Indique kilos dentro del saldo disponible.');
+                if (pasoVenta === 3 && (!precioAutorizado || cargandoPrecio || precioFueraDeRango)) return toast.error(`El precio debe respetar el rango autorizado de ${fmtCRC(precioMinimo)} a ${fmtCRC(precioMaximo)} por kg.`);
+                if (pasoVenta === 3 && (descuento < 0 || descuento > descuentoPermitido)) return toast.error(`El descuento máximo permitido es ${fmtCRC(descuentoPermitido)}.`);
                 setPasoVenta(v => v + 1);
-              }} disabled={pasoVenta === 2 && (!clienteId || !producto || cantidad <= 0 || cantidad > stockProducto || !precioAutorizado || cargandoPrecio || precioFueraDeRango || descuento < 0 || descuento > descuentoPermitido)} className="min-h-12 flex-1 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>{pasoVenta === 2 && precioFueraDeRango ? 'Ajuste el precio autorizado' : 'Continuar'}</button>}
+              }} disabled={(pasoVenta === 2 && (!clienteId || !producto)) || (pasoVenta === 3 && (!producto || cantidad <= 0 || cantidad > stockProducto || !precioAutorizado || cargandoPrecio || precioFueraDeRango || descuento < 0 || descuento > descuentoPermitido))} className="min-h-12 flex-1 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>{pasoVenta === 3 && precioFueraDeRango ? 'Ajuste el precio autorizado' : 'Continuar'}</button>}
             </div>
           </div>
 
           {/* Columna derecha: tiquetes del día + terminar día */}
-          {pasoVenta === 3 && <div className="route-pos-sidebar min-w-0 space-y-4">
+          {pasoVenta === 4 && <div className="route-pos-sidebar min-w-0 space-y-4">
             <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>Tiquetes de ruta del día</p>
               {emitidas.length === 0 ? (
