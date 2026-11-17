@@ -38,6 +38,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   const [cobro, setCobro] = useState<'Efectivo' | 'Credito' | 'Transferencia'>('Efectivo');
   const [tiquete, setTiquete] = useState<any>(null);
   const [previewTiqueteAbierto, setPreviewTiqueteAbierto] = useState(false);
+  const [cierreRutaAbierto, setCierreRutaAbierto] = useState(false);
   const [ventas, setVentas] = useState<any[]>([]);
   const [gastosRuta, setGastosRuta] = useState<any[]>([]);
   const [modoDevolucion, setModoDevolucion] = useState(false);
@@ -326,7 +327,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
       cobro: muestraGeneral ? 'Efectivo' : cobro,
       total: subtotalMuestra - descuentoMuestra,
     });
-    setPreviewTiqueteAbierto(muestraGeneral);
+    setPreviewTiqueteAbierto(true);
   };
 
   return (
@@ -340,7 +341,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
           </div>
           {onClose && <button type="button" onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Cerrar registro de venta"><X className="h-5 w-5" /></button>}
         </div>
-        {guia && <button type="button" onClick={() => setRegistrarGastoAbierto(true)} disabled={!guiaId || cajaCerrada} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold disabled:opacity-50 sm:w-auto" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)', border: '1px solid var(--brand-primary-soft)' }}><Banknote className="h-5 w-5" /> Registrar gasto de esta ruta</button>}
+        {guia && <div className="flex flex-col gap-2 sm:flex-row">
+          <button type="button" onClick={() => setRegistrarGastoAbierto(true)} disabled={!guiaId || cajaCerrada} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold disabled:opacity-50 sm:w-auto" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)', border: '1px solid var(--brand-primary-soft)' }}><Banknote className="h-5 w-5" /> Registrar gasto de esta ruta</button>
+          {guia.estado === 'EnRuta' && <button type="button" onClick={() => setCierreRutaAbierto(true)} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold sm:w-auto" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}><Truck className="h-5 w-5" /> Cierre y entrega a Bodega</button>}
+        </div>}
         <div className="route-pos-header-layout">
           <div className="route-pos-assignment">
             <div className="min-w-0">
@@ -668,20 +672,6 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}>
                 Vista previa del tiquete · no registra venta
               </button>
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => setModoDevolucion(true)}
-                  disabled={loading || cajaCerrada}
-                  className="min-h-12 flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50"
-                  style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}>
-                  <RotateCcw className="w-4 h-4" /> Registrar devolución
-                </button>
-                <button onClick={() => { setEtiquetaMerma(etiquetasDisponibles[0]?.etiquetaId || ''); setModoMerma(true); }}
-                  disabled={loading || cajaCerrada || etiquetasDisponibles.length === 0}
-                  className="min-h-12 flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50"
-                  style={{ background: 'var(--status-warning-soft)', color: 'var(--status-warning)', border: '1px solid var(--status-warning)' }}>
-                  <AlertTriangle className="w-4 h-4" /> Reportar daño
-                </button>
-              </div>
             </div>}
             <div className="flex gap-2">
               {pasoVenta > 1 && <button type="button" onClick={() => setPasoVenta(v => Math.max(1, v - 1))} className="min-h-12 flex-1 rounded-xl border px-4 text-sm font-bold" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }}>Volver</button>}
@@ -696,8 +686,13 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
             </div>
           </div>
 
-          {/* Columna derecha: tiquetes del día + terminar día */}
-          {pasoVenta === 4 && <div className="route-pos-sidebar min-w-0 space-y-4">
+          {/* Panel independiente para cierre de ruta y entrega de sobrante */}
+          {cierreRutaAbierto && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center">
+            <div className="route-pos-sidebar max-h-[92dvh] w-full max-w-2xl min-w-0 space-y-4 overflow-y-auto rounded-2xl p-4" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-default)' }}>
+            <div className="flex items-start justify-between gap-3">
+              <div><h2 className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>Cierre de ruta y entrega a Bodega</h2><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Revise ventas y gastos, registre devoluciones o daños y cuente el efectivo antes de finalizar el día.</p></div>
+              <button type="button" onClick={() => setCierreRutaAbierto(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Cerrar panel de cierre"><X className="h-5 w-5" /></button>
+            </div>
             <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>Tiquetes de ruta del día</p>
               {emitidas.length === 0 ? (
@@ -722,9 +717,14 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
               {gastosRuta.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Aún no hay gastos registrados para esta ruta.</p> : <div className="space-y-2">{gastosRuta.slice().sort((a: any, b: any) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 4).map((gasto: any) => <div key={gasto.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2" style={{ background: 'var(--bg-muted)' }}><div><p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{gasto.categoria} · {fmtCRC(Number(gasto.monto))}</p><p className="text-xs" style={{ color: 'var(--text-muted)' }}>{gasto.descripcion} · {fmtHora(gasto.fecha)}</p>{gasto.motivoRevision && <p className="text-xs font-semibold" style={{ color: 'var(--status-danger)' }}>Observación: {gasto.motivoRevision}</p>}</div><span className="rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: gasto.estadoRevision === 'Aprobado' ? 'var(--status-success-soft)' : gasto.estadoRevision === 'Observado' ? 'var(--status-danger-soft)' : 'var(--status-warning-soft)', color: gasto.estadoRevision === 'Aprobado' ? 'var(--status-success)' : gasto.estadoRevision === 'Observado' ? 'var(--status-danger)' : 'var(--status-warning)' }}>{gasto.estadoRevision === 'Aprobado' ? 'Revisado' : gasto.estadoRevision}</span></div>)}</div>}
             </div>
 
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <button type="button" onClick={() => { setDevSel(null); setModoDevolucion(true); setCierreRutaAbierto(false); }} disabled={loading || cajaCerrada || emitidas.length === 0} className="min-h-12 flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}><RotateCcw className="h-4 w-4" /> Registrar devolución</button>
+              <button type="button" onClick={() => { setEtiquetaMerma(etiquetasDisponibles[0]?.etiquetaId || ''); setModoMerma(true); setCierreRutaAbierto(false); }} disabled={loading || cajaCerrada || etiquetasDisponibles.length === 0} className="min-h-12 flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50" style={{ background: 'var(--status-warning-soft)', color: 'var(--status-warning)', border: '1px solid var(--status-warning)' }}><AlertTriangle className="h-4 w-4" /> Reportar daño</button>
+            </div>
+
             {!cajaCerrada && (
               <label className="block mt-3 space-y-1.5">
-                <span className="text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>Efectivo contado en caja (₡)</span>
+                <span className="text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>Conteo de efectivo al cierre (₡)</span>
                 <input
                   type="number" min="0" step="1" inputMode="decimal" value={efectivoContado}
                   onChange={e => setEfectivoContado(e.target.value)}
@@ -740,13 +740,13 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
               </label>
             )}
             <div className="rounded-xl p-3 space-y-2" style={{ background: 'var(--bg-muted)' }}>
-              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Al cerrar, ya no podrá emitir más tiquetes. Cuente el efectivo primero.</p>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Al finalizar, se bloquean las ventas y Bodega podrá recibir el sobrante y completar el cierre de la guía.</p>
               <button
                 onClick={finDia}
                 disabled={loading || cajaCerrada || !efectivoContado.trim()}
                 className="min-h-12 w-full flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-base font-bold disabled:opacity-50"
                 style={{ background: 'var(--status-warning-soft)', color: 'var(--text-primary)', border: '1px solid var(--status-warning)' }}>
-                Cerrar caja y terminar día
+                 Finalizar ventas y enviar a Bodega
               </button>
             </div>
 
@@ -782,6 +782,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 </dl>
               </div>
             )}
+            </div>
           </div>}
         </div>
       )}
