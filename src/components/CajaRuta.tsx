@@ -33,8 +33,8 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   // POS state
   const [clienteId, setClienteId] = useState<string>('');
   const [producto, setProducto] = useState<string>('');
-  const [cantidad, setCantidad] = useState<number>(1);
-  const [descuento, setDescuento] = useState<number>(0);
+  const [cantidadTexto, setCantidadTexto] = useState('1');
+  const [descuentoTexto, setDescuentoTexto] = useState('0');
   const [cobro, setCobro] = useState<'Efectivo' | 'Credito' | 'Transferencia'>('Efectivo');
   const [tiquete, setTiquete] = useState<any>(null);
   const [previewTiqueteAbierto, setPreviewTiqueteAbierto] = useState(false);
@@ -162,24 +162,26 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   // No inferimos conversión desde el registro de inventario: el pesaje es la fuente.
   const factorProducto = productoActivo?.unidad === 'kg' ? 1 : null;
   const stockProducto = factorProducto ? stockOrigen : 0;
+  const cantidad = Number(cantidadTexto) || 0;
+  const descuento = Number(descuentoTexto) || 0;
   const precioVenta = Number(precioNegociado || politicaPrecio?.precio) || 0;
   const precioAutorizado = Number(politicaPrecio?.precio) > 0 && !politicaPrecio?.error;
   const cantidadTiquete = Number(tiquete?.cantidadKg ?? tiquete?.cartones ?? 0);
   const precioUnitarioTiquete = Number(tiquete?.precioUnitario || (Number(tiquete?.subtotal ?? tiquete?.total ?? 0) / (cantidadTiquete || 1)));
   const subtotal = Number(cantidad) * precioVenta;
-  const total = Math.max(0, subtotal - Number(descuento || 0));
+  const total = Math.max(0, subtotal - descuento);
   const precioMinimo = Number(politicaPrecio?.precioMinimo ?? politicaPrecio?.precio ?? 0);
   const precioMaximo = Number(politicaPrecio?.precioMaximo ?? politicaPrecio?.precio ?? 0);
   const precioFueraDeRango = precioAutorizado && (precioVenta < precioMinimo || precioVenta > precioMaximo);
   const descuentoPorPiso = Math.max(0, subtotal - Number(cantidad) * precioMinimo);
   const descuentoPorcentaje = Math.max(0, subtotal * Math.max(0, Number(politicaPrecio?.descuentoMaximo || 0)) / 100);
-  const descuentoPermitido = Math.min(descuentoPorPiso, descuentoPorcentaje);
+  const descuentoPermitido = precioFueraDeRango ? 0 : Math.min(descuentoPorPiso, descuentoPorcentaje);
 
   const etiquetasDisponibles = (guia?.detalle || []).filter((e: any) => e.estadoEtiqueta === 'Cargada');
   const unidadRuta = 'kg';
 
   const resetPos = () => {
-    setClienteId(''); setProducto(''); setCantidad(1); setDescuento(0); setCobro('Efectivo');
+    setClienteId(''); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0'); setCobro('Efectivo');
   };
 
   const vender = async () => {
@@ -509,7 +511,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 {productosDisponibles.map((i: any) => (
                   <button
                     key={i.id}
-                    onClick={() => { setProducto(i.producto); setCantidad(1); }}
+                    onClick={() => { setProducto(i.producto); setCantidadTexto('1'); }}
                     aria-pressed={producto === i.producto}
                     className={cn('min-h-16 rounded-xl px-4 py-3 text-left text-base font-bold border transition-all', producto === i.producto && 'ring-2')}
                     style={producto === i.producto
@@ -554,14 +556,15 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 <div>
                   <label htmlFor="cantidad-venta" className="mb-1 block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>3 · ¿Cuántos kilos?</label>
                   <div className="flex min-h-14 items-center gap-2">
-                    <button type="button" onClick={() => setCantidad(v => Math.max(0.1, Math.round((v - 1) * 100) / 100))} disabled={!producto} aria-label="Quitar un kilo" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border disabled:cursor-not-allowed disabled:opacity-45" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}><Minus className="h-5 w-5" /></button>
+                    <button type="button" onClick={() => setCantidadTexto(String(Math.max(0.1, Math.round(((Number(cantidadTexto) || 0) - 1) * 100) / 100)))} disabled={!producto} aria-label="Quitar un kilo" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border disabled:cursor-not-allowed disabled:opacity-45" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}><Minus className="h-5 w-5" /></button>
                   <input
-                    id="cantidad-venta" type="number" min={0.01} max={stockProducto || undefined} step="0.01" inputMode="decimal" value={producto ? cantidad : ''} disabled={!producto}
-                    onChange={(e) => setCantidad(Number(e.target.value) || 0)}
+                    id="cantidad-venta" type="number" min={0.01} max={stockProducto || undefined} step="0.01" inputMode="decimal" value={producto ? cantidadTexto : ''} disabled={!producto}
+                    onChange={(e) => setCantidadTexto(e.target.value)}
+                    onBlur={() => { if (cantidadTexto && Number(cantidadTexto) > 0) setCantidadTexto(String(Number(cantidadTexto))); }}
                     className="h-12 min-w-0 flex-1 rounded-xl px-3 py-2 text-center text-2xl font-extrabold focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}
                   />
-                    <button type="button" onClick={() => setCantidad(v => Math.round((v + 1) * 100) / 100)} disabled={!producto} aria-label="Agregar un kilo" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border disabled:cursor-not-allowed disabled:opacity-45" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}><Plus className="h-5 w-5" /></button>
+                    <button type="button" onClick={() => setCantidadTexto(String(Math.round(((Number(cantidadTexto) || 0) + 1) * 100) / 100))} disabled={!producto} aria-label="Agregar un kilo" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border disabled:cursor-not-allowed disabled:opacity-45" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}><Plus className="h-5 w-5" /></button>
                   </div>
                   {cantidad > stockProducto && producto && (
                     <p role="alert" className="mt-2 rounded-lg px-3 py-2 text-sm font-semibold" style={{ background: 'var(--status-danger-soft)', color: 'var(--status-danger)' }}>
@@ -588,8 +591,8 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                   <label htmlFor="descuento-venta" className="mb-1 block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>Descuento total (₡)</label>
                   <input
                     id="descuento-venta"
-                    type="number" min={0} max={descuentoPermitido} value={descuento} disabled={!producto || !precioAutorizado}
-                    onChange={(e) => setDescuento(Number(e.target.value) || 0)}
+                    type="number" min={0} max={descuentoPermitido} value={descuentoTexto} disabled={!producto || !precioAutorizado}
+                    onChange={(e) => setDescuentoTexto(e.target.value)}
                     inputMode="decimal"
                     className="h-12 w-full rounded-xl px-3 py-2 text-base font-bold focus:outline-none"
                     style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}
@@ -598,7 +601,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                 </div>
                 <div className="route-pos-total rounded-xl p-3 sm:flex sm:items-center sm:justify-between" style={{ background: 'var(--bg-muted)' }}>
                   <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Total a cobrar</p>
-                  <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{fmtCRC(total)}</p>
+                  <p className="text-3xl font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{precioFueraDeRango ? '—' : fmtCRC(total)}</p>
                 </div>
               </div>
             </div>}
@@ -663,8 +666,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
               {pasoVenta < 3 && <button type="button" onClick={() => {
                 if (pasoVenta === 1 && !clienteId) return toast.error('Seleccione el cliente de la ruta.');
                 if (pasoVenta === 2 && (!producto || cantidad <= 0 || cantidad > stockProducto)) return toast.error('Seleccione el producto e indique kilos dentro del saldo disponible.');
+                if (pasoVenta === 2 && (!precioAutorizado || cargandoPrecio || precioFueraDeRango)) return toast.error(`El precio debe respetar el rango autorizado de ${fmtCRC(precioMinimo)} a ${fmtCRC(precioMaximo)} por kg.`);
+                if (pasoVenta === 2 && (descuento < 0 || descuento > descuentoPermitido)) return toast.error(`El descuento máximo permitido es ${fmtCRC(descuentoPermitido)}.`);
                 setPasoVenta(v => v + 1);
-              }} disabled={pasoVenta === 2 && (!clienteId || !producto || cantidad <= 0 || cantidad > stockProducto || !precioAutorizado)} className="min-h-12 flex-1 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Continuar</button>}
+              }} disabled={pasoVenta === 2 && (!clienteId || !producto || cantidad <= 0 || cantidad > stockProducto || !precioAutorizado || cargandoPrecio || precioFueraDeRango || descuento < 0 || descuento > descuentoPermitido)} className="min-h-12 flex-1 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>{pasoVenta === 2 && precioFueraDeRango ? 'Ajuste el precio autorizado' : 'Continuar'}</button>}
             </div>
           </div>
 
