@@ -578,6 +578,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
                     id="precio-venta"
                     type="number" min={precioMinimo} max={precioMaximo} step="0.01" value={precioAutorizado ? (precioVenta || '') : ''} disabled={!producto || !precioAutorizado || cargandoPrecio}
                     onChange={(e) => setPrecioNegociado(Number(e.target.value) || 0)}
+                    onBlur={() => { if (precioAutorizado && (precioVenta < precioMinimo || precioVenta > precioMaximo)) setPrecioNegociado(Number(politicaPrecio.precio)); }}
                     inputMode="decimal"
                     className="h-12 w-full rounded-xl px-3 py-2 text-base font-bold focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                     style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: `1px solid ${precioFueraDeRango ? 'var(--status-danger)' : 'var(--border-default)'}` }}
