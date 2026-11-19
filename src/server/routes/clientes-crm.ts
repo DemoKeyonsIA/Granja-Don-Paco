@@ -167,7 +167,11 @@ export function registrarRutasCrmClientes(app: any, db: any, mapaPagadoPorFactur
             return filas.filter((f: any) => ids.has(String(f.id)));
           })
         : filas;
-      res.json({ total: cartera.length, clientes: cartera });
+      const respuestaVendedor = tieneRol(usuario, 'Comercial') && !tieneRol(usuario, 'Admin');
+      res.json({
+        total: cartera.length,
+        clientes: respuestaVendedor ? cartera.map((f: any) => ({ id: f.id, nombre: f.nombre })) : cartera,
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -306,9 +310,60 @@ export function registrarRutasCrmClientes(app: any, db: any, mapaPagadoPorFactur
         try { return JSON.parse(raw); } catch { return null; }
       };
       const lineasFactura = (facturaId: string) => detallesTbl.filter((d: any) => d.facturaId === facturaId).map((d: any) => ({
-        producto: d.producto, cantidad: Number(d.cantidad || 0), precioUnitario: Number(d.precio_unitario || 0),
+        producto: d.producto, cantidad: Number(d.cantidad || 0), unidad: d.unidad || d.unidadInventario || null, precioUnitario: Number(d.precio_unitario || 0),
         subtotal: Number(d.subtotal || 0), resolucionPrecio: parsePrecio(d.resolucionPrecioJson),
       }));
+
+      const usuario = (req as any).usuario;
+      const vistaVendedor = tieneRol(usuario, 'Comercial') && !tieneRol(usuario, 'Admin');
+      if (vistaVendedor) {
+        const catalogoPorProductoVendedor = new Map((catalogoTbl as any[]).map(p => [String(p.nombre).trim().toLocaleLowerCase(), p]));
+        const kilosDesdeCartonesVendedor = (producto: string, cantidad: number) => {
+          const ficha: any = catalogoPorProductoVendedor.get(String(producto).trim().toLocaleLowerCase());
+          const factorKg = Number(ficha?.kgPorCarton || 0);
+          return factorKg > 0 ? cantidad * factorKg : null;
+        };
+        const historialPedidos = [
+          ...facturas.filter((f: any) => f.estado !== 'Anulada').map((f: any) => ({
+            fecha: f.fecha, referencia: f.consecutivo || 'Factura',
+            lineas: lineasFactura(f.id).map((linea: any) => {
+              const unidad = String(linea.unidad || linea.resolucionPrecio?.unidad || 'kg').toLowerCase();
+              const cantidad = Number(linea.cantidad || 0);
+              const kilos = unidad.includes('cart') ? kilosDesdeCartonesVendedor(linea.producto, cantidad) : cantidad;
+              return { producto: linea.producto, kilos: kilos == null ? null : Number(kilos) };
+            }).filter((linea: any) => Number(linea.kilos) > 0),
+          })),
+          ...tiquetesSinFactura.map((v: any) => ({
+            fecha: v.fechaHora, referencia: v.tiqueteConsecutivo || 'Venta en ruta',
+            lineas: [{ producto: v.producto, kilos: Number(v.cantidadKg ?? (v.unidad === 'kg' ? v.cartones : 0)) }].filter((linea: any) => linea.kilos > 0),
+          })),
+        ].filter((pedido: any) => pedido.lineas.length > 0).sort((a: any, b: any) => String(b.fecha).localeCompare(String(a.fecha)));
+        const inicioRecomendacion = fechaRef - 90 * 86400000;
+        const pedidosRecientes = historialPedidos.filter((pedido: any) => new Date(pedido.fecha).getTime() >= inicioRecomendacion);
+        const totalesProducto = new Map<string, { producto: string; kilos: number; pedidos: number }>();
+        for (const pedido of pedidosRecientes) {
+          const vistos = new Set<string>();
+          for (const linea of pedido.lineas) {
+            const clave = String(linea.producto);
+            const acumulado = totalesProducto.get(clave) || { producto: clave, kilos: 0, pedidos: 0 };
+            acumulado.kilos += Number(linea.kilos || 0);
+            if (!vistos.has(clave)) { acumulado.pedidos += 1; vistos.add(clave); }
+            totalesProducto.set(clave, acumulado);
+          }
+        }
+        const recomendaciones = Array.from(totalesProducto.values()).map(item => {
+          const promedioKgPedido = Math.round((item.kilos / Math.max(1, item.pedidos)) * 100) / 100;
+          return { producto: item.producto, promedioKgPedido, kilosRecomendados: promedioKgPedido };
+        }).sort((a, b) => b.kilosRecomendados - a.kilosRecomendados);
+        return res.json({
+          cliente: { id: cliente.id, nombre: cliente.nombre },
+          historialPedidos: historialPedidos.map((pedido: any) => ({
+            fecha: pedido.fecha, referencia: pedido.referencia,
+            lineas: pedido.lineas.map((linea: any) => ({ producto: linea.producto, kilos: linea.kilos })),
+          })),
+          recomendaciones,
+        });
+      }
 
       const facturasAbiertas = facturas.filter((f: any) => !estaSaldada(f.estado));
       const pendientesCredito = facturasAbiertas.filter((f: any) => esCredito(f.condicion_pago));

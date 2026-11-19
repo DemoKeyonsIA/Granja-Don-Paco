@@ -950,6 +950,7 @@ const nuevoItems = useMemo(() => {
             { id: 'ruta', label: 'Mi Ruta', icon: 'PackageOpen', active: activeTab === 'operaciones' && subTab !== 'facturar-movil', onClick: () => navegarComoComercial('ruta') },
             { id: 'facturas', label: 'Facturas', icon: 'FileText', active: activeTab === 'operaciones' && subTab === 'facturar-movil', onClick: () => navegarComoComercial('facturas') },
             { id: 'clientes', label: 'Clientes', icon: 'Users', active: activeTab === 'clientes', onClick: () => navegarComoComercial('clientes') },
+            { id: 'gastos', label: 'Gastos', icon: 'DollarSign', active: isRegistroGastoOpen, onClick: () => setIsRegistroGastoOpen(true) },
           ] as const).map(item => {
             const Icon = iconoDe(item.icon);
             return (

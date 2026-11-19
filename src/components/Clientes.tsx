@@ -120,13 +120,13 @@ export default function Clientes({ currentUser }: ClientesProps) {
     setIsLoading(true);
     try {
       const [resCliente, resCartera, resAnalisis, resRutas, resSolicitudes] = await Promise.all([
-        fetch('/api/clientes', { headers: headersUsuario() }),
+        esVendedor ? Promise.resolve(null) : fetch('/api/clientes', { headers: headersUsuario() }),
         fetch('/api/clientes/cartera', { headers: headersUsuario() }),
         canViewAnalysis ? fetch('/api/clientes/analisis', { headers: headersUsuario() }) : Promise.resolve(null),
         fetch('/api/rutas', { headers: headersUsuario() }),
         esVendedor ? fetch('/api/clientes/solicitudes', { headers: headersUsuario() }) : Promise.resolve(null),
       ]);
-      if (resCliente.ok) setClientes(await resCliente.json());
+      if (resCliente?.ok) setClientes(await resCliente.json());
       if (resCartera.ok) { const d = await resCartera.json(); setCartera(d.clientes || []); }
       if (resAnalisis?.ok) setAnalisis(await resAnalisis.json());
       if (resRutas.ok) setRutas(await resRutas.json());
@@ -306,13 +306,15 @@ export default function Clientes({ currentUser }: ClientesProps) {
             <h1>{view === 'analisis' ? 'Análisis de Cartera' : 'Cartera de Clientes'}</h1>
             <div className="sub">
               {view === 'cartera'
-                ? `${filtrarCartera.length} de ${cartera.length} clientes · click en una fila abre el perfil 360 · busca por nombre, documento, teléfono o ruta`
+                ? esVendedor
+                  ? `${filtrarCartera.length} clientes asignados · seleccione uno para ver pedidos y recomendación de venta`
+                  : `${filtrarCartera.length} de ${cartera.length} clientes · click en una fila abre el perfil 360 · busca por nombre, documento, teléfono o ruta`
                 : `${analisis?.totalClientes ?? 0} cuentas · la segmentación decide dónde pone el foco su equipo`}
             </div>
           </div>
           {view === 'cartera' && (
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn" onClick={exportCSV}><Download className="w-4 h-4" /> Exportar</button>
+              {!esVendedor && <button className="btn" onClick={exportCSV}><Download className="w-4 h-4" /> Exportar</button>}
               {(canEdit || esVendedor) && (
                 <button
                   className="btn brand"
@@ -408,7 +410,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
                   <Search className="w-4 h-4" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink3)' }} />
                   <input
                     type="text"
-                    placeholder="Buscar por nombre, documento, teléfono, ruta..."
+                    placeholder={esVendedor ? 'Buscar cliente de mi ruta…' : 'Buscar por nombre, documento, teléfono, ruta...'}
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
                     style={{ paddingLeft: 34, width: '100%' }}
@@ -424,12 +426,20 @@ export default function Clientes({ currentUser }: ClientesProps) {
                 <div className="cartera-table-scroll" style={{ overflowX: 'auto' }}>
                   <table className="gcrm-table">
                     <thead>
-                      <tr><th>Cliente</th><th>Ruta</th><th>Segmento</th><th>Pedidos 90d</th><th className="num" title="Compra promedio por pedido">Ticket prom.</th><th>Crédito (uso)</th><th>Riesgo</th><th className="num">Saldo</th><th className="client-actions-head">Acciones</th></tr>
+                      {esVendedor
+                        ? <tr><th>Clientes de mi ruta</th><th className="client-actions-head">Acción</th></tr>
+                        : <tr><th>Cliente</th><th>Ruta</th><th>Segmento</th><th>Pedidos 90d</th><th className="num" title="Compra promedio por pedido">Ticket prom.</th><th>Crédito (uso)</th><th>Riesgo</th><th className="num">Saldo</th><th className="client-actions-head">Acciones</th></tr>}
                     </thead>
                     <tbody>
                       {filtrarCartera.map((c) => {
-                        const bar = riesgoBars(c);
                         const iniciales = c.nombre.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+                        if (esVendedor) return (
+                          <tr key={c.id} className="clickable" onClick={() => setDrawerCliente({ id: c.id, nombre: c.nombre } as Cliente)}>
+                            <td><span className="av-mini">{iniciales}</span><span className="strong" style={{ verticalAlign: 'middle' }}>{c.nombre}</span></td>
+                            <td className="client-actions-cell" onClick={e => e.stopPropagation()}><button className="btn sm brand" onClick={() => setDrawerCliente({ id: c.id, nombre: c.nombre } as Cliente)}>Ver pedidos</button></td>
+                          </tr>
+                        );
+                        const bar = riesgoBars(c);
                         return (
                           <tr key={c.id} className="clickable" onClick={() => setDrawerCliente(clientes.find(x => x.id === c.id) || toCliente(c))}>
                             <td>
@@ -866,6 +876,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
       <Cliente360
         cliente={drawerCliente}
         currentUser={currentUser}
+        esVendedor={esVendedor}
         open={!!drawerCliente}
         onClose={() => setDrawerCliente(null)}
         onEdit={canEdit ? (c) => { if (c) { setDrawerCliente(null); startEdit(c); } } : undefined}

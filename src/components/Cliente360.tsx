@@ -13,6 +13,7 @@ type Tab = 'resumen' | 'pedidos' | 'docs' | 'rutas' | 'credito' | 'precios' | 'n
 interface Cliente360Props {
   cliente: Cliente | null;
   currentUser: User;
+  esVendedor?: boolean;
   open: boolean;
   onClose: () => void;
   onEdit?: (cliente: Cliente) => void;
@@ -45,10 +46,12 @@ function fechaLocal(d: Date) {
   return local.toISOString().slice(0, 10);
 }
 
-export default function Cliente360({ cliente, currentUser, open, onClose, onEdit }: Cliente360Props) {
+export default function Cliente360({ cliente, currentUser, esVendedor = false, open, onClose, onEdit }: Cliente360Props) {
   const [activeTab, setActiveTab] = useState<Tab>('resumen');
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [preciosRecomendados, setPreciosRecomendados] = useState<Record<string, any>>({});
+  const [cargandoPrecios, setCargandoPrecios] = useState(false);
 
   const [catalogo, setCatalogo] = useState<ProductoCatalogo[]>([]);
   const [showExcForm, setShowExcForm] = useState(false);
@@ -60,9 +63,9 @@ export default function Cliente360({ cliente, currentUser, open, onClose, onEdit
   });
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || esVendedor) return;
     fetch('/api/productos-catalogo', { headers: sessionHeaders(currentUser.id) }).then(r => r.ok ? r.json() : []).then(setCatalogo).catch(() => setCatalogo([]));
-  }, [open]);
+  }, [open, esVendedor, currentUser.id]);
 
   const cargarPerfil = async () => {
     if (!cliente) return;
@@ -102,9 +105,27 @@ export default function Cliente360({ cliente, currentUser, open, onClose, onEdit
   useEffect(() => {
     if (!open || !cliente) return;
     setActiveTab('resumen');
+    setData(null);
+    setPreciosRecomendados({});
     setIsLoading(true);
     cargarPerfil().finally(() => setIsLoading(false));
   }, [open, cliente]);
+
+  useEffect(() => {
+    if (!open || !esVendedor || !cliente || !Array.isArray(data?.recomendaciones)) return;
+    const productos = data.recomendaciones.map((item: any) => item.producto).filter(Boolean);
+    if (productos.length === 0) { setPreciosRecomendados({}); setCargandoPrecios(false); return; }
+    const controller = new AbortController();
+    setCargandoPrecios(true);
+    fetch('/api/precios/lookup-multiple', {
+      method: 'POST', signal: controller.signal,
+      headers: sessionHeaders(currentUser.id, true),
+      body: JSON.stringify({ productos, clienteId: cliente.id }),
+    }).then(async res => res.ok ? res.json() : {}).then(result => setPreciosRecomendados(result || {}))
+      .catch(error => { if (error.name !== 'AbortError') setPreciosRecomendados({}); })
+      .finally(() => { if (!controller.signal.aborted) setCargandoPrecios(false); });
+    return () => controller.abort();
+  }, [open, esVendedor, cliente?.id, data?.recomendaciones, currentUser.id]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && open) onClose(); };
@@ -113,6 +134,54 @@ export default function Cliente360({ cliente, currentUser, open, onClose, onEdit
   }, [open, onClose]);
 
   if (!open) return null;
+
+  if (esVendedor) {
+    const clienteNombre = data?.cliente?.nombre || cliente?.nombre || 'Cliente';
+    const historial = Array.isArray(data?.historialPedidos) ? data.historialPedidos : [];
+    const recomendaciones = Array.isArray(data?.recomendaciones) ? data.recomendaciones : [];
+    const cerrar = <button type="button" onClick={onClose} aria-label="Cerrar" className="btn ico"><X className="w-5 h-5" /></button>;
+    return (
+      <div className="gcrm">
+        <div className="drawer-fixed" onClick={onClose}>
+          <aside className="drawer" onClick={e => e.stopPropagation()}>
+            <div className="identity" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+              <div><div className="mini">Pedidos y recomendación de venta</div><h2 style={{ margin: '5px 0 0', color: 'var(--ink)' }}>{clienteNombre}</h2></div>
+              {cerrar}
+            </div>
+            <div style={{ padding: 20, display: 'grid', gap: 20 }}>
+              {isLoading ? <div className="empty">Cargando historial…</div> : data == null ? <div className="empty">No se pudo cargar la información. Cierre y vuelva a abrir el cliente.</div> : <>
+                <section className="panel" aria-labelledby="recomendacion-ruta-heading">
+                  <div className="panelbar"><strong id="recomendacion-ruta-heading">Recomendación para la ruta</strong></div>
+                  {recomendaciones.length === 0 ? <div className="empty">Aún no hay pedidos recientes para calcular una recomendación.</div> : (
+                    <div className="divide-y">
+                      {recomendaciones.map((item: any) => {
+                        const precio = preciosRecomendados[item.producto];
+                        return <div key={item.producto} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                          <div><div className="strong">{item.producto}</div><div className="mini">Promedio por pedido: {fmtKg(item.promedioKgPedido)}</div></div>
+                          <div className="text-right"><div className="strong">Sugerido: {fmtKg(item.kilosRecomendados)}</div><div className="mini">Precio recomendado: {precio?.precio != null ? `${fmt(precio.precio)}/kg` : cargandoPrecios ? 'Consultando…' : 'Sin precio autorizado'}</div></div>
+                        </div>;
+                      })}
+                    </div>
+                  )}
+                </section>
+                <section className="panel" aria-labelledby="historial-pedidos-heading">
+                  <div className="panelbar"><strong id="historial-pedidos-heading">Historial de pedidos</strong><span>{historial.length}</span></div>
+                  {historial.length === 0 ? <div className="empty">Este cliente todavía no tiene pedidos registrados.</div> : (
+                    <div className="divide-y">
+                      {historial.map((pedido: any, index: number) => <article key={`${pedido.referencia}-${index}`} className="px-4 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2"><strong>{pedido.referencia}</strong><span className="mini">{pedido.fecha ? new Date(pedido.fecha).toLocaleDateString('es-CR', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Fecha no disponible'}</span></div>
+                        <ul className="mt-2 grid gap-1 text-sm">{(pedido.lineas || []).map((linea: any, lineaIndex: number) => <li key={`${linea.producto}-${lineaIndex}`} className="flex justify-between gap-3"><span>{linea.producto}</span><span className="font-semibold tabular-nums">{fmtKg(linea.kilos)}</span></li>)}</ul>
+                      </article>)}
+                    </div>
+                  )}
+                </section>
+              </>}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
 
   // Mantiene a mano los datos ricos de la fila de cartera mientras carga el
   // 360; así la explicación de segmento no desaparece por un payload parcial.

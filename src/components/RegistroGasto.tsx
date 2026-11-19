@@ -44,9 +44,13 @@ export default function RegistroGasto({
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/logistica/guias-activas', { headers: { 'x-user-id': currentUser.id, ...(loadSession()?.token ? { Authorization: `Bearer ${loadSession()?.token}` } : {}) } }).then(async res => res.ok ? res.json() : []).then(data => setGuiasActivas(Array.isArray(data) ? data : [])).catch(() => setGuiasActivas([]));
+    fetch('/api/logistica/guias-activas', { headers: { 'x-user-id': currentUser.id, ...(loadSession()?.token ? { Authorization: `Bearer ${loadSession()?.token}` } : {}) } }).then(async res => res.ok ? res.json() : []).then(data => {
+      const guias = Array.isArray(data) ? data : [];
+      setGuiasActivas(guias);
+      if (esVendedor && !initialGuideId) setGuiaId(guias.length === 1 ? String(guias[0].id) : '');
+    }).catch(() => setGuiasActivas([]));
     if (!esVendedor) fetch('/api/productos-catalogo', { headers: { 'x-user-id': currentUser.id, ...(loadSession()?.token ? { Authorization: `Bearer ${loadSession()?.token}` } : {}) } }).then(async res => res.ok ? res.json() : []).then(data => setProductosHuevo(Array.isArray(data) ? data.filter((p: any) => p.categoria === 'Huevos' && p.estado === 'Activo') : [])).catch(() => setProductosHuevo([]));
-  }, [currentUser.id]);
+  }, [currentUser.id, esVendedor, initialGuideId]);
 
   useEffect(() => { if (initialGuideId) setGuiaId(initialGuideId); }, [initialGuideId]);
 
@@ -96,7 +100,7 @@ export default function RegistroGasto({
           </div>
           <div>
             <h3 className="font-bold text-neutral-900 dark:text-white">Registrar gasto</h3>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">Gastos operativos de la jornada</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">{esVendedor ? 'El gasto se asociará a su ruta activa.' : 'Gastos operativos de la jornada'}</p>
           </div>
         </div>
 
@@ -154,7 +158,7 @@ export default function RegistroGasto({
           {!initialGuideId && <div className="space-y-2">
             <label htmlFor="gasto-guia" className="text-sm font-bold text-neutral-700 dark:text-neutral-300">{esVendedor ? 'Guía de ruta activa' : 'Ruta o jornada (opcional)'}</label>
             <select id="gasto-guia" required={esVendedor} value={guiaId} onChange={e => setGuiaId(e.target.value)} className="w-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-sm">
-              <option value="">Gasto general</option>{guiasActivas.map((g: any) => <option key={g.id} value={g.id}>{g.consecutivo} · {g.camionNombre || 'Camión'} · {g.rutaNombre || 'Ruta'}</option>)}
+              {!esVendedor && <option value="">Gasto general</option>}{guiasActivas.map((g: any) => <option key={g.id} value={g.id}>{g.consecutivo} · {g.camionNombre || 'Camión'} · {g.rutaNombre || 'Ruta'}</option>)}
             </select>
             {esVendedor && guiasActivas.length === 0 && <p className="text-xs font-semibold text-amber-700">No hay una ruta activa asignada. Puede guardar el gasto cuando tenga una guía abierta.</p>}
           </div>}
