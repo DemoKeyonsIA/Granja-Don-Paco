@@ -10,7 +10,8 @@ export async function initializeNeonDatabase(db: any) {
   await db.execute(sql`ALTER TABLE ventas_ruta_kg ADD COLUMN IF NOT EXISTS etiquetas_asignadas_json TEXT`);
 
   {
-    const passwordHash = hashPassword(process.env.GDP_DEMO_PASSWORD || '1234');
+    // Login shortcuts use 1234; synchronize persistent demo credentials on startup.
+    const passwordHash = hashPassword('1234');
     const demoUsers = [
       { id: '1', name: 'Administrador', email: 'admin@granja.com', role: 'Admin', roles: 'Admin' },
       { id: '2', name: 'Comercial Central', email: 'facturacion@granja.com', role: 'Comercial', roles: 'Comercial' },
@@ -21,11 +22,16 @@ export async function initializeNeonDatabase(db: any) {
       { id: '9', name: 'Comercial Reparto Demo', email: 'camionero@granja.com', role: 'Comercial', roles: 'Comercial' },
     ];
 
-    await db.insert(schema.users).values(demoUsers.map((user) => ({
-      ...user,
-      password_hash: passwordHash,
-      activo: true,
-    }))).onConflictDoNothing();
+    for (const user of demoUsers) {
+      await db.insert(schema.users).values({ ...user, password_hash: passwordHash, activo: true }).onConflictDoNothing();
+      await db.update(schema.users).set({
+        name: user.name,
+        role: user.role,
+        roles: user.roles,
+        password_hash: passwordHash,
+        activo: true,
+      }).where(eq(schema.users.email, user.email));
+    }
   }
 
   const products = await db.select({ id: schema.productosCatalogo.id }).from(schema.productosCatalogo).limit(1);
