@@ -18,7 +18,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  AlertTriangle, ArrowRight, CheckCircle2, Clock, DollarSign, FileText,
+  AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, Clock, DollarSign, FileText,
   TrendingDown, TrendingUp, Wallet, ClipboardList,
 } from 'lucide-react';
 import type { User } from '../types';
@@ -119,7 +119,7 @@ const avisosDe = (r: ResumenFinanzas): Aviso[] => {
       id: 'aging-60',
       nivel: 'alto',
       titulo: 'Cartera con más de 60 días',
-      detalle: 'Es la plata que dejó de depender de la buena voluntad del cliente.',
+      detalle: 'Revisa el vencimiento, el seguimiento realizado y el soporte de cobro.',
       monto: r.aging.d60,
     });
   }
@@ -128,21 +128,9 @@ const avisosDe = (r: ResumenFinanzas): Aviso[] => {
       id: 'aging-31',
       nivel: 'medio',
       titulo: 'Cartera entre 31 y 60 días',
-      detalle: 'Todavía recuperable, pero ya pasó la ventana de recordatorio suave.',
+      detalle: 'Revisa cuáles facturas siguen abiertas y programa su seguimiento.',
       monto: r.aging.d31_60,
     });
-  }
-  if (vencido > 0 && r.ingresosCobrados > 0) {
-    const dias = Math.round((vencido / r.ingresosCobrados) * 30);
-    if (dias > 0) {
-      avisos.push({
-        id: 'ciclo-cobro',
-        nivel: 'medio',
-        titulo: 'Se cobra a ~1 mes de vender',
-        detalle: `El promedio ponderado del cobro está en ${dias} días.`,
-        monto: null,
-      });
-    }
   }
   if (r.utilidad < 0) {
     avisos.push({
@@ -194,6 +182,14 @@ const avisosOperativosDe = (alertas: DashboardEnterprise['alertas']): Aviso[] =>
     detalle: a.detalle,
     monto: null,
   }));
+
+const accionParaAviso = (aviso?: Aviso): { tab: string; texto: string } | null => {
+  if (!aviso) return null;
+  if (aviso.id.startsWith('aging') || aviso.id === 'devengado-cobrado') return { tab: 'cobranza', texto: 'Ver cobranza' };
+  if (aviso.id === 'gasto-concentrado') return { tab: 'gastos-ruta', texto: 'Ver gastos' };
+  if (aviso.id === 'utilidad-negativa') return { tab: 'reporte:financiero', texto: 'Ver resultado' };
+  return null;
+};
 
 const ESTILO_NIVEL: Record<Aviso['nivel'], { fondo: string; texto: string; punto: string }> = {
   alto: { fondo: 'bg-red-50 dark:bg-red-950/30', texto: 'text-red-800 dark:text-red-300', punto: 'bg-red-500' },
@@ -322,9 +318,12 @@ export default function FinanzasResumen({ currentUser, onNavigate }: { currentUs
 
   const avisos = [...avisosDe(resumen), ...avisosOperativosDe(alertasOperacion)]
     .sort((a, b) => (b.monto ?? -1) - (a.monto ?? -1));
+  const accionPrioritaria = accionParaAviso(avisos[0]);
   const vencido = resumen.aging.d1_30 + resumen.aging.d31_60 + resumen.aging.d60;
   const enRiesgo = resumen.aging.d31_60 + resumen.aging.d60;
   const hayActividadFinanciera = resumen.ingresosFacturados !== 0 || resumen.ingresosCobrados !== 0 || resumen.gastos !== 0 || resumen.cuentasPorCobrar !== 0 || resumen.documentosEmitidos > 0 || (resumen.conciliacionCaja?.cierres ?? 0) > 0;
+  const rolesUsuario = currentUser.roles?.length ? currentUser.roles : [currentUser.role];
+  const puedeRegistrar = rolesUsuario.includes('Admin');
   const navegar = (tab: string) => onNavigate?.(tab);
 
   return (
@@ -340,25 +339,35 @@ export default function FinanzasResumen({ currentUser, onNavigate }: { currentUs
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30" data-testid="finanzas-resumen-prioridad">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" /><div><h3 className="font-bold text-amber-950 dark:text-amber-100">Hay {avisos.length} asunto(s) para revisar</h3><p className="mt-1 text-sm text-amber-900/80 dark:text-amber-200">Empieza por: {avisos[0]?.titulo}. Abre el detalle para ver qué registros lo explican.</p></div></div>
-            <button type="button" onClick={() => navegar('cobranza')} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-bold text-amber-950 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-800 dark:bg-neutral-900 dark:text-amber-100">Revisar pendientes <ArrowRight className="h-4 w-4" /></button>
+            {accionPrioritaria && <button type="button" onClick={() => navegar(accionPrioritaria.tab)} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-bold text-amber-950 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-800 dark:bg-neutral-900 dark:text-amber-100">{accionPrioritaria.texto} <ArrowRight className="h-4 w-4" /></button>}
           </div>
         </section>
-      ) : !hayActividadFinanciera ? (
+      ) : null}
+
+      {!hayActividadFinanciera && (
         <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/30" data-testid="finanzas-sin-actividad">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
+          <div className="flex items-start gap-3">
               <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-blue-700 dark:text-blue-300" />
               <div>
                 <h3 className="font-bold text-blue-950 dark:text-blue-100">Aún no hay movimientos financieros en este periodo</h3>
-                <p className="mt-1 text-sm text-blue-900/80 dark:text-blue-200">Los indicadores están en cero porque todavía no hay facturas, cobros ni gastos registrados. No significa que el periodo esté conciliado.</p>
+                <p className="mt-1 text-sm text-blue-900/80 dark:text-blue-200">Registra o consulta una actividad para empezar. Un periodo sin movimientos no significa que esté conciliado.</p>
               </div>
-            </div>
-            <button type="button" onClick={() => navegar('documentos')} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-              Ver documentos <ArrowRight className="h-4 w-4" />
-            </button>
           </div>
+          {puedeRegistrar && <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label="Acciones financieras">
+            <button type="button" onClick={() => navegar('documentos')} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-blue-200 bg-white px-4 py-3 text-left text-sm font-bold text-blue-950 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-blue-800 dark:bg-neutral-900 dark:text-blue-100 dark:hover:bg-blue-950/40">
+              <span className="flex items-center gap-2"><FileText className="h-4 w-4" />Facturas y documentos</span><ArrowRight className="h-4 w-4 shrink-0" />
+            </button>
+            <button type="button" onClick={() => navegar('gastos-ruta')} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-blue-200 bg-white px-4 py-3 text-left text-sm font-bold text-blue-950 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-blue-800 dark:bg-neutral-900 dark:text-blue-100 dark:hover:bg-blue-950/40">
+              <span className="flex items-center gap-2"><TrendingDown className="h-4 w-4" />Gastos de ruta</span><ArrowRight className="h-4 w-4 shrink-0" />
+            </button>
+            <button type="button" onClick={() => navegar('cobranza')} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-blue-200 bg-white px-4 py-3 text-left text-sm font-bold text-blue-950 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-blue-800 dark:bg-neutral-900 dark:text-blue-100 dark:hover:bg-blue-950/40">
+              <span className="flex items-center gap-2"><Wallet className="h-4 w-4" />Cobros y saldos</span><ArrowRight className="h-4 w-4 shrink-0" />
+            </button>
+          </div>}
         </section>
-      ) : (
+      )}
+
+      {avisos.length === 0 && hayActividadFinanciera && (
         <section className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30" data-testid="finanzas-todo-al-dia">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700 dark:text-emerald-300" />
           <div><h3 className="font-bold text-emerald-950 dark:text-emerald-100">No hay asuntos pendientes detectados</h3><p className="mt-1 text-sm text-emerald-900/80 dark:text-emerald-200">Revisa los indicadores y la conciliación antes de dar el periodo por cerrado.</p></div>
@@ -366,7 +375,7 @@ export default function FinanzasResumen({ currentUser, onNavigate }: { currentUs
       )}
 
       {/* 1. Las cinco tarjetas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4" data-testid="finanzas-tarjetas">
+      {hayActividadFinanciera && <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4" data-testid="finanzas-tarjetas">
         <Tarjeta
           label="Ingresos"
           valor={resumen.ingresosFacturados}
@@ -407,13 +416,13 @@ export default function FinanzasResumen({ currentUser, onNavigate }: { currentUs
           ayuda={`${fmtCRC(enRiesgo)} en riesgo`}
           onClick={() => navegar('cobranza')}
         />
-      </div>
+      </div>}
 
       {/* 2. La banda del ciclo del dinero */}
       <details className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm group">
         <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 font-bold text-neutral-900 dark:text-white [&::-webkit-details-marker]:hidden">
           <span>Entender el recorrido del dinero</span>
-          <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Ver resumen · {resumen.documentosEmitidos} documentos</span>
+          <span className="flex items-center gap-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{resumen.documentosEmitidos} documentos <ChevronDown aria-hidden="true" className="h-4 w-4 transition-transform group-open:rotate-180" /></span>
         </summary>
         <div className="border-t border-neutral-200 p-5 dark:border-neutral-700">
         <ol className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3" data-testid="finanzas-ciclo">
@@ -427,8 +436,8 @@ export default function FinanzasResumen({ currentUser, onNavigate }: { currentUs
         </div>
       </details>
 
-      <details className="rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800" data-testid="finanzas-conciliacion-caja">
-        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 font-bold text-neutral-900 dark:text-white [&::-webkit-details-marker]:hidden"><span>Revisar caja de rutas</span><span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{resumen.conciliacionCaja?.cierres ?? 0} cierres</span></summary>
+      <details className="group rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800" data-testid="finanzas-conciliacion-caja">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 font-bold text-neutral-900 dark:text-white [&::-webkit-details-marker]:hidden"><span>Revisar caja de rutas</span><span className="flex items-center gap-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">{resumen.conciliacionCaja?.cierres ?? 0} cierres <ChevronDown aria-hidden="true" className="h-4 w-4 transition-transform group-open:rotate-180" /></span></summary>
         <div className="border-t border-neutral-200 p-5 dark:border-neutral-700">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -449,11 +458,16 @@ export default function FinanzasResumen({ currentUser, onNavigate }: { currentUs
         </div>
         </div>
       </details>
-      <ConciliacionDepositos currentUser={currentUser} />
+      <details className="group rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-800" data-testid="finanzas-depositos-plegable">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 font-bold text-neutral-900 dark:text-white [&::-webkit-details-marker]:hidden">
+          <span>Depósitos bancarios</span><span className="flex items-center gap-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">Registrar y conciliar depósitos de ruta <ChevronDown aria-hidden="true" className="h-4 w-4 transition-transform group-open:rotate-180" /></span>
+        </summary>
+        <div className="border-t border-neutral-200 p-3 dark:border-neutral-700"><ConciliacionDepositos currentUser={currentUser} /></div>
+      </details>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* 3. Requiere atención */}
-        <details className="xl:col-span-2 bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm" data-testid="finanzas-requiere-atencion" open={avisos.length > 0}>
+        <details className="group xl:col-span-2 bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm" data-testid="finanzas-requiere-atencion" open={avisos.length > 0}>
           <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
             <h3 className="font-bold text-neutral-900 dark:text-white flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-500" />
@@ -462,12 +476,14 @@ export default function FinanzasResumen({ currentUser, onNavigate }: { currentUs
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               {avisos.length > 0 ? `${avisos.length} asuntos` : 'Nada pendiente'}
             </span>
+            <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-neutral-500 transition-transform group-open:rotate-180" />
           </summary>
           <div className="border-t border-neutral-200 dark:border-neutral-700">
           {avisos.length > 0 ? (
             <ul className="divide-y divide-neutral-100 dark:divide-neutral-700">
               {avisos.map(a => {
                 const estilo = ESTILO_NIVEL[a.nivel];
+                const accion = accionParaAviso(a);
                 return (
                   <li key={a.id} className="flex items-start gap-3 p-4">
                     <span className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${estilo.punto}`} />
@@ -478,8 +494,7 @@ export default function FinanzasResumen({ currentUser, onNavigate }: { currentUs
                     {a.monto !== null && (
                       <p className="font-black text-sm text-neutral-900 dark:text-white shrink-0">{fmtCRC(a.monto)}</p>
                     )}
-                    {(a.id.startsWith('aging') || a.id === 'devengado-cobrado') && <button type="button" onClick={() => navegar('cobranza')} className="ml-2 shrink-0 text-xs font-bold text-blue-700 underline underline-offset-2 hover:text-blue-900 dark:text-blue-300">Ver cobranza</button>}
-                    {a.id === 'gasto-concentrado' && <button type="button" onClick={() => navegar('gastos-ruta')} className="ml-2 shrink-0 text-xs font-bold text-blue-700 underline underline-offset-2 hover:text-blue-900 dark:text-blue-300">Ver gastos</button>}
+                    {accion && <button type="button" onClick={() => navegar(accion.tab)} className="ml-2 shrink-0 text-xs font-bold text-blue-700 underline underline-offset-2 hover:text-blue-900 dark:text-blue-300">{accion.texto}</button>}
                   </li>
                 );
               })}
@@ -495,10 +510,9 @@ export default function FinanzasResumen({ currentUser, onNavigate }: { currentUs
 
         {/* Columna derecha: lo que aportaba el Centro de Mando, y la cartera */}
         <div className="space-y-6">
-          <section
-            className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm p-5"
-            data-testid="finanzas-salud-negocio"
-          >
+          <details className="group bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm" data-testid="finanzas-salud-negocio">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 font-bold text-neutral-900 dark:text-white [&::-webkit-details-marker]:hidden"><span>Salud del negocio</span><span className="flex items-center gap-2 text-xs font-medium text-neutral-500 dark:text-neutral-400">Producción, bodega y rutas <ChevronDown aria-hidden="true" className="h-4 w-4 transition-transform group-open:rotate-180" /></span></summary>
+            <div className="border-t border-neutral-200 p-5 dark:border-neutral-700">
             <h3 className="font-bold text-neutral-900 dark:text-white mb-1">Salud del negocio</h3>
             <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4">
               Producción, bodega y rutas de hoy.
@@ -511,14 +525,15 @@ export default function FinanzasResumen({ currentUser, onNavigate }: { currentUs
                 siendo las de `/api/finanzas/resumen`.
               </p>
             )}
-          </section>
+            </div>
+          </details>
 
           <section className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm p-5">
             <h3 className="font-bold text-neutral-900 dark:text-white mb-1">Salud de la cartera</h3>
             <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4">
               {fmtCRC(resumen.cuentasPorCobrar)} por cobrar, {fmtCRC(vencido)} vencido.
             </p>
-            <ul className="space-y-2" data-testid="finanzas-aging">
+            {resumen.cuentasPorCobrar > 0 ? <ul className="space-y-2" data-testid="finanzas-aging">
               {ETIQUETAS_AGING.map(e => {
                 const monto = resumen.aging[e.id] ?? 0;
                 const pct = resumen.cuentasPorCobrar > 0 ? (monto / resumen.cuentasPorCobrar) * 100 : 0;
@@ -534,7 +549,7 @@ export default function FinanzasResumen({ currentUser, onNavigate }: { currentUs
                   </li>
                 );
               })}
-            </ul>
+            </ul> : <p className="rounded-xl bg-neutral-50 p-3 text-sm text-neutral-600 dark:bg-neutral-900/60 dark:text-neutral-300" data-testid="finanzas-aging-vacio">No hay saldos pendientes de cobro en este periodo.</p>}
           </section>
         </div>
       </div>
