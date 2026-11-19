@@ -918,7 +918,7 @@ const nuevoItems = useMemo(() => {
                 {subTab === 'gastos-ruta' && <GastosRutaAdmin currentUser={currentUser} />}
                 {subTab === 'cobranza' && <Cobranza currentUser={currentUser} />}
                 {tipoReporteDe(subTab) && (
-                  <Reportes currentUser={currentUser} tipo={tipoReporteDe(subTab)!} />
+                  <Reportes currentUser={currentUser} tipo={tipoReporteDe(subTab)!} onNavigate={setSubTab} />
                 )}
               </div></Suspense>
             </div>

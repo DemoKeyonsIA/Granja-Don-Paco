@@ -19,9 +19,11 @@ import { sessionHeaders } from '../lib/session';
 export default function Reportes({
   currentUser,
   tipo,
+  onNavigate,
 }: {
   currentUser: User;
   tipo: TipoReporte;
+  onNavigate: (tab: string) => void;
 }) {
   const reporteActivo = tipo;
   const [datos, setDatos] = useState<any>(null);
@@ -103,7 +105,7 @@ export default function Reportes({
           </div>
         </div>
       ) : datos == null || datosVacios ? (
-        <EmptyReport mensaje="Todavía no hay información para mostrar." />
+        <EmptyReport mensaje="Todavía no hay información para mostrar." tipo={reporteActivo} onNavigate={onNavigate} />
       ) : (
         <div className="animate-in fade-in">
           {reporteActivo === 'financiero' && <ReporteFinanciero data={datos} />}
@@ -140,11 +142,17 @@ function reporteSinDatos(tipo: TipoReporte, data: any) {
     : [data.ingresosFacturados, data.ingresosCobrados, data.gastos];
   return importes.every(importe => Number(importe || 0) === 0);
 }
-function EmptyReport({ mensaje }: { mensaje: string }) {
+function EmptyReport({ mensaje, tipo, onNavigate }: { mensaje: string; tipo?: TipoReporte; onNavigate?: (tab: string) => void }) {
+  const acciones: Partial<Record<TipoReporte, { etiqueta: string; tab: string }[]>> = {
+    financiero: [{ etiqueta: 'Ver documentos', tab: 'documentos' }, { etiqueta: 'Ver gastos de ruta', tab: 'gastos-ruta' }],
+    'flujo-caja': [{ etiqueta: 'Ver gastos de ruta', tab: 'gastos-ruta' }, { etiqueta: 'Ver cobranza', tab: 'cobranza' }],
+    'ventas-por-ruta': [{ etiqueta: 'Ver documentos', tab: 'documentos' }],
+  };
   return <div className="rounded-2xl border border-neutral-200 bg-white px-6 py-12 text-center dark:border-neutral-700 dark:bg-neutral-800">
     <CalendarDays className="mx-auto h-8 w-8 text-neutral-500 dark:text-neutral-300" />
     <p className="mt-3 font-semibold text-neutral-900 dark:text-white">{mensaje}</p>
     <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">Probá otro periodo o registrá actividad para este reporte.</p>
+    {!!tipo && !!onNavigate && !!acciones[tipo]?.length && <div className="mt-5 flex flex-wrap justify-center gap-2">{acciones[tipo]!.map(accion => <button key={accion.tab} type="button" onClick={() => onNavigate(accion.tab)} className="rounded-xl border border-neutral-300 px-4 py-2 text-sm font-bold text-neutral-800 transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-neutral-600 dark:text-white dark:hover:bg-neutral-700">{accion.etiqueta}<ArrowRight className="ml-2 inline h-4 w-4" /></button>)}</div>}
   </div>;
 }
 
