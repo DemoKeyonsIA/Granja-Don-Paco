@@ -308,6 +308,36 @@ export function registrarRutasCajaCustodia(
           .set({ cantidad: Number(camionStock.cantidad) - cantidadOrigen, ultima_actualizacion: new Date().toISOString() })
           .where(eq(inventario.id, camionStock.id));
 
+        // Consumo estimado de cartones por venta: el factor kg/cartón se captura
+        // por producto al recibir el insumo y se puede recalibrar con conteos.
+        // Se conserva el movimiento fuente para auditar cada estimación.
+        const productoClave = (v: unknown) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase();
+        const lotesCartones = (await tx.query.inventario_insumos.findMany()).filter((i: any) =>
+          String(i.categoria || '').toLocaleLowerCase() === 'cartones'
+          && productoClave(i.productoHuevo) === productoClave(productoVenta.nombre)
+          && Number(i.kgPorUnidad) > 0
+        ).sort((a: any, b: any) => String(a.creadoEn).localeCompare(String(b.creadoEn))).map((i: any) => ({ ...i, saldoProcesado: Number(i.cantidadActual || 0) }));
+        let cartonesEstimados = Number(cantidadKg);
+        const kgEstimados = Number(cantidadKg);
+        for (const loteInsumo of lotesCartones) {
+          if (cartonesEstimados <= 0.0001) break;
+          const factor = Number(loteInsumo.kgPorUnidad);
+          const disponible = Math.max(0, loteInsumo.saldoProcesado);
+          const consumir = Math.min(disponible, cartonesEstimados / factor);
+          if (consumir <= 0) continue;
+          loteInsumo.saldoProcesado -= consumir;
+          await tx.update(schema.inventario_insumos).set({ cantidadActual: Math.round(loteInsumo.saldoProcesado * 10000) / 10000 }).where(eq(schema.inventario_insumos.id, loteInsumo.id));
+          await tx.insert(schema.movimientos_insumos).values({ id: crypto.randomUUID(), insumoId: loteInsumo.id, tipo: 'Consumo estimado por venta', cantidad: consumir, unidad: loteInsumo.unidad, referenciaId: ventaId, kgHuevo: Math.min(kgEstimados, consumir * factor), registradoPor: vendedorEfectivo, fecha: new Date().toISOString(), observacion: `${productoVenta.nombre}: ${factor} kg por cartón` });
+          cartonesEstimados -= consumir * factor;
+        }
+        if (cartonesEstimados > 0.0001 && lotesCartones.length) {
+          const ultimo = lotesCartones[lotesCartones.length - 1]; const factor = Number(ultimo.kgPorUnidad);
+          const deficit = cartonesEstimados / factor;
+          ultimo.saldoProcesado -= deficit;
+          await tx.update(schema.inventario_insumos).set({ cantidadActual: Math.round(ultimo.saldoProcesado * 10000) / 10000 }).where(eq(schema.inventario_insumos.id, ultimo.id));
+          await tx.insert(schema.movimientos_insumos).values({ id: crypto.randomUUID(), insumoId: ultimo.id, tipo: 'Consumo estimado · bajo inventario', cantidad: deficit, unidad: ultimo.unidad, referenciaId: ventaId, kgHuevo: cartonesEstimados, registradoPor: vendedorEfectivo, fecha: new Date().toISOString(), observacion: `Existencia negativa estimada para ${productoVenta.nombre}; verifique el conteo físico.` });
+        }
+
         // 5. Movimiento de inventario
         await tx.insert(movimientosInventario).values({
           id: crypto.randomUUID(),

@@ -23,6 +23,7 @@ const CamioneroMovil = lazy(() => import("./components/CamioneroMovil"));
 const IncidentesMovil = lazy(() => import("./components/IncidentesMovil"));
 const FinanzasResumen = lazy(() => import("./components/FinanzasResumen"));
 const GastosRutaAdmin = lazy(() => import("./components/GastosRutaAdmin"));
+const InventarioInsumos = lazy(() => import("./components/InventarioInsumos"));
 const Etiquetas = lazy(() => import("./components/Etiquetas"));
 const Pesos = lazy(() => import("./components/Pesos"));
 const SaludAvicola = lazy(() => import("./components/SaludAvicola"));
@@ -161,7 +162,7 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
   const nuevoMenuRef = useRef<HTMLDivElement>(null);
   const [isRegistroGastoOpen, setIsRegistroGastoOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const ocultarEstelaEnMovil = currentUser.role === 'Comercial' || activeTab === 'operaciones' || activeTab === 'admin' || activeTab === 'clientes';
+  const ocultarEstelaEnMovil = currentUser.role === 'Comercial' || activeTab === 'operaciones' || activeTab === 'admin' || activeTab === 'clientes' || activeTab === 'inventario';
 
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -934,6 +935,7 @@ const nuevoItems = useMemo(() => {
           {activeTab === 'clientes' && <Suspense fallback={<ModuleLoading />}>
             <Clientes currentUser={currentUser} />
           </Suspense>}
+          {activeTab === 'inventario' && userRoles.includes('Admin') && <Suspense fallback={<ModuleLoading />}><InventarioInsumos currentUser={currentUser} /></Suspense>}
         </main>
       </div>
 

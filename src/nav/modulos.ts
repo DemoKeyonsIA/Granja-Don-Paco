@@ -21,7 +21,7 @@ export type IconName =
   | 'CreditCardAlt' | 'Scale' | 'PiggyBank';
 
 export type ModuleId =
-  | 'finanzas' | 'admin'
+  | 'finanzas' | 'admin' | 'inventario'
   | 'office' | 'operaciones' | 'clientes';
 
 export interface ModuloDef {
@@ -69,6 +69,12 @@ export const MODULOS: ModuloDef[] = [
       Comercial: 'Mi Ruta',
     },
     shortLabel: 'Ops',
+  },
+  {
+    id: 'inventario',
+    label: 'Inventario',
+    icon: 'PackageOpen',
+    roles: ['Admin'],
   },
   {
     id: 'clientes',

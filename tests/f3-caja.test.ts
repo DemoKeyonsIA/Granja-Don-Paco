@@ -82,6 +82,7 @@ describe('F3 — Caja del vendedor: ventas en ruta, tiquetes, retornos, tablero 
     const cam = await authRequest().post('/api/logistica/camiones')
       .send({ nombre: 'Camión Ruta 5', placa: 'CR-555', ruta_defecto: 'Ruta 1', capacidad_cartones: 150 });
     expect(cam.status).toBe(201);
+    await client.execute({ sql: 'UPDATE camiones SET camionero_id = ? WHERE id = ?', args: ['3', cam.body.id] });
 
     const gu = await authRequest().post('/api/logistica/guias')
       .send({
@@ -97,6 +98,20 @@ describe('F3 — Caja del vendedor: ventas en ruta, tiquetes, retornos, tablero 
     guia = list.body[0];
     expect(guia.totalCartones).toBe(120);
     expect(guia.camionNombre).toBe('Camión Ruta 5');
+    const compraCartones = await authRequest().post('/api/gastos').send({ categoria: 'Insumos', monto: 10000, descripcion: 'Compra demo de 100 cartones', insumo: { producto: 'Cartones huevo grande', tipo: 'Cartones', cantidad: 100, unidad: 'cartones', ubicacion: 'Bodega', productoHuevo: 'Huevos - Grande', kgPorUnidad: 1.8 } });
+    expect(compraCartones.status).toBe(200);
+    const insumosIniciales = await client.execute({ sql: `SELECT cantidad_actual FROM inventario_insumos WHERE producto = ?`, args: ['Cartones huevo grande'] });
+    expect(Number(insumosIniciales.rows[0].cantidad_actual)).toBe(100);
+    const ventaAntesDeConfirmar = await authRequest().post('/api/logistica/caja/venta').send({
+      guiaId: guia.id, clienteId: 'c1', etiquetaId: 'e1', producto: 'Huevos - Grande', cantidadKg: 1, precioUnitario: 16000, cobro: 'Efectivo',
+    });
+    expect(ventaAntesDeConfirmar.status).toBe(409);
+    expect(ventaAntesDeConfirmar.body.error).toContain('confirmar primero la carga');
+    const gastoAntesDeIniciar = await requestAs(app, '3').post('/api/gastos').send({ categoria: 'Diésel', monto: 2000, descripcion: 'No debe guardarse antes de salir', guiaId: guia.id });
+    expect(gastoAntesDeIniciar.status).toBe(409);
+    expect(gastoAntesDeIniciar.body.error).toMatch(/cuando ya inició su ruta/i);
+    const inicio = await requestAs(app, '3').post(`/api/logistica/guias/${guia.id}/marcar-en-ruta`);
+    expect(inicio.status).toBe(200);
   });
 
   it('Venta en caja: emite TQ-0001, descuenta el camión correcto y marca la etiqueta Entregada', async () => {
@@ -127,6 +142,8 @@ describe('F3 — Caja del vendedor: ventas en ruta, tiquetes, retornos, tablero 
     const inv = await authRequest().get('/api/inventario');
     const camion = inv.body.find((i: any) => i.ubicacion === 'Camión Ruta 5' && i.producto === 'Huevos - Grande');
     expect(camion.cantidad).toBe(90); // 120 - 30 vendidos
+    const cartonSaldo = await client.execute({ sql: `SELECT cantidad_actual FROM inventario_insumos WHERE producto = ?`, args: ['Cartones huevo grande'] });
+    expect(Number(cartonSaldo.rows[0].cantidad_actual)).toBeCloseTo(100 - 30 / 1.8, 3);
 
     const etiquetas = await authRequest().get('/api/etiquetas');
     const e1 = etiquetas.body.find((e: any) => e.id === 'e1');
@@ -355,6 +372,17 @@ describe('F3 — Caja del vendedor: ventas en ruta, tiquetes, retornos, tablero 
     expect(venta.status).toBe(409);
   });
 
+  it('un vendedor no puede asociar un gasto a una guía asignada a otro vendedor', async () => {
+    await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['vendedor-ajeno', 'Vendedor ajeno', 'ajeno@test.com', 'Vendedor'] });
+    await client.execute({ sql: `INSERT INTO camiones (id, nombre, capacidad_cartones, camionero_id) VALUES (?, ?, ?, ?)`, args: ['camion-ajeno', 'Camión ajeno', 100, 'vendedor-ajeno'] });
+    await client.execute({ sql: `INSERT INTO guias_despacho (id, consecutivo, camion_id, fecha, estado) VALUES (?, ?, ?, ?, ?)`, args: ['guia-ajena', 'GD-AJENA-001', 'camion-ajeno', '2026-11-19', 'EnRuta'] });
+    const gasto = await requestAs(app, '3').post('/api/gastos').send({
+      categoria: 'Diésel', monto: 5000, descripcion: 'Intento de gasto en ruta ajena', guiaId: 'guia-ajena', medioPago: 'Efectivo',
+    });
+    expect(gasto.status).toBe(403);
+    expect(gasto.body.error).toMatch(/guía activa asignada a usted/i);
+  });
+
   it('Diferencia de efectivo: se registra y solicita aprobación administrativa', async () => {
     await client.execute({
       sql: `INSERT INTO etiquetas (id, codigo_unico, producto, cantidad, estado, ubicacion_actual, lote, peso_bodega) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -392,5 +420,23 @@ describe('F3 — Caja del vendedor: ventas en ruta, tiquetes, retornos, tablero 
     expect(aprobada.status).toBe(200);
     const depositoActual = await client.execute({ sql: `SELECT estado FROM depositos_caja WHERE cierre_id = ?`, args: [cierreRow.rows[0].id] });
     expect(depositoActual.rows[0].estado).toBe('Conciliado');
+  });
+
+  it('calibra el factor de cartones con kg vendidos y conteo físico observado', async () => {
+    const item = await client.execute({ sql: `SELECT id FROM inventario_insumos WHERE producto = ? LIMIT 1`, args: ['Cartones huevo grande'] });
+    const calibracion = await authRequest().post(`/api/inventario-insumos/${item.rows[0].id}/calibrar`).send({ kgHuevo: 90, cartonesUsados: 50, observacion: 'Conteo físico semanal' });
+    expect(calibracion.status).toBe(200);
+    expect(calibracion.body.kgPorUnidad).toBe(1.8);
+    const movimiento = await client.execute({ sql: `SELECT tipo FROM movimientos_insumos WHERE insumo_id = ? AND tipo = ?`, args: [item.rows[0].id, 'Calibración real'] });
+    expect(movimiento.rows).toHaveLength(1);
+  });
+
+  it('permite al administrador ingresar insumos manualmente y registra el movimiento', async () => {
+    const ingreso = await authRequest().post('/api/inventario-insumos').send({ producto: 'Alimento postura', categoria: 'Alimento', cantidad: 12, unidad: 'sacos', ubicacion: 'Bodega' });
+    expect(ingreso.status).toBe(201);
+    const saldo = await client.execute({ sql: `SELECT cantidad_actual FROM inventario_insumos WHERE id = ?`, args: [ingreso.body.id] });
+    expect(Number(saldo.rows[0].cantidad_actual)).toBe(12);
+    const movimiento = await client.execute({ sql: `SELECT tipo FROM movimientos_insumos WHERE insumo_id = ?`, args: [ingreso.body.id] });
+    expect(movimiento.rows[0].tipo).toBe('IngresoManual');
   });
 });

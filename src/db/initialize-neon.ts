@@ -5,6 +5,8 @@ import { hashPassword } from '../lib/password';
 /** Seeds the fresh demo database after Drizzle has applied the schema. */
 export async function initializeNeonDatabase(db: any) {
   const now = new Date().toISOString();
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS inventario_insumos (id TEXT PRIMARY KEY, producto TEXT NOT NULL, categoria TEXT NOT NULL, cantidad_recibida DOUBLE PRECISION NOT NULL, cantidad_actual DOUBLE PRECISION NOT NULL, unidad TEXT NOT NULL, ubicacion TEXT NOT NULL, lote TEXT, proveedor TEXT, gasto_id TEXT, monto_compra DOUBLE PRECISION, producto_huevo TEXT, kg_por_unidad DOUBLE PRECISION, creado_por TEXT NOT NULL, creado_en TEXT NOT NULL)`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS movimientos_insumos (id TEXT PRIMARY KEY, insumo_id TEXT NOT NULL, tipo TEXT NOT NULL, cantidad DOUBLE PRECISION NOT NULL, unidad TEXT NOT NULL, referencia_id TEXT, kg_huevo DOUBLE PRECISION, registrado_por TEXT NOT NULL, fecha TEXT NOT NULL, observacion TEXT)`);
 
   // Keep the per-ticket FEFO allocation for transparent returns and traceability.
   await db.execute(sql`ALTER TABLE ventas_ruta_kg ADD COLUMN IF NOT EXISTS etiquetas_asignadas_json TEXT`);

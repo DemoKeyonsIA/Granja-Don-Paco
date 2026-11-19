@@ -5,7 +5,7 @@ export function registrarRutasGastos(app: any, db: any, requirePermission: any) 
   const { gastos, guias_despacho, camiones, users, aprobaciones, rutas } = schema;
   app.post("/api/gastos", requirePermission(['gastos_ruta', 'finanzas'], 'create'), async (req, res) => {
     try {
-      const { id, fecha, categoria, monto, descripcion, guiaId = null, medioPago = 'Efectivo', comprobante = null } = req.body;
+      const { id, fecha, categoria, monto, descripcion, guiaId = null, medioPago = 'Efectivo', comprobante = null, insumo = null } = req.body;
       const rawKey = req.get('Idempotency-Key') || req.body.idempotencyKey;
       const idempotencyKey = rawKey == null ? null : String(rawKey).trim();
       if (idempotencyKey !== null && (!idempotencyKey || idempotencyKey.length > 160)) {
@@ -16,6 +16,15 @@ export function registrarRutasGastos(app: any, db: any, requirePermission: any) 
       const roles = [(req as any).usuario?.role, ...((req as any).usuario?.roles || [])].filter(Boolean);
       const esAdmin = roles.includes('Admin');
       const esVendedor = roles.includes('Comercial') && !esAdmin;
+      if (categoria === 'Insumos' && !esAdmin) return res.status(403).json({ error: 'Solo Administración puede registrar compras de insumos.' });
+      if (categoria === 'Insumos' && (!insumo || !String(insumo.producto || '').trim() || !Number.isFinite(Number(insumo.cantidad)) || Number(insumo.cantidad) <= 0 || !String(insumo.unidad || '').trim())) return res.status(400).json({ error: 'Para una compra de insumos indique producto, cantidad y unidad.' });
+      if (categoria === 'Insumos' && !['Cartones', 'Alimento', 'Empaques', 'Otros'].includes(String(insumo.tipo || 'Otros'))) return res.status(400).json({ error: 'Tipo de insumo inválido.' });
+      if (categoria === 'Insumos' && String(insumo.tipo) === 'Cartones') {
+        const factor = Number(insumo.kgPorUnidad); const productoHuevo = String(insumo.productoHuevo || '').trim();
+        if (String(insumo.unidad) !== 'cartones' || !productoHuevo || !Number.isFinite(factor) || factor <= 0) return res.status(400).json({ error: 'Para cartones use la unidad cartones, asócielos a un producto de huevo y configure kg por cartón.' });
+        const productoCatalogo = await db.query.productosCatalogo.findFirst({ where: eq(schema.productosCatalogo.nombre, productoHuevo) });
+        if (!productoCatalogo || productoCatalogo.estado !== 'Activo' || productoCatalogo.categoria !== 'Huevos') return res.status(400).json({ error: 'Seleccione un producto de huevo activo del catálogo.' });
+      }
       const categoriasPermitidas = new Set(esVendedor ? categoriasVendedor : categoriasAdmin);
       const montoNumerico = Number(monto);
       const fechaGasto = fecha == null || fecha === '' ? new Date().toISOString() : String(fecha);
@@ -30,9 +39,11 @@ export function registrarRutasGastos(app: any, db: any, requirePermission: any) 
         const guiaGasto = await db.query.guias_despacho.findFirst({ where: eq(guias_despacho.id, String(guiaId)) });
         if (!guiaGasto) return res.status(404).json({ error: 'Guía asociada al gasto no encontrada.' });
         if (guiaGasto.finDiaFecha || ['Cerrada', 'CerradaConDiferencia', 'Anulada'].includes(guiaGasto.estado)) return res.status(409).json({ error: 'La guía ya cerró; no se pueden agregar gastos a su caja.' });
+        if (esVendedor && guiaGasto.estado !== 'EnRuta') return res.status(409).json({ error: 'Solo puede registrar gastos cuando ya inició su ruta.' });
         if (!esAdmin) {
           const camion = guiaGasto.camionId ? await db.query.camiones.findFirst({ where: eq(camiones.id, guiaGasto.camionId) }) : null;
-          if (!camion || (camion.camioneroId || camion.vendedor_id) !== autor || (guiaGasto.vendedorId && guiaGasto.vendedorId !== autor)) return res.status(403).json({ error: 'Solo puede registrar gastos en la guía activa de su camión.' });
+          const camionAsignado = camion && [camion.camioneroId, camion.vendedor_id].some((id: unknown) => String(id || '') === autor);
+          if (!camionAsignado || (guiaGasto.vendedorId && String(guiaGasto.vendedorId) !== autor)) return res.status(403).json({ error: 'Solo puede registrar gastos en una guía activa asignada a usted.' });
         }
       }
       if (comprobante && (typeof comprobante !== 'string' || comprobante.length > 800_000 || !/^data:image\/(jpeg|png|webp);base64,/.test(comprobante))) return res.status(400).json({ error: 'El comprobante debe ser una imagen JPG, PNG o WebP de hasta 600 KB.' });
@@ -56,6 +67,22 @@ export function registrarRutasGastos(app: any, db: any, requirePermission: any) 
           descripcion: String(descripcion).trim(), usuarioId: autor, idempotencyKey,
           guiaId: guiaId ? String(guiaId) : null, medioPago: String(medioPago),
         });
+        if (categoria === 'Insumos') {
+          const cantidad = Number(insumo.cantidad);
+          const kgPorUnidad = insumo.kgPorUnidad == null || insumo.kgPorUnidad === '' ? null : Number(insumo.kgPorUnidad);
+          if (kgPorUnidad != null && (!Number.isFinite(kgPorUnidad) || kgPorUnidad <= 0)) throw Object.assign(new Error('El factor kg por unidad debe ser positivo.'), { status: 400 });
+          const insumoId = crypto.randomUUID();
+          await tx.insert(schema.inventario_insumos).values({
+            id: insumoId, producto: String(insumo.producto).trim(), categoria: String(insumo.tipo || 'Otros'),
+            cantidadRecibida: cantidad, cantidadActual: cantidad, unidad: String(insumo.unidad),
+            ubicacion: String(insumo.ubicacion || 'Bodega'), lote: String(insumo.lote || '').trim() || null,
+            proveedor: String(insumo.proveedor || '').trim() || null, gastoId: gastoId,
+            montoCompra: Math.round(montoNumerico * 100) / 100,
+            productoHuevo: String(insumo.productoHuevo || '').trim() || null, kgPorUnidad,
+            creadoPor: autor, creadoEn: new Date().toISOString(),
+          });
+          await tx.insert(schema.movimientos_insumos).values({ id: crypto.randomUUID(), insumoId, tipo: 'Compra', cantidad, unidad: String(insumo.unidad), referenciaId: gastoId, kgHuevo: null, registradoPor: autor, fecha: new Date().toISOString(), observacion: String(insumo.producto).trim() });
+        }
         if (guiaId && !roles.includes('Admin')) await tx.insert(aprobaciones).values({
           id: crypto.randomUUID(), tipo: 'GastoRuta', modulo: 'Finanzas', referenciaId: gastoId,
           solicitudUsuario: autor, descripcion: `Gasto ${categoria} por ₡${Math.round(montoNumerico).toLocaleString('es-CR')}`,
@@ -72,6 +99,55 @@ export function registrarRutasGastos(app: any, db: any, requirePermission: any) 
       console.error("Error registrando gasto:", error);
       res.status(500).json({ error: error.message || "Internal server error" });
     }
+  });
+
+  app.get('/api/inventario-insumos', requirePermission('finanzas', 'view'), async (_req, res) => {
+    try {
+      const rows = await db.query.inventario_insumos.findMany();
+      res.json(rows.sort((a: any, b: any) => String(b.creadoEn).localeCompare(String(a.creadoEn))));
+    } catch (error: any) { res.status(500).json({ error: error.message || 'No se pudo cargar el inventario de insumos.' }); }
+  });
+
+  app.get('/api/inventario-insumos/movimientos', requirePermission('finanzas', 'view'), async (_req, res) => {
+    try { const rows = await db.query.movimientos_insumos.findMany(); res.json(rows.sort((a: any, b: any) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 300)); }
+    catch (error: any) { res.status(500).json({ error: error.message || 'No se pudo cargar el historial de insumos.' }); }
+  });
+
+  app.post('/api/inventario-insumos/:id/calibrar', requirePermission('finanzas', 'create'), async (req, res) => {
+    try {
+      const { kgHuevo, cartonesUsados, observacion } = req.body || {};
+      const kg = Number(kgHuevo); const cartones = Number(cartonesUsados);
+      if (!Number.isFinite(kg) || kg <= 0 || !Number.isFinite(cartones) || cartones <= 0 || !String(observacion || '').trim()) return res.status(400).json({ error: 'Indique kg vendidos, cartones realmente usados y una nota del conteo.' });
+      const item = await db.query.inventario_insumos.findFirst({ where: eq(schema.inventario_insumos.id, String(req.params.id)) });
+      if (!item || String(item.categoria).toLowerCase() !== 'cartones') return res.status(404).json({ error: 'No se encontró el insumo de cartones.' });
+      const factor = Math.round((kg / cartones) * 10000) / 10000; const autor = String((req as any).usuario?.id || ''); const fecha = new Date().toISOString(); const anterior = Number(item.kgPorUnidad || 0);
+      await db.transaction(async (tx: any) => {
+        await tx.update(schema.inventario_insumos).set({ kgPorUnidad: factor }).where(eq(schema.inventario_insumos.id, item.id));
+        await tx.insert(schema.movimientos_insumos).values({ id: crypto.randomUUID(), insumoId: item.id, tipo: 'Calibración real', cantidad: cartones, unidad: item.unidad, referenciaId: null, kgHuevo: kg, registradoPor: autor, fecha, observacion: `${String(observacion).trim()} · factor anterior ${anterior || 'sin configurar'} kg/cartón; nuevo ${factor} kg/cartón` });
+      });
+      res.json({ success: true, kgPorUnidad: factor });
+    } catch (error: any) { res.status(500).json({ error: error.message || 'No se pudo calibrar la conversión.' }); }
+  });
+
+  app.post('/api/inventario-insumos', requirePermission('finanzas', 'create'), async (req, res) => {
+    try {
+      const { producto, categoria = 'Otros', cantidad, unidad, ubicacion = 'Bodega', lote, proveedor, productoHuevo, kgPorUnidad } = req.body || {};
+      const cantidadNum = Number(cantidad); const factor = kgPorUnidad == null || kgPorUnidad === '' ? null : Number(kgPorUnidad);
+      if (!String(producto || '').trim() || !Number.isFinite(cantidadNum) || cantidadNum <= 0 || !String(unidad || '').trim()) return res.status(400).json({ error: 'Indique producto, cantidad positiva y unidad.' });
+      if (!['Cartones', 'Alimento', 'Empaques', 'Otros'].includes(String(categoria))) return res.status(400).json({ error: 'Tipo de insumo inválido.' });
+      if (factor != null && (!Number.isFinite(factor) || factor <= 0)) return res.status(400).json({ error: 'El factor kg por unidad debe ser positivo.' });
+      if (String(categoria) === 'Cartones') {
+        if (String(unidad) !== 'cartones' || !String(productoHuevo || '').trim() || factor == null) return res.status(400).json({ error: 'Para cartones use la unidad cartones, asócielos a un producto de huevo y configure kg por cartón.' });
+        const productoCatalogo = await db.query.productosCatalogo.findFirst({ where: eq(schema.productosCatalogo.nombre, String(productoHuevo).trim()) });
+        if (!productoCatalogo || productoCatalogo.estado !== 'Activo' || productoCatalogo.categoria !== 'Huevos') return res.status(400).json({ error: 'Seleccione un producto de huevo activo del catálogo.' });
+      }
+      const id = crypto.randomUUID(); const fecha = new Date().toISOString(); const autor = String((req as any).usuario?.id || '');
+      await db.transaction(async (tx: any) => {
+        await tx.insert(schema.inventario_insumos).values({ id, producto: String(producto).trim(), categoria: String(categoria), cantidadRecibida: cantidadNum, cantidadActual: cantidadNum, unidad: String(unidad), ubicacion: String(ubicacion).trim(), lote: String(lote || '').trim() || null, proveedor: String(proveedor || '').trim() || null, gastoId: null, montoCompra: null, productoHuevo: String(productoHuevo || '').trim() || null, kgPorUnidad: factor, creadoPor: autor, creadoEn: fecha });
+        await tx.insert(schema.movimientos_insumos).values({ id: crypto.randomUUID(), insumoId: id, tipo: 'IngresoManual', cantidad: cantidadNum, unidad: String(unidad), referenciaId: null, kgHuevo: null, registradoPor: autor, fecha, observacion: String(lote || '').trim() || 'Ingreso manual' });
+      });
+      res.status(201).json({ success: true, id });
+    } catch (error: any) { res.status(500).json({ error: error.message || 'No se pudo registrar la entrada de inventario.' }); }
   });
 
   app.get("/api/gastos", requirePermission(['finanzas', 'gastos_ruta'], 'view'), async (req, res) => {

@@ -36,17 +36,20 @@ export default function RegistroGasto({
   const [guiaId, setGuiaId] = useState('');
   const [medioPago, setMedioPago] = useState('Efectivo');
   const [comprobante, setComprobante] = useState<string | null>(null);
+  const [insumo, setInsumo] = useState({ producto: '', tipo: 'Cartones', cantidad: '', unidad: 'cartones', ubicacion: 'Bodega', proveedor: '', lote: '', productoHuevo: '', kgPorUnidad: '' });
   const [guiasActivas, setGuiasActivas] = useState<any[]>([]);
+  const [productosHuevo, setProductosHuevo] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/logistica/guias-activas', { headers: { 'x-user-id': currentUser.id, ...(loadSession()?.token ? { Authorization: `Bearer ${loadSession()?.token}` } : {}) } }).then(async res => res.ok ? res.json() : []).then(data => setGuiasActivas(Array.isArray(data) ? data : [])).catch(() => setGuiasActivas([]));
+    if (!esVendedor) fetch('/api/productos-catalogo', { headers: { 'x-user-id': currentUser.id, ...(loadSession()?.token ? { Authorization: `Bearer ${loadSession()?.token}` } : {}) } }).then(async res => res.ok ? res.json() : []).then(data => setProductosHuevo(Array.isArray(data) ? data.filter((p: any) => p.categoria === 'Huevos' && p.estado === 'Activo') : [])).catch(() => setProductosHuevo([]));
   }, [currentUser.id]);
 
   useEffect(() => { if (initialGuideId) setGuiaId(initialGuideId); }, [initialGuideId]);
 
-  const completo = Boolean(categoria && Number(monto) > 0 && descripcion.trim() && (!esVendedor || guiaId));
+  const completo = Boolean(categoria && Number(monto) > 0 && descripcion.trim() && (!esVendedor || guiaId) && (categoria !== 'Insumos' || (insumo.producto.trim() && Number(insumo.cantidad) > 0 && insumo.unidad)));
 
   const guardar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,6 +72,7 @@ export default function RegistroGasto({
           guiaId: guiaId || null,
           medioPago,
           comprobante,
+          insumo: categoria === 'Insumos' ? { ...insumo, cantidad: Number(insumo.cantidad), kgPorUnidad: insumo.kgPorUnidad || null } : null,
         }),
       });
       if (!res.ok) throw new Error(`No se pudo registrar el gasto (${res.status})`);
@@ -109,6 +113,22 @@ export default function RegistroGasto({
               {categorias.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
+
+          {categoria === 'Insumos' && !esVendedor && <section className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900 dark:bg-emerald-950/20">
+            <div><h4 className="text-sm font-extrabold text-emerald-950 dark:text-emerald-100">El gasto también ingresará existencias</h4><p className="mt-1 text-xs text-emerald-900 dark:text-emerald-200">Se guardará el gasto y el lote en inventario en una sola operación.</p></div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-xs font-bold">Insumo<input required value={insumo.producto} onChange={e => setInsumo({ ...insumo, producto: e.target.value })} placeholder="Cartón para huevo grande" className="w-full rounded-lg border bg-white px-3 py-2 text-sm dark:bg-neutral-900" /></label>
+              <label className="space-y-1 text-xs font-bold">Tipo<select value={insumo.tipo} onChange={e => setInsumo({ ...insumo, tipo: e.target.value })} className="w-full rounded-lg border bg-white px-3 py-2 text-sm dark:bg-neutral-900"><option>Cartones</option><option>Alimento</option><option>Empaques</option><option>Otros</option></select></label>
+              <label className="space-y-1 text-xs font-bold">Cantidad<input required type="number" min="0.001" step="0.001" value={insumo.cantidad} onChange={e => setInsumo({ ...insumo, cantidad: e.target.value })} placeholder="100" className="w-full rounded-lg border bg-white px-3 py-2 text-sm dark:bg-neutral-900" /></label>
+              <label className="space-y-1 text-xs font-bold">Unidad<select value={insumo.unidad} onChange={e => setInsumo({ ...insumo, unidad: e.target.value })} className="w-full rounded-lg border bg-white px-3 py-2 text-sm dark:bg-neutral-900"><option>cartones</option><option>sacos</option><option>unidades</option><option>kg</option><option>litros</option></select></label>
+              <label className="space-y-1 text-xs font-bold">Proveedor<input value={insumo.proveedor} onChange={e => setInsumo({ ...insumo, proveedor: e.target.value })} className="w-full rounded-lg border bg-white px-3 py-2 text-sm dark:bg-neutral-900" /></label>
+              <label className="space-y-1 text-xs font-bold">Lote / factura<input value={insumo.lote} onChange={e => setInsumo({ ...insumo, lote: e.target.value })} className="w-full rounded-lg border bg-white px-3 py-2 text-sm dark:bg-neutral-900" /></label>
+              {insumo.tipo === 'Cartones' && <>
+                <label className="space-y-1 text-xs font-bold">Producto de huevo asociado<select required value={insumo.productoHuevo} onChange={e => { const p = productosHuevo.find((item: any) => item.nombre === e.target.value); setInsumo({ ...insumo, productoHuevo: e.target.value, kgPorUnidad: p?.kgPorCarton ? String(p.kgPorCarton) : insumo.kgPorUnidad }); }} className="w-full rounded-lg border bg-white px-3 py-2 text-sm dark:bg-neutral-900"><option value="">Seleccione el producto</option>{productosHuevo.map((p: any) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}</select></label>
+                <label className="space-y-1 text-xs font-bold">Kg por cartón (factor inicial)<input required type="number" min="0.001" step="0.001" value={insumo.kgPorUnidad} onChange={e => setInsumo({ ...insumo, kgPorUnidad: e.target.value })} placeholder="Use kg/cartón configurado en catálogo" className="w-full rounded-lg border bg-white px-3 py-2 text-sm dark:bg-neutral-900" /></label>
+              </>}
+            </div>
+          </section>}
 
           <div className="space-y-2">
             <label htmlFor="gasto-monto" className="text-sm font-bold text-neutral-700 dark:text-neutral-300">Monto (₡)</label>

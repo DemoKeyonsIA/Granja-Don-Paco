@@ -75,6 +75,7 @@ const LECTURAS_LISTA: string[] = [
   '/api/desperdicios', '/api/precios/listas', '/api/precios/historial', '/api/auditoria',
   '/api/reportes/ventas-por-ruta', '/api/reportes/produccion',
   '/api/reportes/inventario', '/api/reportes/desperdicios', '/api/users', '/api/clientes',
+  '/api/inventario-insumos', '/api/inventario-insumos/movimientos',
   '/api/productos-catalogo', '/api/tipos-carton', '/api/incidentes',
   '/api/operaciones/traslados', '/api/operaciones/cargas', '/api/operaciones/recepciones',
   '/api/operaciones/remisiones', '/api/logistica/camiones', '/api/logistica/guias',
@@ -167,6 +168,7 @@ const ESCRITURAS_EXIGEN_SESION: string[] = [
   '/api/office/cuentas', '/api/office/sync', '/api/office/mensajes', '/api/office/documentos',
   '/api/office/vinculaciones', '/api/office/vinculaciones/probar',
   '/api/operaciones/inventario/granja/conciliar-kg',
+  '/api/inventario-insumos', '/api/inventario-insumos/*/calibrar',
 ];
 
 /**

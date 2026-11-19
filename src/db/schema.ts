@@ -204,6 +204,28 @@ export const inventario = pgTable('inventario', {
   ultima_actualizacion: text('ultima_actualizacion').notNull(),
 });
 
+/** Insumos operativos comprados o ingresados manualmente, separados del huevo. */
+export const inventario_insumos = pgTable('inventario_insumos', {
+  id: text('id').primaryKey(),
+  producto: text('producto').notNull(),
+  categoria: text('categoria').notNull(),
+  cantidadRecibida: doublePrecision('cantidad_recibida').notNull(),
+  cantidadActual: doublePrecision('cantidad_actual').notNull(),
+  unidad: text('unidad').notNull(),
+  ubicacion: text('ubicacion').notNull(),
+  lote: text('lote'),
+  proveedor: text('proveedor'),
+  gastoId: text('gasto_id'),
+  montoCompra: doublePrecision('monto_compra'),
+  productoHuevo: text('producto_huevo'),
+  kgPorUnidad: doublePrecision('kg_por_unidad'),
+  creadoPor: text('creado_por').notNull(),
+  creadoEn: text('creado_en').notNull(),
+});
+export const movimientos_insumos = pgTable('movimientos_insumos', {
+  id: text('id').primaryKey(), insumoId: text('insumo_id').notNull(), tipo: text('tipo').notNull(), cantidad: doublePrecision('cantidad').notNull(), unidad: text('unidad').notNull(), referenciaId: text('referencia_id'), kgHuevo: doublePrecision('kg_huevo'), registradoPor: text('registrado_por').notNull(), fecha: text('fecha').notNull(), observacion: text('observacion'),
+});
+
 /** Conteo físico en cuarentena separado del stock disponible y del saldo libro. */
 export const inventario_cuarentena = pgTable('inventario_cuarentena', {
   id: text('id').primaryKey(),
