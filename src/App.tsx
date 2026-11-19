@@ -259,7 +259,7 @@ const nuevoItems = useMemo(() => {
         const tabsMoviles = new Set(subTabsOperacionesMovil(userRoles).map(t => t.id));
         if (tabsMoviles.has('venta-movil')) items.push({ label: 'Venta', icon: CreditCard, tab: 'operaciones', subTab: 'venta-movil' });
         if (tabsMoviles.has('facturar-movil')) items.push({ label: 'Factura o nota', icon: FileText, tab: 'operaciones', subTab: 'facturar-movil' });
-        if (tabsMoviles.has('cargas-comercial') || tabsMoviles.has('confirmar')) items.push({ label: 'Cargas asignadas', icon: Truck, tab: 'operaciones', subTab: tabsMoviles.has('cargas-comercial') ? 'cargas-comercial' : 'confirmar' });
+        if (tabsMoviles.has('cargas-comercial') || tabsMoviles.has('confirmar')) items.push({ label: 'Mi ruta', icon: Truck, tab: 'operaciones', subTab: tabsMoviles.has('cargas-comercial') ? 'cargas-comercial' : 'confirmar' });
         if (tabsMoviles.has('carga')) items.push({ label: 'Nueva carga', icon: Truck, tab: 'operaciones', subTab: 'carga' });
         if (tabsMoviles.has('recibir')) items.push({ label: 'Recibir', icon: Truck, tab: 'operaciones', subTab: 'recibir' });
       } else {
@@ -273,7 +273,6 @@ const nuevoItems = useMemo(() => {
         // SUBTABS_GRANJA. Antes vivía en el módulo Granja que ya no existe.
         if (grupos.has('granja')) items.push({ label: 'Granja', icon: Egg, tab: 'operaciones', subTab: 'granja' });
       }
-      if (userRoles.includes('Comercial')) items.push({ label: 'Registrar gasto de ruta', icon: DollarSign, tab: 'operaciones', accion: 'gasto' });
     } else if (activeTab === 'office') {
       // Office tiene dos espacios y los dos dan de alta: conectar una cuenta de
       // correo y subir un documento. "Nueva regla" ya no vive acá, está en Admin.
@@ -950,7 +949,6 @@ const nuevoItems = useMemo(() => {
             { id: 'ruta', label: 'Mi Ruta', icon: 'PackageOpen', active: activeTab === 'operaciones' && subTab !== 'facturar-movil', onClick: () => navegarComoComercial('ruta') },
             { id: 'facturas', label: 'Facturas', icon: 'FileText', active: activeTab === 'operaciones' && subTab === 'facturar-movil', onClick: () => navegarComoComercial('facturas') },
             { id: 'clientes', label: 'Clientes', icon: 'Users', active: activeTab === 'clientes', onClick: () => navegarComoComercial('clientes') },
-            { id: 'gastos', label: 'Gastos', icon: 'DollarSign', active: isRegistroGastoOpen, onClick: () => setIsRegistroGastoOpen(true) },
           ] as const).map(item => {
             const Icon = iconoDe(item.icon);
             return (

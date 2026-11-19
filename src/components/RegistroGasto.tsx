@@ -105,7 +105,7 @@ export default function RegistroGasto({
         </div>
 
         <div className="space-y-4">
-          {initialGuideId && (() => { const g = guiasActivas.find((x: any) => x.id === initialGuideId); return <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950"><b>Gasto asociado a la guía activa</b><br />{g ? `${g.consecutivo} · ${g.camionNombre || 'Camión'} · ${g.rutaNombre || 'Ruta asignada'}` : 'Cargando guía…'}</div>; })()}
+          {initialGuideId && (() => { const g = guiasActivas.find((x: any) => x.id === initialGuideId); return <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-100"><b>Gasto asociado a la guía activa</b><br />{g ? `${g.consecutivo} · ${g.camionNombre || 'Camión'} · ${g.rutaNombre || 'Ruta asignada'}` : 'Cargando guía…'}</div>; })()}
           <div className="space-y-2">
             <label htmlFor="gasto-categoria" className="text-sm font-bold text-neutral-700 dark:text-neutral-300">Categoría</label>
             <select

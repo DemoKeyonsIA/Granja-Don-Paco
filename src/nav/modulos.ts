@@ -167,7 +167,7 @@ export const SUBTABS_OPERACIONES_MOVIL: Record<Role, SubTabDef[]> = {
   Comercial: [
     { id: 'venta-movil', label: 'Venta' },
     { id: 'facturar-movil', label: 'Facturar' },
-    { id: 'cargas-comercial', label: 'Cargas' },
+    { id: 'cargas-comercial', label: 'Mi ruta' },
   ],
 };
 
@@ -250,6 +250,7 @@ export const SUBTABS_ADMIN: SubTabDef[] = [
   { id: 'productos', label: 'Productos' },
   { id: 'infraestructura', label: 'Infraestructura' },
   { id: 'precios-negociacion', label: 'Precios y negociación', roles: ['Admin'] },
+  { id: 'datos-fiscales', label: 'Datos fiscales', roles: ['Admin'] },
   { id: 'usuarios', label: 'Usuarios' },
   { id: 'aprobaciones', label: 'Aprobaciones', roles: ['Admin'] },
   { id: 'vinculaciones', label: 'Vinculaciones' },

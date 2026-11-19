@@ -342,7 +342,6 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
           {onClose && <button type="button" onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Cerrar registro de venta"><X className="h-5 w-5" /></button>}
         </div>
         {guia && <div className="flex flex-col gap-2 sm:flex-row">
-          <button type="button" onClick={() => setRegistrarGastoAbierto(true)} disabled={!guiaId || cajaCerrada} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold disabled:opacity-50 sm:w-auto" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)', border: '1px solid var(--brand-primary-soft)' }}><Banknote className="h-5 w-5" /> Registrar gasto de esta ruta</button>
           {guia.estado === 'EnRuta' && <button type="button" onClick={() => setCierreRutaAbierto(true)} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold sm:w-auto" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}><Truck className="h-5 w-5" /> Cierre y entrega a Bodega</button>}
         </div>}
         <div className="route-pos-header-layout">

@@ -272,8 +272,8 @@ export default function CamioneroMovil({ currentUser }: Props) {
     <div className="max-w-3xl mx-auto px-4 pt-4 pb-24 animate-in fade-in">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
         <div>
-          <h2 className="text-2xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>Mi ruta activa</h2>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Carga inicial y kilos disponibles después de las ventas.</p>
+          <h2 className="text-2xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>Mi ruta</h2>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Consulta tu ruta asignada y los kilos disponibles.</p>
         </div>
         <button type="button" onClick={() => setGastoAbierto(true)}
           className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 font-bold"
@@ -286,9 +286,9 @@ export default function CamioneroMovil({ currentUser }: Props) {
         <section className="rounded-2xl p-5 mb-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
           <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Ruta asignada</p>
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Ruta asignada</p>
               <h3 className="text-lg font-black" style={{ color: 'var(--text-primary)' }}>{guiaActiva.rutaNombre || guiaActiva.consecutivo || guiaActiva.camionNombre || 'Ruta activa'}</h3>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{guiaActiva.camionNombre || ''}</p>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{guiaActiva.camionNombre || ''}</p>
             </div>
             <span className="rounded-full px-3 py-1 text-sm font-bold" style={{ background: 'var(--status-success-soft)', color: 'var(--status-success)' }}>{guiaActiva.estadoLogico || guiaActiva.estado || 'Activa'}</span>
           </div>
@@ -296,17 +296,17 @@ export default function CamioneroMovil({ currentUser }: Props) {
             {saldoRuta.map(item => <div key={item.producto} className="rounded-xl p-4" style={{ background: 'var(--bg-muted)' }}>
               <p className="font-bold mb-2" style={{ color: 'var(--text-primary)' }}>{item.producto}</p>
               <div className="grid grid-cols-2 gap-3">
-                <div><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Kilos al salir</p><p className="text-xl font-black" style={{ color: 'var(--text-primary)' }}>{item.inicial.toFixed(2)} {item.unidad}</p></div>
-                <div><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Disponibles ahora</p><p className="text-xl font-black" style={{ color: 'var(--brand-primary)' }}>{item.actual.toFixed(2)} {item.unidad}</p></div>
+                <div><p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{item.unidad === 'kg' ? 'Kilos al salir' : `Cantidad inicial (${item.unidad})`}</p><p className="text-xl font-black" style={{ color: 'var(--text-primary)' }}>{item.inicial.toFixed(2)} {item.unidad}</p></div>
+                <div><p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{item.unidad === 'kg' ? 'Kilos disponibles ahora' : `Disponible ahora (${item.unidad})`}</p><p className="text-xl font-black" style={{ color: 'var(--brand-primary)' }}>{item.actual.toFixed(2)} {item.unidad}</p></div>
               </div>
             </div>)}
-          </div> : <p className="text-sm" style={{ color: 'var(--text-muted)' }}>La guía activa todavía no tiene detalle de productos.</p>}
+          </div> : <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>La guía activa todavía no tiene detalle de productos.</p>}
         </section>
       ) : (
         <section className="rounded-2xl p-6 mb-6 text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
           <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}><Truck className="w-7 h-7" /></div>
           <p className="font-bold" style={{ color: 'var(--text-primary)' }}>No tienes una ruta activa</p>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Cuando Administración te asigne una ruta, aquí verás la carga y el saldo disponible.</p>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Cuando Administración te asigne una ruta, aquí verás la carga y el saldo disponible.</p>
         </section>
       )}
 
