@@ -18,8 +18,8 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  AlertTriangle, CheckCircle2, Clock, DollarSign, FileText,
-  TrendingDown, TrendingUp, Wallet,
+  AlertTriangle, ArrowRight, CheckCircle2, Clock, DollarSign, FileText,
+  TrendingDown, TrendingUp, Wallet, ClipboardList,
 } from 'lucide-react';
 import type { User } from '../types';
 import { fmtCRC, type NodoCiclo, type RangoPeriodo } from '../lib/finanzas';
@@ -208,7 +208,7 @@ const ESTILO_NIVEL: Record<Aviso['nivel'], { fondo: string; texto: string; punto
  * muestra cuando el periodo anterior fue cero.
  */
 function Tarjeta({
-  label, valor, variacion, ayuda, icono: Icono, negativo = false, maloSiSube = false,
+  label, valor, variacion, ayuda, icono: Icono, negativo = false, maloSiSube = false, onClick,
 }: {
   label: string;
   valor: number;
@@ -218,12 +218,12 @@ function Tarjeta({
   icono: React.ComponentType<{ className?: string }>;
   negativo?: boolean;
   maloSiSube?: boolean;
+  onClick?: () => void;
 }) {
   // Una variación no comparable (`null`, periodo anterior en cero) no se pinta
   // como 0%: sería una mentira más pequeña que la de al lado.
   const malo = variacion == null ? null : (maloSiSube ? variacion > 0 : variacion < 0);
-  return (
-    <TarjetaKpi
+  const contenido = <TarjetaKpi
       etiqueta={label}
       valor={fmtCRC(valor)}
       icono={Icono}
@@ -245,11 +245,16 @@ function Tarjeta({
           {variacion == null ? 'Sin periodo anterior con que comparar' : 'vs. periodo anterior'}
         </span>
       </div>
-    </TarjetaKpi>
-  );
+    </TarjetaKpi>;
+  return onClick ? (
+    <button type="button" onClick={onClick} aria-label={`Ver ${label.toLowerCase()}`} className="group block w-full min-w-0 rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+      <div className="transition group-hover:-translate-y-0.5 group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-blue-500 rounded-2xl">{contenido}</div>
+      <span className="sr-only">Abrir detalle</span>
+    </button>
+  ) : contenido;
 }
 
-export default function FinanzasResumen({ currentUser }: { currentUser: User }) {
+export default function FinanzasResumen({ currentUser, onNavigate }: { currentUser: User; onNavigate?: (tab: string) => void }) {
   const [resumen, setResumen] = useState<ResumenFinanzas | null>(null);
   const [salud, setSalud] = useState<SaludNegocio | null>(null);
   const [alertasOperacion, setAlertasOperacion] = useState<DashboardEnterprise['alertas']>([]);
@@ -319,15 +324,46 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
     .sort((a, b) => (b.monto ?? -1) - (a.monto ?? -1));
   const vencido = resumen.aging.d1_30 + resumen.aging.d31_60 + resumen.aging.d60;
   const enRiesgo = resumen.aging.d31_60 + resumen.aging.d60;
+  const hayActividadFinanciera = resumen.ingresosFacturados !== 0 || resumen.ingresosCobrados !== 0 || resumen.gastos !== 0 || resumen.cuentasPorCobrar !== 0 || resumen.documentosEmitidos > 0 || (resumen.conciliacionCaja?.cierres ?? 0) > 0;
+  const navegar = (tab: string) => onNavigate?.(tab);
 
   return (
     <div className="space-y-6" data-testid="finanzas-resumen">
       <div>
         <h2 className="text-2xl font-bold text-neutral-900 dark:text-white">Resumen financiero</h2>
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          {resumen.periodo.desde} a {resumen.periodo.hasta} · Ingresos y utilidad sobre lo facturado; caja y cobro sobre lo cobrado.
+          {resumen.periodo.desde} a {resumen.periodo.hasta} · Aquí puedes revisar ventas, cobros y gastos.
         </p>
       </div>
+
+      {avisos.length > 0 ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30" data-testid="finanzas-resumen-prioridad">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" /><div><h3 className="font-bold text-amber-950 dark:text-amber-100">Hay {avisos.length} asunto(s) para revisar</h3><p className="mt-1 text-sm text-amber-900/80 dark:text-amber-200">Empieza por: {avisos[0]?.titulo}. Abre el detalle para ver qué registros lo explican.</p></div></div>
+            <button type="button" onClick={() => navegar('cobranza')} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-bold text-amber-950 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-800 dark:bg-neutral-900 dark:text-amber-100">Revisar pendientes <ArrowRight className="h-4 w-4" /></button>
+          </div>
+        </section>
+      ) : !hayActividadFinanciera ? (
+        <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/30" data-testid="finanzas-sin-actividad">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-blue-700 dark:text-blue-300" />
+              <div>
+                <h3 className="font-bold text-blue-950 dark:text-blue-100">Aún no hay movimientos financieros en este periodo</h3>
+                <p className="mt-1 text-sm text-blue-900/80 dark:text-blue-200">Los indicadores están en cero porque todavía no hay facturas, cobros ni gastos registrados. No significa que el periodo esté conciliado.</p>
+              </div>
+            </div>
+            <button type="button" onClick={() => navegar('documentos')} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+              Ver documentos <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        </section>
+      ) : (
+        <section className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30" data-testid="finanzas-todo-al-dia">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700 dark:text-emerald-300" />
+          <div><h3 className="font-bold text-emerald-950 dark:text-emerald-100">No hay asuntos pendientes detectados</h3><p className="mt-1 text-sm text-emerald-900/80 dark:text-emerald-200">Revisa los indicadores y la conciliación antes de dar el periodo por cerrado.</p></div>
+        </section>
+      )}
 
       {/* 1. Las cinco tarjetas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4" data-testid="finanzas-tarjetas">
@@ -337,6 +373,7 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
           variacion={resumen.variacion.ingresosFacturados}
           icono={DollarSign}
           ayuda="Facturado, cobrado o no"
+          onClick={() => navegar('documentos')}
         />
         <Tarjeta
           label="Cobrado"
@@ -344,6 +381,7 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
           variacion={resumen.variacion.ingresosCobrados}
           icono={Wallet}
           ayuda="Dinero que entró a caja"
+          onClick={() => navegar('cobranza')}
         />
         <Tarjeta
           label="Gastos"
@@ -351,6 +389,7 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
           variacion={resumen.variacion.gastos}
           icono={TrendingDown}
           maloSiSube
+          onClick={() => navegar('gastos-ruta')}
         />
         <Tarjeta
           label="Utilidad"
@@ -359,23 +398,24 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
           icono={FileText}
           negativo={resumen.utilidad < 0}
           ayuda={`Margen ${resumen.margen.toFixed(1)}%`}
+          onClick={() => navegar('reporte:financiero')}
         />
         <Tarjeta
           label="Por cobrar"
           valor={resumen.cuentasPorCobrar}
           icono={Clock}
           ayuda={`${fmtCRC(enRiesgo)} en riesgo`}
+          onClick={() => navegar('cobranza')}
         />
       </div>
 
       {/* 2. La banda del ciclo del dinero */}
-      <section className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-neutral-900 dark:text-white">Ciclo del dinero</h3>
-          <span className="text-xs text-neutral-500 dark:text-neutral-400">
-            {resumen.documentosEmitidos} documentos emitidos
-          </span>
-        </div>
+      <details className="bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm group">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 font-bold text-neutral-900 dark:text-white [&::-webkit-details-marker]:hidden">
+          <span>Entender el recorrido del dinero</span>
+          <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Ver resumen · {resumen.documentosEmitidos} documentos</span>
+        </summary>
+        <div className="border-t border-neutral-200 p-5 dark:border-neutral-700">
         <ol className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3" data-testid="finanzas-ciclo">
           {(resumen.cicloDelDinero ?? []).map((nodo) => (
             <li key={nodo.etapa} className="relative rounded-xl bg-neutral-50 dark:bg-neutral-900/60 p-3">
@@ -384,16 +424,19 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
             </li>
           ))}
         </ol>
-      </section>
+        </div>
+      </details>
 
-      <section className="rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5" data-testid="finanzas-conciliacion-caja">
+      <details className="rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800" data-testid="finanzas-conciliacion-caja">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 font-bold text-neutral-900 dark:text-white [&::-webkit-details-marker]:hidden"><span>Revisar caja de rutas</span><span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{resumen.conciliacionCaja?.cierres ?? 0} cierres</span></summary>
+        <div className="border-t border-neutral-200 p-5 dark:border-neutral-700">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="font-bold text-neutral-900 dark:text-white">Conciliación de caja de ruta</h3>
             <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">Conteo declarado por vendedor comparado con efectivo esperado por tiquetes.</p>
           </div>
-          <span className={`rounded-full px-3 py-1 text-xs font-bold ${(resumen.conciliacionCaja?.pendientesConteo || resumen.conciliacionCaja?.diferenciasPendientes || resumen.conciliacionCaja?.depositosPendientes) ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
-            {(resumen.conciliacionCaja?.pendientesConteo || resumen.conciliacionCaja?.diferenciasPendientes || resumen.conciliacionCaja?.depositosPendientes) ? `${(resumen.conciliacionCaja?.pendientesConteo || 0) + (resumen.conciliacionCaja?.diferenciasPendientes || 0) + (resumen.conciliacionCaja?.depositosPendientes || 0)} por revisar` : 'Sin diferencias pendientes'}
+          <span className={`rounded-full px-3 py-1 text-xs font-bold ${(resumen.conciliacionCaja?.cierres ?? 0) === 0 ? 'bg-neutral-100 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200' : (resumen.conciliacionCaja?.pendientesConteo || resumen.conciliacionCaja?.diferenciasPendientes || resumen.conciliacionCaja?.depositosPendientes) ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+            {(resumen.conciliacionCaja?.cierres ?? 0) === 0 ? 'Sin cierres registrados' : (resumen.conciliacionCaja?.pendientesConteo || resumen.conciliacionCaja?.diferenciasPendientes || resumen.conciliacionCaja?.depositosPendientes) ? `${(resumen.conciliacionCaja?.pendientesConteo || 0) + (resumen.conciliacionCaja?.diferenciasPendientes || 0) + (resumen.conciliacionCaja?.depositosPendientes || 0)} por revisar` : 'Cierres sin diferencias'}
           </span>
         </div>
         <div className="mt-4 grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
@@ -404,21 +447,23 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
           <div><p className="text-xs text-neutral-500">Diferencia neta</p><p className="font-extrabold text-neutral-900 dark:text-white">{fmtCRC(resumen.conciliacionCaja?.diferenciaNeta ?? 0)}</p></div>
           <div><p className="text-xs text-neutral-500">Depósitos conciliados</p><p className="font-extrabold text-neutral-900 dark:text-white">{resumen.conciliacionCaja?.depositosConciliados ?? 0} · {fmtCRC(resumen.conciliacionCaja?.montoDepositado ?? 0)}</p></div>
         </div>
-      </section>
+        </div>
+      </details>
       <ConciliacionDepositos currentUser={currentUser} />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* 3. Requiere atención */}
-        <section className="xl:col-span-2 bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm" data-testid="finanzas-requiere-atencion">
-          <div className="p-4 border-b border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
+        <details className="xl:col-span-2 bg-white dark:bg-neutral-800 rounded-2xl border border-neutral-200 dark:border-neutral-700 shadow-sm" data-testid="finanzas-requiere-atencion" open={avisos.length > 0}>
+          <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
             <h3 className="font-bold text-neutral-900 dark:text-white flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-500" />
-              Requiere atención
+              Detalle de asuntos
             </h3>
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               {avisos.length > 0 ? `${avisos.length} asuntos` : 'Nada pendiente'}
             </span>
-          </div>
+          </summary>
+          <div className="border-t border-neutral-200 dark:border-neutral-700">
           {avisos.length > 0 ? (
             <ul className="divide-y divide-neutral-100 dark:divide-neutral-700">
               {avisos.map(a => {
@@ -433,6 +478,8 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
                     {a.monto !== null && (
                       <p className="font-black text-sm text-neutral-900 dark:text-white shrink-0">{fmtCRC(a.monto)}</p>
                     )}
+                    {(a.id.startsWith('aging') || a.id === 'devengado-cobrado') && <button type="button" onClick={() => navegar('cobranza')} className="ml-2 shrink-0 text-xs font-bold text-blue-700 underline underline-offset-2 hover:text-blue-900 dark:text-blue-300">Ver cobranza</button>}
+                    {a.id === 'gasto-concentrado' && <button type="button" onClick={() => navegar('gastos-ruta')} className="ml-2 shrink-0 text-xs font-bold text-blue-700 underline underline-offset-2 hover:text-blue-900 dark:text-blue-300">Ver gastos</button>}
                   </li>
                 );
               })}
@@ -440,10 +487,11 @@ export default function FinanzasResumen({ currentUser }: { currentUser: User }) 
           ) : (
             <div className="p-10 text-center">
               <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-              <p className="text-sm text-neutral-600 dark:text-neutral-300 mt-2">Sin cartera vencida, sin alertas de operación y el periodo cierra en positivo.</p>
+              <p className="text-sm text-neutral-600 dark:text-neutral-300 mt-2">No hay alertas financieras ni operativas detectadas con la información disponible.</p>
             </div>
           )}
-        </section>
+          </div>
+        </details>
 
         {/* Columna derecha: lo que aportaba el Centro de Mando, y la cartera */}
         <div className="space-y-6">

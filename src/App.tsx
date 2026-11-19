@@ -913,7 +913,7 @@ const nuevoItems = useMemo(() => {
                   que el tab activo y el breadcrumb lo pueda leer. */}
               {renderFilaTabs(subTabsInternosDe('finanzas', subTab), 'secundario')}
               <Suspense fallback={<ModuleLoading />}><div className="animate-in fade-in">
-                {subTab === 'resumen' && <FinanzasResumen currentUser={currentUser} />}
+                {subTab === 'resumen' && <FinanzasResumen currentUser={currentUser} onNavigate={setSubTab} />}
                 {subTab === 'documentos' && <Facturacion currentUser={currentUser} />}
                 {subTab === 'gastos-ruta' && <GastosRutaAdmin currentUser={currentUser} />}
                 {subTab === 'cobranza' && <Cobranza currentUser={currentUser} />}
