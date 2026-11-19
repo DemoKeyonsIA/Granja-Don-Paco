@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { BloqueCarga, SpinnerConTexto } from './Spinner';
 import { sessionHeaders } from '../lib/session';
 import RegistroGasto from './RegistroGasto';
+import CajaRuta from './CajaRuta';
 
 type CargaItem = { trasladoId: string; granjaOrigenId?: string; producto: string; cantidad: number; unidad: string };
 type Carga = {
@@ -47,6 +48,7 @@ export default function CamioneroMovil({ currentUser }: Props) {
   const [guiaActiva, setGuiaActiva] = useState<GuiaActiva | null>(null);
   const [inventarioCamion, setInventarioCamion] = useState<any[]>([]);
   const [gastoAbierto, setGastoAbierto] = useState(false);
+  const [cierreRutaAbierto, setCierreRutaAbierto] = useState(false);
 
   const fetchCargas = async () => {
     try {
@@ -151,6 +153,10 @@ export default function CamioneroMovil({ currentUser }: Props) {
     }
     return [...iniciales].map(([producto, carga]) => ({ producto, inicial: carga.inicial, actual: disponible.has(producto) ? Math.max(0, disponible.get(producto)!) : Math.max(0, carga.inicial - (vendidos.get(producto) || 0)), unidad: String(inventarioCamion.find((i: any) => i.producto === producto)?.unidad || carga.unidad) }));
   })();
+
+  if (cierreRutaAbierto && guiaActiva) {
+    return <CajaRuta currentUser={currentUser} initialGuideId={guiaActiva.id} initialOpenClosure onClose={() => setCierreRutaAbierto(false)} />;
+  }
 
   if (loading) {
     return (
@@ -292,6 +298,7 @@ export default function CamioneroMovil({ currentUser }: Props) {
             </div>
             <span className="rounded-full px-3 py-1 text-sm font-bold" style={{ background: 'var(--status-success-soft)', color: 'var(--status-success)' }}>{guiaActiva.estadoLogico || guiaActiva.estado || 'Activa'}</span>
           </div>
+          {guiaActiva.estado === 'EnRuta' && <button type="button" onClick={() => setCierreRutaAbierto(true)} className="mb-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}><Truck className="h-5 w-5" /> Cerrar ruta y entregar a Bodega</button>}
           {saldoRuta.length ? <div className="space-y-3">
             {saldoRuta.map(item => <div key={item.producto} className="rounded-xl p-4" style={{ background: 'var(--bg-muted)' }}>
               <p className="font-bold mb-2" style={{ color: 'var(--text-primary)' }}>{item.producto}</p>

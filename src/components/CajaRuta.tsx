@@ -1,22 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Truck, PackageOpen, User as UserIcon, Banknote, CreditCard, ArrowLeftRight, RotateCcw, Printer, CheckCircle2, X, AlertTriangle, Minus, Plus, Eye } from 'lucide-react';
+import { Truck, PackageOpen, User as UserIcon, RotateCcw, Printer, CheckCircle2, X, AlertTriangle, Minus, Plus, Eye } from 'lucide-react';
 import { User } from '../types';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { sessionHeaders } from '../lib/session';
-import RegistroGasto from './RegistroGasto';
 
 interface CajaRutaProps {
   currentUser: User;
   initialGuideId?: string;
   onClose?: () => void;
+  initialOpenClosure?: boolean;
 }
 
 const fmtCRC = (n: number) => new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 0 }).format(n || 0);
 const fmtHora = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' });
 const fmtFechaHora = (iso: string) => new Date(iso).toLocaleString('es-CR', { dateStyle: 'medium', timeStyle: 'short' });
 
-export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaRutaProps) {
+type SugerenciaVenta = { producto: string; kilos: number; precio: number; pedidosAnalizados: number; precioMinimo: number; precioMaximo: number; metodo: string };
+
+export default function CajaRuta({ currentUser, initialGuideId, onClose, initialOpenClosure = false }: CajaRutaProps) {
   const rolesUsuario = currentUser.roles?.length ? currentUser.roles : [currentUser.role];
   const puedeElegirGuia = rolesUsuario.some((role) => role === 'Admin' || role === 'Despachador');
   const [guias, setGuias] = useState<any[]>([]);
@@ -26,6 +28,9 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   const [stockCamion, setStockCamion] = useState<any[]>([]);
   const [politicaPrecio, setPoliticaPrecio] = useState<any>(null);
   const [preciosProductos, setPreciosProductos] = useState<Record<string, any>>({});
+  const [sugerenciasVenta, setSugerenciasVenta] = useState<Record<string, SugerenciaVenta>>({});
+  const [cargandoSugerencia, setCargandoSugerencia] = useState(false);
+  const [sugerenciaUsaIA, setSugerenciaUsaIA] = useState(false);
   const [precioNegociado, setPrecioNegociado] = useState(0);
   const [cargandoPrecio, setCargandoPrecio] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -38,7 +43,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   const [cobro, setCobro] = useState<'Efectivo' | 'Credito' | 'Transferencia'>('Efectivo');
   const [tiquete, setTiquete] = useState<any>(null);
   const [previewTiqueteAbierto, setPreviewTiqueteAbierto] = useState(false);
-  const [cierreRutaAbierto, setCierreRutaAbierto] = useState(false);
+  const [cierreRutaAbierto, setCierreRutaAbierto] = useState(initialOpenClosure);
   const [ventas, setVentas] = useState<any[]>([]);
   const [gastosRuta, setGastosRuta] = useState<any[]>([]);
   const [modoDevolucion, setModoDevolucion] = useState(false);
@@ -50,7 +55,6 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   const [motivoMerma, setMotivoMerma] = useState('Quebrado Camión');
   const [cuadre, setCuadre] = useState<any>(null);
   const [efectivoContado, setEfectivoContado] = useState('');
-  const [registrarGastoAbierto, setRegistrarGastoAbierto] = useState(false);
   const [pasoVenta, setPasoVenta] = useState(1);
 
   const fetchBase = useCallback(async () => {
@@ -132,6 +136,29 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   }, [clienteId, currentUser.id, stockCamion]);
 
   useEffect(() => {
+    if (!clienteId) { setSugerenciasVenta({}); setSugerenciaUsaIA(false); setCargandoSugerencia(false); return; }
+    const productos = Array.from(new Set(stockCamion.filter((item: any) => Number(item.cantidad) > 0).map((item: any) => String(item.producto))));
+    if (productos.length === 0) { setSugerenciasVenta({}); return; }
+    const controller = new AbortController();
+    setSugerenciasVenta({});
+    setCargandoSugerencia(true);
+    fetch('/api/precios/recomendacion-ruta', {
+      method: 'POST', signal: controller.signal,
+      headers: sessionHeaders(currentUser.id, true),
+      body: JSON.stringify({ clienteId, productos }),
+    }).then(async res => {
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No fue posible preparar la sugerencia');
+      const mapa: Record<string, SugerenciaVenta> = {};
+      for (const item of data.recomendaciones || []) mapa[item.producto] = item;
+      setSugerenciasVenta(mapa);
+      setSugerenciaUsaIA(Boolean(data.usoIA));
+    }).catch(error => { if (error.name !== 'AbortError') setSugerenciasVenta({}); })
+      .finally(() => { if (!controller.signal.aborted) setCargandoSugerencia(false); });
+    return () => controller.abort();
+  }, [clienteId, currentUser.id, stockCamion]);
+
+  useEffect(() => {
     if (!clienteId || !producto) {
       setPoliticaPrecio(null);
       setPrecioNegociado(0);
@@ -167,6 +194,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
   const descuento = Number(descuentoTexto) || 0;
   const precioVenta = Number(precioNegociado || politicaPrecio?.precio) || 0;
   const precioAutorizado = Number(politicaPrecio?.precio) > 0 && !politicaPrecio?.error;
+  const sugerenciaProducto = producto ? sugerenciasVenta[producto] : undefined;
   const cantidadTiquete = Number(tiquete?.cantidadKg ?? tiquete?.cartones ?? 0);
   const precioUnitarioTiquete = Number(tiquete?.precioUnitario || (Number(tiquete?.subtotal ?? tiquete?.total ?? 0) / (cantidadTiquete || 1)));
   const subtotal = Number(cantidad) * precioVenta;
@@ -342,7 +370,6 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
           {onClose && <button type="button" onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Cerrar registro de venta"><X className="h-5 w-5" /></button>}
         </div>
         {guia && <div className="flex flex-col gap-2 sm:flex-row">
-          {guia.estado === 'EnRuta' && <button type="button" onClick={() => setCierreRutaAbierto(true)} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-extrabold sm:w-auto" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}><Truck className="h-5 w-5" /> Cierre y entrega a Bodega</button>}
         </div>}
         <div className="route-pos-header-layout">
           <div className="route-pos-assignment">
@@ -564,6 +591,18 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
               )}
 
               <div className="route-pos-sale-fields">
+                {producto && clienteId && sugerenciaProducto && <div className="rounded-xl p-3" style={{ background: 'var(--brand-primary-soft)', border: '1px solid var(--border-default)' }}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{sugerenciaUsaIA ? 'Sugerencia de IA basada en pedidos anteriores' : 'Sugerencia basada en el historial'}</p>
+                      <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>{sugerenciaProducto.pedidosAnalizados > 0 ? `${sugerenciaProducto.pedidosAnalizados} pedidos · ` : 'Sin pedidos históricos · '}{sugerenciaProducto.kilos > 0 ? `${sugerenciaProducto.kilos.toFixed(2)} kg` : 'cantidad a definir'} · {fmtCRC(sugerenciaProducto.precio)}/kg</p>
+                      <p className="mt-1 text-[11px]" style={{ color: 'var(--text-secondary)' }}>Precio permitido por Administración: {fmtCRC(sugerenciaProducto.precioMinimo)}–{fmtCRC(sugerenciaProducto.precioMaximo)}/kg</p>
+                    </div>
+                    {sugerenciaProducto.kilos > 0 && <button type="button" onClick={() => { setCantidadTexto(String(Math.min(stockProducto, sugerenciaProducto.kilos))); setPrecioNegociado(Math.min(sugerenciaProducto.precioMaximo, Math.max(sugerenciaProducto.precioMinimo, sugerenciaProducto.precio))); }} disabled={!precioAutorizado || stockProducto <= 0} className="min-h-10 rounded-lg px-3 text-xs font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Aplicar sugerencia</button>}
+                  </div>
+                </div>}
+                {clienteId && cargandoSugerencia && <p role="status" className="rounded-lg px-3 py-2 text-xs" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Analizando pedidos anteriores y precios aprobados…</p>}
+                {clienteId && producto && !cargandoSugerencia && !sugerenciaProducto && <p className="rounded-lg px-3 py-2 text-xs" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>No hay una sugerencia para este producto. El precio se mantiene sujeto al rango aprobado por Administración.</p>}
                 {clienteId && producto && (cargandoPrecio || !precioAutorizado) && (
                   <div role="status" className="route-pos-price-warning rounded-xl px-3 py-2.5 text-sm" style={{ background: 'var(--status-warning-soft)', color: 'var(--status-warning)', border: '1px solid var(--status-warning)' }}>
                     <strong className="block">{cargandoPrecio ? 'Consultando precio autorizado…' : 'Precio autorizado pendiente'}</strong>
@@ -690,7 +729,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
             <div className="route-pos-sidebar max-h-[92dvh] w-full max-w-2xl min-w-0 space-y-4 overflow-y-auto rounded-2xl p-4" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-default)' }}>
             <div className="flex items-start justify-between gap-3">
               <div><h2 className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>Cierre de ruta y entrega a Bodega</h2><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Revise ventas y gastos, registre devoluciones o daños y cuente el efectivo antes de finalizar el día.</p></div>
-              <button type="button" onClick={() => setCierreRutaAbierto(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Cerrar panel de cierre"><X className="h-5 w-5" /></button>
+              <button type="button" onClick={() => initialOpenClosure ? onClose?.() : setCierreRutaAbierto(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Cerrar panel de cierre"><X className="h-5 w-5" /></button>
             </div>
             <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>Tiquetes de ruta del día</p>
@@ -871,7 +910,6 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose }: CajaR
           </div>
         </div>
       )}
-      {registrarGastoAbierto && guiaId && <RegistroGasto currentUser={currentUser} initialGuideId={guiaId} onClose={() => { setRegistrarGastoAbierto(false); void loadGuia(guiaId); }} />}
     </div>
   );
 }

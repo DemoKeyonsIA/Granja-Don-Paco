@@ -9,6 +9,7 @@ import { hashPassword, verifyPassword } from "./src/lib/password";
 import { round2 } from "./src/lib/cobranza";
 import { resolverPrecioParaProducto } from "./src/lib/precios";
 import { registrarRutasLookupPrecios } from "./src/server/routes/precios-lookup";
+import { registrarRutaRecomendacionVenta } from "./src/server/routes/precios-recomendacion";
 import { registrarRutasAdministracionPrecios } from "./src/server/routes/precios-admin";
 import { registrarRutasReportesOperativos } from "./src/server/routes/reportes-operativos";
 import { registrarRutasFinanzas } from "./src/server/routes/finanzas";
@@ -391,6 +392,7 @@ export async function createApp(testMode = false, testDb?: any, serveFrontend = 
   registrarRutasAprobaciones(app, db, { requirePermission, ApiError, httpError, logAudit, recordEventTx });
 
   registrarRutasLookupPrecios(app, db, getPrecioParaProducto, requirePermission);
+  registrarRutaRecomendacionVenta(app, db, ai, getPrecioParaProducto, requirePermission);
 
   registrarRutasReportesOperativos(app, db, requirePermission);
 
