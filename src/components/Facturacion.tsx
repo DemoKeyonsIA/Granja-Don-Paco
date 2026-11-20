@@ -71,6 +71,7 @@ interface RutaDia {
 }
 
 export default function Facturacion({ currentUser }: FacturacionProps) {
+  const esVendedor = (currentUser.roles?.length ? currentUser.roles : [currentUser.role]).includes('Comercial');
   const [inventario, setInventario] = useState<InventarioItem[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [facturas, setFacturas] = useState<Factura[]>([]);
@@ -536,7 +537,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
         { label: 'Documentos' }
       ]} />
 
-      {estadoIntegracion && <div role="status" className="flex items-start gap-3 rounded-xl border p-4 text-sm" style={{ background: 'var(--status-warning-soft)', borderColor: 'var(--status-warning)', color: 'var(--text-primary)' }}>
+      {!esVendedor && estadoIntegracion && <div role="status" className="flex items-start gap-3 rounded-xl border p-4 text-sm" style={{ background: 'var(--status-warning-soft)', borderColor: 'var(--status-warning)', color: 'var(--text-primary)' }}>
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" style={{ color: 'var(--status-warning)' }} />
         <div className="min-w-0"><b>{estadoIntegracion.modo === 'simulacion' ? 'Modo demostración fiscal' : 'Emisión electrónica no configurada'}</b><p className="mt-1">{estadoIntegracion.mensaje}</p>
           {!!estadoIntegracion.limitaciones?.length && <details className="mt-2"><summary className="cursor-pointer font-semibold">Límites de la demostración ({estadoIntegracion.limitaciones.length})</summary><ul className="mt-2 list-disc space-y-1 pl-5">{estadoIntegracion.limitaciones.map((item: string, index: number) => <li key={`${item}-${index}`}>{item}</li>)}</ul></details>}
