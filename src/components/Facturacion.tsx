@@ -612,7 +612,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                         className={cn("flex min-h-11 min-w-0 items-center justify-center rounded-lg px-2 py-2 text-xs font-bold leading-tight transition-colors sm:px-3",
                           tipoDocumento === 'Factura' ? "shadow-sm" : "")}
                         style={tipoDocumento === 'Factura' ? { background: 'var(--bg-card)', color: 'var(--text-link)' } : { color: 'var(--text-muted)' }}>
-                        <FileText className="mr-1 h-3.5 w-3.5 shrink-0" /> <span>Factura electrónica · demo</span>
+                        <FileText className="mr-1 h-3.5 w-3.5 shrink-0" /> <span>Factura electrónica</span>
                       </button>
                       <button type="button" onClick={() => { setTipoDocumento('Tiquete'); setSelectedCliente(''); }}
                         className={cn("flex min-h-11 min-w-0 items-center justify-center rounded-lg px-2 py-2 text-xs font-bold leading-tight transition-colors sm:px-3",
@@ -623,7 +623,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                       <button type="button" onClick={() => setTipoDocumento('Proforma')}
                         className={cn("flex min-h-11 min-w-0 items-center justify-center rounded-lg px-2 py-2 text-xs font-bold leading-tight transition-colors sm:px-3", tipoDocumento === 'Proforma' ? "shadow-sm" : "")}
                         style={tipoDocumento === 'Proforma' ? { background: 'var(--bg-card)', color: 'var(--text-link)' } : { color: 'var(--text-muted)' }}>
-                        <FileText className="mr-1 h-3.5 w-3.5 shrink-0" /> <span>Proforma · no fiscal</span>
+                        <FileText className="mr-1 h-3.5 w-3.5 shrink-0" /> <span>Proforma</span>
                       </button>
                     </div>
                   </div>
@@ -762,11 +762,11 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
               ) : (
                 <div className="p-6 rounded-2xl border text-center" style={{ background: 'color-mix(in srgb, var(--brand-primary) 5%, transparent)', borderColor: 'color-mix(in srgb, var(--brand-primary) 15%, transparent)' }}>
                   <p className="font-bold" style={{ color: 'var(--text-link)' }}>{NOMBRE_NOTA_VENTA} — Consumidor final</p>
-                  <p className="mt-1 text-sm" style={{ color: 'var(--brand-primary)' }}>En producción se emitiría como comprobante fiscal electrónico. En esta demo no se transmite a Hacienda y no sirve para respaldar créditos o gastos tributarios.</p>
+                  <p className="mt-1 text-sm" style={{ color: 'var(--brand-primary)' }}>En este entorno de prueba no se transmite a Hacienda ni sirve para respaldar créditos o gastos tributarios.</p>
                 </div>
               )}
 
-              {tipoDocumento === 'Proforma' ? <div className="rounded-2xl border p-4 text-sm" style={{ background: 'var(--status-warning-soft)', borderColor: 'var(--status-warning)', color: 'var(--text-primary)' }}><b>Cotización comercial · no fiscal</b><p className="mt-1">Guardar la proforma no registra una venta, no recibe pagos y no descuenta existencias. Al concretarla, úsela para iniciar la factura o el tiquete.</p></div> : <div className="p-6 rounded-2xl shadow-sm border" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+              {tipoDocumento === 'Proforma' ? <div className="rounded-2xl border p-4 text-sm" style={{ background: 'var(--status-warning-soft)', borderColor: 'var(--status-warning)', color: 'var(--text-primary)' }}><b>Cotización comercial</b><p className="mt-1">Al guardarla no se registra venta, cobro ni salida de inventario. Puede retomarla después para concretar la venta.</p></div> : <div className="p-6 rounded-2xl shadow-sm border" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                   <CreditCard className="w-5 h-5" style={{ color: 'var(--brand-primary)' }} /> Condición de Pago
                 </h3>
@@ -972,7 +972,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><strong className="font-mono text-sm" style={{ color: 'var(--text-primary)' }}>{p.consecutivo}</strong><span className="rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: p.estado === 'Vigente' ? 'var(--status-success-soft)' : 'var(--brand-primary-soft)', color: 'var(--text-primary)' }}>{p.estado}</span></div><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>{getCliente(p.clienteId)?.nombre || 'Cliente no indicado'} · {new Date(p.fecha).toLocaleDateString('es-CR')} · {(p.detalles || []).length} producto(s)</p></div>
                 <div className="flex items-center justify-between gap-2 sm:justify-end"><strong className="mr-2" style={{ color: 'var(--text-primary)' }}>{formatoCRC(Number(p.total))}</strong><button type="button" onClick={() => imprimirProforma(p)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Printer className="mr-1 inline h-3.5 w-3.5" /> Imprimir</button>{p.estado === 'Vigente' && !p.guiaId && <button type="button" onClick={() => { setTipoDocumento('Factura'); setSelectedCliente(p.clienteId || ''); setDetalles((p.detalles || []).map((d: any) => ({ producto: d.producto, cantidad: Number(d.cantidad), precio_unitario: Number(d.precio_unitario), subtotal: Number(d.subtotal) }))); setDescuento(Number(p.descuento) || 0); setProformaOrigenId(p.id); setIsCreating(true); setWizardStep(1); }} className="min-h-10 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Convertir en venta</button>}{p.estado === 'Vigente' && p.guiaId && <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Convierta desde Mi Ruta</span>}</div>
               </div>)}
-            </div> : <p className="px-4 py-5 text-sm md:px-6" style={{ color: 'var(--text-muted)' }}>Aún no hay proformas. Cree una desde “Nueva Venta” seleccionando “Proforma · no fiscal”.</p>}
+            </div> : <p className="px-4 py-5 text-sm md:px-6" style={{ color: 'var(--text-muted)' }}>Aún no hay proformas. Cree una desde “Nueva venta” seleccionando “Proforma”.</p>}
           </section>
 
           <section data-testid="documentos-ventas">
