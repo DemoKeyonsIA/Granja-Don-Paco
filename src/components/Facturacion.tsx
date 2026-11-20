@@ -126,6 +126,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
   const [facturaSeleccionada, setFacturaSeleccionada] = useState<Factura | null>(null);
   const [correoReenvioFactura, setCorreoReenvioFactura] = useState('');
   const [facturasExpandOf, setFacturasExpandOf] = useState<Set<string>>(() => new Set());
+  const [filtroDocumentosVendedor, setFiltroDocumentosVendedor] = useState<'todos' | 'facturas' | 'proformas'>('todos');
   const [creandoFactura, setCreandoFactura] = useState(false);
 
   const handleImprimirFactura = () => {
@@ -462,6 +463,10 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
     return f.consecutivo.toLowerCase().includes(searchTerm.toLowerCase()) || cliente.toLowerCase().includes(searchTerm.toLowerCase());
   });
   const filteredProformas = proformas.filter(p => `${p.consecutivo} ${getCliente(p.clienteId)?.nombre || ''}`.toLocaleLowerCase('es').includes(searchTerm.toLocaleLowerCase('es')));
+  const documentosVendedor = [
+    ...(filtroDocumentosVendedor !== 'proformas' ? filteredFacturas.map(f => ({ tipo: 'Factura' as const, id: `factura:${f.id}`, fecha: f.fecha, consecutivo: f.consecutivo, cliente: getCliente(f.clienteId)?.nombre || 'Consumidor final', total: Number(f.total || 0), estado: f.estado, data: f })) : []),
+    ...(filtroDocumentosVendedor !== 'facturas' ? filteredProformas.map(p => ({ tipo: 'Proforma' as const, id: `proforma:${p.id}`, fecha: p.fecha || p.fechaCreacion || new Date().toISOString(), consecutivo: p.consecutivo, cliente: getCliente(p.clienteId)?.nombre || 'Consumidor final', total: Number(p.total || 0), estado: p.estado || 'Vigente', data: p })) : []),
+  ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 
   const getEstadoIcon = (estado: string) => {
     switch (estado) {
@@ -549,9 +554,9 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
         <div>
           <h2 className="text-2xl font-bold text-neutral-800 flex items-center">
             <FileText className="w-6 h-6 mr-2" style={{ color: 'var(--brand-primary)' }} />
-            Documentos
+            {esVendedor ? 'Mis documentos' : 'Documentos'}
           </h2>
-          <p className="text-sm text-neutral-500 mt-1">Facturas, documentos electrónicos y rutas por facturar.</p>
+          <p className="text-sm text-neutral-500 mt-1">{esVendedor ? 'Facturas y proformas de tus entregas.' : 'Facturas, documentos electrónicos y rutas por facturar.'}</p>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => {
@@ -921,6 +926,46 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
             </div>
           </div>
 
+          {esVendedor ? <section data-testid="documentos-vendedor" className="p-3 sm:p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div><h3 className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>Historial de documentos</h3><p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>Abra un documento para ver sus acciones.</p></div>
+              <div className="flex gap-1 rounded-xl p-1" role="tablist" aria-label="Filtrar documentos" style={{ background: 'var(--bg-muted)' }}>
+                {([['todos', 'Todos', facturasActivas.length + proformas.length], ['facturas', 'Facturas', facturasActivas.length], ['proformas', 'Proformas', proformas.length]] as const).map(([filtro, etiqueta, cantidad]) => <button key={filtro} type="button" role="tab" aria-selected={filtroDocumentosVendedor === filtro} onClick={() => setFiltroDocumentosVendedor(filtro)} className="min-h-9 rounded-lg px-2.5 text-xs font-bold" style={{ background: filtroDocumentosVendedor === filtro ? 'var(--bg-card)' : 'transparent', color: filtroDocumentosVendedor === filtro ? 'var(--brand-primary)' : 'var(--text-secondary)' }}>{etiqueta}<span className="ml-1 opacity-70">{cantidad}</span></button>)}
+              </div>
+            </div>
+            {documentosVendedor.length > 1 && <div className="mb-2 flex justify-end gap-2">
+              <button type="button" onClick={() => setFacturasExpandOf(new Set(documentosVendedor.map(doc => doc.id)))} className="min-h-8 rounded-lg px-2.5 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Expandir todo</button>
+              <button type="button" onClick={() => setFacturasExpandOf(new Set())} className="min-h-8 rounded-lg px-2.5 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Contraer todo</button>
+            </div>}
+            <div className="space-y-2">
+              {documentosVendedor.map(doc => {
+                const expandido = facturasExpandOf.has(doc.id);
+                const fecha = new Date(doc.fecha);
+                const detalleProforma = doc.tipo === 'Proforma' ? (doc.data.detalles || []).map((detalle: any) => `${detalle.producto} · ${Number(detalle.cantidad || 0).toFixed(2)} kg`).join(' / ') : '';
+                return <article key={doc.id} className="rounded-xl border p-3" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+                  <button type="button" aria-expanded={expandido} onClick={() => setFacturasExpandOf(prev => { const next = new Set(prev); if (next.has(doc.id)) next.delete(doc.id); else next.add(doc.id); return next; })} className="flex min-h-12 w-full items-center justify-between gap-2 text-left">
+                    <span className="min-w-0"><span className="block truncate text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{doc.consecutivo}</span><span className="mt-1 block truncate text-xs" style={{ color: 'var(--text-secondary)' }}>{doc.cliente} · {Number.isNaN(fecha.getTime()) ? 'Fecha sin registrar' : fecha.toLocaleDateString('es-CR')}</span></span>
+                    <span className="shrink-0 text-right"><span className="block text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{formatoCRC(doc.total)}</span><span className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold" style={doc.estado === 'Pagada' || doc.estado === 'Vigente' ? { background: 'var(--status-success-soft)', color: 'var(--status-success)' } : doc.estado === 'Pendiente' ? { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' } : { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>{doc.tipo === 'Proforma' ? 'Proforma' : doc.estado}</span></span>
+                    <span className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--brand-primary)' }}>{expandido ? '−' : '+'}</span>
+                  </button>
+                  {expandido && <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border-default)' }}>
+                    {doc.tipo === 'Factura' ? <>
+                      <p className="mb-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{doc.data.condicion_pago === 'Credito' ? 'Crédito' : 'Contado'}{doc.data.metodo_pago ? ` · ${doc.data.metodo_pago}` : ''}</p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <button type="button" onClick={() => abrirFactura(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><FileText className="mr-1 inline h-4 w-4" />Ver factura</button>
+                        <button type="button" onClick={() => abrirFactura(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Send className="mr-1 inline h-4 w-4" />Reenviar</button>
+                        <button type="button" onClick={() => imprimirFacturaDesdeLista(doc.data)} className="min-h-10 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Printer className="mr-1 inline h-4 w-4" />Imprimir</button>
+                      </div>
+                    </> : <>
+                      <p className="mb-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{detalleProforma || 'Cotización comercial'}</p>
+                      <button type="button" onClick={() => imprimirProforma(doc.data)} className="min-h-10 w-full rounded-lg border px-3 text-xs font-bold sm:w-auto" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Printer className="mr-1 inline h-4 w-4" />Ver o imprimir proforma</button>
+                    </>}
+                  </div>}
+                </article>;
+              })}
+              {documentosVendedor.length === 0 && <p className="rounded-xl p-6 text-center text-sm" style={{ background: 'var(--bg-muted)', color: 'var(--text-muted)' }}>{searchTerm ? 'No encontramos documentos con esa búsqueda.' : 'Aún no hay facturas ni proformas.'}</p>}
+            </div>
+          </section> : <>
           <section className="border-b" style={{ borderColor: 'var(--border-default)' }}>
             <div className="flex items-center justify-between gap-3 border-b px-4 py-3 md:px-6" style={{ borderColor: 'var(--border-default)' }}>
               <div><h3 className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Proformas / cotizaciones ({filteredProformas.length})</h3><p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>No fiscales; no registran ventas, pagos ni movimientos de inventario.</p></div>
@@ -1179,6 +1224,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
               {documentosElectronicos.length === 0 && <p className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>No hay documentos electrónicos. Cree una factura para generar uno.</p>}
             </div>
           </section>
+          </>}
         </div>
       )}
       {facturaSeleccionada && (
