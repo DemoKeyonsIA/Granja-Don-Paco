@@ -552,11 +552,11 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
       {/* Header */}
       <div className={`flex ${esVendedor ? 'items-start justify-between gap-3' : 'flex-col justify-between gap-4 md:flex-row md:items-center'}`}>
         <div className="min-w-0">
-          <h2 className="text-2xl font-bold text-neutral-800 flex items-center">
-            <FileText className="w-6 h-6 mr-2" style={{ color: 'var(--brand-primary)' }} />
-            {esVendedor ? 'Mis documentos' : 'Documentos'}
+          <h2 className={`flex items-center font-bold text-neutral-800 ${esVendedor ? 'text-xl sm:text-2xl' : 'text-2xl'}`}>
+            <FileText className="mr-2 h-6 w-6 shrink-0" style={{ color: 'var(--brand-primary)' }} />
+            {esVendedor ? 'Documentos' : 'Documentos'}
           </h2>
-          <p className="text-sm text-neutral-500 mt-1">{esVendedor ? 'Facturas y proformas de tus entregas.' : 'Facturas, documentos electrónicos y rutas por facturar.'}</p>
+          <p className="text-sm text-neutral-500 mt-1">{esVendedor ? 'Facturas y proformas' : 'Facturas, documentos electrónicos y rutas por facturar.'}</p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <button onClick={() => {
@@ -568,7 +568,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
               ? { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }
               : { background: 'var(--brand-primary)', color: 'var(--text-on-action)' }
             }>
-            {isCreating ? <><X className="h-4 w-4 sm:mr-2" /><span className={esVendedor ? 'hidden sm:inline' : ''}>Cancelar</span></> : <><Plus className="h-4 w-4 sm:mr-1.5" /><span>Nueva venta</span></>}
+            {isCreating ? <><X className="h-4 w-4 sm:mr-2" /><span className={esVendedor ? 'hidden sm:inline' : ''}>Cancelar</span></> : <><Plus className="h-4 w-4 sm:mr-1.5" /><span className={esVendedor ? 'hidden sm:inline' : ''}>Nueva venta</span><span className="sr-only sm:hidden">Nueva venta</span></>}
           </button>
         </div>
       </div>
