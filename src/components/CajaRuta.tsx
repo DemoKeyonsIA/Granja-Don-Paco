@@ -411,11 +411,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
     <div className={`route-pos-root space-y-4 pb-4${guia && !cajaCerrada && clienteId && producto ? ' route-pos-has-action' : ''}`}>
       {/* Cabecera: guía activa */}
       <div className="min-w-0 rounded-2xl p-4 sm:p-5 space-y-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xl font-extrabold" style={{ color: 'var(--text-primary)' }}>Venta en ruta</p>
-            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Registre los kilos entregados y emita el tiquete de esta entrega.</p>
-          </div>
+        <div className="flex items-start justify-end gap-3">
           {onClose && <button type="button" onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Cerrar registro de venta"><X className="h-5 w-5" /></button>}
         </div>
         {guia && <div className="flex flex-col gap-2 sm:flex-row">
@@ -424,7 +420,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
           <div className="route-pos-assignment">
             <div className="min-w-0">
               <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
-                {puedeElegirGuia ? 'Ruta de trabajo' : 'Ruta asignada por Administración'}
+                {puedeElegirGuia ? 'Ruta de trabajo' : 'Ruta asignada'}
               </p>
               <div className="route-pos-title-row">
                 <p className="mt-1 min-w-0 truncate text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>
