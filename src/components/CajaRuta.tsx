@@ -58,6 +58,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const [cuadre, setCuadre] = useState<any>(null);
   const [efectivoContado, setEfectivoContado] = useState('');
   const [pasoVenta, setPasoVenta] = useState(1);
+  const [vistaClientesRuta, setVistaClientesRuta] = useState<'pendientes' | 'completados'>('pendientes');
   const [tipoDocumentoRuta, setTipoDocumentoRuta] = useState<'Factura' | 'Tiquete' | 'Proforma'>('Factura');
   const [proformaOrigenIdRuta, setProformaOrigenIdRuta] = useState<string | null>(null);
 
@@ -258,10 +259,11 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
           setProformaOrigenIdRuta(null);
         }
         setTiquete(data);
-        setVentas(prev => [...prev, { ...data, estado: 'Emitida' }].sort((a: any, b: any) => String(a.tiqueteConsecutivo).localeCompare(String(b.tiqueteConsecutivo))));
+        setVentas(prev => [...prev, { ...data, clienteId, estado: 'Emitida' }].sort((a: any, b: any) => String(a.tiqueteConsecutivo).localeCompare(String(b.tiqueteConsecutivo))));
         toast.success(`Venta registrada · ${tipoDocumentoRuta === 'Factura' ? 'factura electrónica' : 'tiquete electrónico'} ${data.documentoFiscalConsecutivo || ''} en Documentos`);
         resetPos();
         setPasoVenta(1);
+        setVistaClientesRuta('pendientes');
         await loadGuia(guiaId);
       } else { const d = await res.json(); toast.error(`Error: ${d.error}`); }
       }
@@ -353,6 +355,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
     .filter((i: any) => i.unidad === 'kg')
     .reduce((s: number, i: any) => s + Number(i.cantidad || 0), 0);
   const clientesRuta = (guia?.rutaOrden || []).length > 0 ? guia.rutaOrden : (guia?.clientesRuta || []);
+  const clientesCompletadosIds = new Set(ventas.filter((venta: any) => venta.estado === 'Emitida' && venta.clienteId).map((venta: any) => String(venta.clienteId)));
+  const clientesPorEntregar = clientesRuta.filter((cliente: any) => !clientesCompletadosIds.has(String(cliente.clienteId)));
+  const clientesConEntregaCompletada = clientesRuta.filter((cliente: any) => clientesCompletadosIds.has(String(cliente.clienteId)));
+  const clientesVisibles = vistaClientesRuta === 'pendientes' ? clientesPorEntregar : clientesConEntregaCompletada;
   const clienteSeleccionado = clientesRuta.find((c: any) => c.clienteId === clienteId);
   const limiteCreditoCliente = Number(clienteSeleccionado?.limiteCredito ?? clienteSeleccionado?.limite_credito ?? 0);
   const saldoPendienteCliente = Number(clienteSeleccionado?.saldoPendiente ?? clienteSeleccionado?.saldo_pendiente ?? 0);
@@ -410,16 +416,14 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   return (
     <div className={`route-pos-root space-y-4 pb-4${guia && !cajaCerrada && clienteId && producto ? ' route-pos-has-action' : ''}`}>
       {/* Cabecera: guía activa */}
-      <div className="min-w-0 rounded-2xl p-4 sm:p-5 space-y-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-        <div className="flex items-start justify-end gap-3">
+      <div className="min-w-0 rounded-2xl p-3 sm:p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+        {onClose && <div className="mb-2 flex items-start justify-end gap-3">
           {onClose && <button type="button" onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Cerrar registro de venta"><X className="h-5 w-5" /></button>}
-        </div>
-        {guia && <div className="flex flex-col gap-2 sm:flex-row">
         </div>}
         <div className="route-pos-header-layout">
           <div className="route-pos-assignment">
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-xs font-bold tracking-wide" style={{ color: 'var(--text-muted)' }}>
                 {puedeElegirGuia ? 'Ruta de trabajo' : 'Ruta asignada'}
               </p>
               <div className="route-pos-title-row">
@@ -548,23 +552,20 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
       <div className="route-pos-layout">
           {/* Columna izquierda: cliente + producto */}
           <div className="route-pos-main min-w-0 space-y-4">
-            <div className="grid grid-cols-4 gap-2" aria-label="Pasos de la venta">
-              {[['1', 'Cliente'], ['2', 'Producto'], ['3', 'Cantidad y precio'], ['4', 'Cobro y factura']].map(([numero, etiqueta], index) => {
-                const puedeAbrir = index === 0 || (index === 1 && Boolean(clienteId)) || (index === 2 && Boolean(clienteId && producto)) || (index === 3 && Boolean(clienteId && producto && cantidad > 0 && cantidad <= stockProducto && precioAutorizado && !precioFueraDeRango && descuento >= 0 && descuento <= descuentoPermitido));
-                return <button key={numero} type="button" onClick={() => { if (puedeAbrir) setPasoVenta(index + 1); }} disabled={!puedeAbrir} aria-current={pasoVenta === index + 1 ? 'step' : undefined} className="rounded-xl px-1.5 py-3 text-center text-[11px] font-bold disabled:cursor-not-allowed disabled:opacity-50 sm:px-2 sm:text-xs" style={{ background: pasoVenta === index + 1 ? 'var(--brand-primary)' : 'var(--bg-muted)', color: pasoVenta === index + 1 ? 'var(--text-on-action)' : 'var(--text-secondary)' }}><span className="mr-1">{numero}</span>{etiqueta}</button>;
-              })}
-            </div>
             {/* Clientes */}
             {pasoVenta === 1 && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-              <p className="text-base font-extrabold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                <span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>1</span>
-                <UserIcon className="w-4 h-4" /> Elija el cliente
-              </p>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-base font-extrabold" style={{ color: 'var(--text-primary)' }}><UserIcon className="h-4 w-4" /> Elija el cliente</p>
+                <div className="flex w-full gap-1 rounded-xl p-1 sm:w-auto" role="tablist" aria-label="Clientes de la ruta" style={{ background: 'var(--bg-muted)' }}>
+                  <button type="button" role="tab" aria-selected={vistaClientesRuta === 'pendientes'} onClick={() => setVistaClientesRuta('pendientes')} className="min-h-9 flex-1 rounded-lg px-3 text-xs font-bold sm:flex-none" style={{ background: vistaClientesRuta === 'pendientes' ? 'var(--bg-card)' : 'transparent', color: vistaClientesRuta === 'pendientes' ? 'var(--brand-primary)' : 'var(--text-secondary)' }}>Por entregar <span className="ml-1">{clientesPorEntregar.length}</span></button>
+                  <button type="button" role="tab" aria-selected={vistaClientesRuta === 'completados'} onClick={() => setVistaClientesRuta('completados')} className="min-h-9 flex-1 rounded-lg px-3 text-xs font-bold sm:flex-none" style={{ background: vistaClientesRuta === 'completados' ? 'var(--bg-card)' : 'transparent', color: vistaClientesRuta === 'completados' ? 'var(--brand-primary)' : 'var(--text-secondary)' }}>Entrega completada <span className="ml-1">{clientesConEntregaCompletada.length}</span></button>
+                </div>
+              </div>
               <div className="route-pos-choice-grid">
-                {clientesRuta.map((c: any) => (
+                {clientesVisibles.map((c: any) => (
                   <button
                     key={c.clienteId}
-                    onClick={() => setClienteId(c.clienteId)}
+                    onClick={() => { setClienteId(c.clienteId); setPasoVenta(2); }}
                     aria-pressed={clienteId === c.clienteId}
                     className={cn('min-h-14 rounded-xl px-4 py-3 text-left text-base font-bold transition-all border focus-visible:ring-2', clienteId === c.clienteId && 'ring-2')}
                     style={clienteId === c.clienteId
@@ -576,8 +577,8 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                   </button>
                 ))}
               </div>
-              {clientesRuta.length === 0 && (
-                <p className="rounded-xl p-3 text-sm" style={{ background: 'var(--status-warning-soft)', color: 'var(--text-primary)' }}>Esta ruta no tiene clientes asignados. Pida al administrador que los agregue antes de iniciar la venta.</p>
+              {clientesVisibles.length === 0 && (
+                <p className="rounded-xl p-3 text-sm" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>{vistaClientesRuta === 'pendientes' ? (clientesRuta.length === 0 ? 'Esta ruta no tiene clientes asignados. Pida al administrador que los agregue antes de iniciar la venta.' : 'Todos los clientes de esta ruta ya tienen una entrega registrada.') : 'Las entregas completadas aparecerán aquí.'}</p>
               )}
             </div>}
 

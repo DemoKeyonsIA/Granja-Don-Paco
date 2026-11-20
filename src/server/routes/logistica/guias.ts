@@ -120,6 +120,7 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
       const ventas = ventasRutaData.map((v: any) => ({
         ventaId: v.id,
         tiqueteConsecutivo: v.tiqueteConsecutivo,
+        clienteId: v.clienteId || null,
         producto: v.producto,
         cartones: Number(v.cartones),
         cantidadKg: Number(v.cantidadKg ?? v.cartones),
