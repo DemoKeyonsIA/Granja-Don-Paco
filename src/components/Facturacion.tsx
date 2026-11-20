@@ -550,41 +550,38 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
       </div>}
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+      <div className={`flex ${esVendedor ? 'items-start justify-between gap-3' : 'flex-col justify-between gap-4 md:flex-row md:items-center'}`}>
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold text-neutral-800 flex items-center">
             <FileText className="w-6 h-6 mr-2" style={{ color: 'var(--brand-primary)' }} />
             {esVendedor ? 'Mis documentos' : 'Documentos'}
           </h2>
           <p className="text-sm text-neutral-500 mt-1">{esVendedor ? 'Facturas y proformas de tus entregas.' : 'Facturas, documentos electrónicos y rutas por facturar.'}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           <button onClick={() => {
             if (isCreating) { clearDraft(); resetForm(); setWizardStep(1); }
             setIsCreating(!isCreating);
           }}
-            className="flex items-center justify-center px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
+            className={`flex min-h-10 items-center justify-center rounded-xl text-sm font-bold transition-all shadow-sm ${esVendedor ? 'px-3 py-2' : 'px-4 py-2.5'}`}
             style={isCreating
               ? { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }
               : { background: 'var(--brand-primary)', color: 'var(--text-on-action)' }
             }>
-            {isCreating ? <><X className="w-5 h-5 mr-2" /> Cancelar</> : <><Plus className="w-5 h-5 mr-2" /> Nueva Venta</>}
+            {isCreating ? <><X className="h-4 w-4 sm:mr-2" /><span className={esVendedor ? 'hidden sm:inline' : ''}>Cancelar</span></> : <><Plus className="h-4 w-4 sm:mr-1.5" /><span>Nueva venta</span></>}
           </button>
         </div>
       </div>
 
       {/* Draft indicator */}
       {!isCreating && draft && (
-        <div className="border rounded-xl p-4 flex items-center justify-between" style={{ background: 'var(--status-warning-soft)', borderColor: 'var(--status-warning)' }}>
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5" style={{ color: 'var(--status-warning)' }} />
-            <div>
-              <p className="text-sm font-bold text-stone-800">Borrador guardado</p>
-              <p className="text-xs" style={{ color: 'var(--status-warning)' }}>Tienes una factura en progreso sin finalizar.</p>
-            </div>
+        <div role="status" className={`flex items-center justify-between gap-3 ${esVendedor ? 'rounded-lg px-3 py-2' : 'rounded-xl border p-4'}`} style={esVendedor ? { background: 'var(--bg-muted)' } : { background: 'var(--status-warning-soft)', borderColor: 'var(--status-warning)' }}>
+          <div className="flex min-w-0 items-center gap-2">
+            {!esVendedor && <AlertTriangle className="h-5 w-5 shrink-0" style={{ color: 'var(--status-warning)' }} />}
+            <p className="truncate text-sm" style={{ color: 'var(--text-secondary)' }}><strong style={{ color: 'var(--text-primary)' }}>Borrador pendiente</strong>{!esVendedor && <span> · Tienes una factura en progreso sin finalizar.</span>}</p>
           </div>
           <button onClick={() => { setIsCreating(true); setWizardStep(draft.wizardStep || 1); }}
-            className="px-4 py-2 rounded-lg text-xs font-bold transition-colors" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
+            className="min-h-9 shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition-colors" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
             Continuar
           </button>
         </div>
