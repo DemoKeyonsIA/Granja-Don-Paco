@@ -123,6 +123,8 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [facturaSeleccionada, setFacturaSeleccionada] = useState<Factura | null>(null);
+  const [correoReenvioFactura, setCorreoReenvioFactura] = useState('');
+  const [facturasExpandOf, setFacturasExpandOf] = useState<Set<string>>(() => new Set());
   const [creandoFactura, setCreandoFactura] = useState(false);
 
   const handleImprimirFactura = () => {
@@ -493,11 +495,12 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
 
   const handleEnviarCorreoFactura = () => {
     if (!facturaSeleccionada) return;
-    const correo = documentoFiscalFactura?.receptorCorreo || clienteFactura?.email;
+    const correo = correoReenvioFactura.trim();
     if (!correo) {
-      toast.error('Este cliente no tiene un correo registrado. Agrégalo en su perfil para preparar el envío.');
+      toast.error('Escriba el correo al que desea reenviar la factura.');
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return toast.error('Revise el formato del correo electrónico.');
     const asunto = `${documentoFiscalFactura?.tipoDocumento === 'Tiquete' ? 'Nota de venta' : 'Factura'} ${facturaSeleccionada.consecutivo} · Granja Don Paco`;
     const lineas = facturaSeleccionada.detalles?.map(d => `• ${d.producto}: ${Number(d.cantidad).toLocaleString('es-CR')} kg — ${formatoCRC(d.subtotal)}`).join('\n') || '';
     const cuerpo = [
@@ -513,6 +516,17 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
       'Granja Don Paco · Siempre frescos',
     ].filter(Boolean).join('\n');
     window.location.href = `mailto:${encodeURIComponent(correo)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  };
+
+  const abrirFactura = (factura: Factura) => {
+    const documento = documentosElectronicos.find(d => d.facturaId === factura.id && ['Factura', 'Tiquete'].includes(d.tipoDocumento));
+    setCorreoReenvioFactura(documento?.receptorCorreo || getCliente(factura.clienteId)?.email || '');
+    setFacturaSeleccionada(factura);
+  };
+
+  const imprimirFacturaDesdeLista = (factura: Factura) => {
+    abrirFactura(factura);
+    window.setTimeout(handleImprimirFactura, 250);
   };
 
   return (
@@ -938,7 +952,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 <tbody className="divide-y divide-neutral-100">
                   {filteredFacturas.map(f => (
                     <tr key={f.id} className="hover:bg-stone-50 transition-colors">
-                      <td className="px-6 py-4 font-bold text-neutral-900"><button type="button" onClick={() => setFacturaSeleccionada(f)} className="text-left underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2" aria-label={`Abrir factura ${f.consecutivo}`}>{f.consecutivo}</button></td>
+                      <td className="px-6 py-4 font-bold text-neutral-900"><button type="button" onClick={() => abrirFactura(f)} className="text-left underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2" aria-label={`Abrir factura ${f.consecutivo}`}>{f.consecutivo}</button></td>
                       <td className="px-6 py-4 text-neutral-500">{new Date(f.fecha).toLocaleDateString()}</td>
                       <td className="px-6 py-4 font-medium text-neutral-800">{getCliente(f.clienteId)?.nombre || 'Desconocido'}</td>
                       <td className="px-6 py-4">
@@ -960,7 +974,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <button onClick={() => setFacturaSeleccionada(f)}
+                        <button onClick={() => abrirFactura(f)}
                           title={`Ver factura ${f.consecutivo}`}
                           className="p-1.5 hover:bg-stone-50 rounded-lg transition-colors inline-flex items-center space-x-1" style={{ color: 'var(--text-link)' }}>
                           <FileText className="w-4 h-4" /><span className="text-xs font-bold">Ver</span>
@@ -974,23 +988,29 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 </tbody>
               </table>
             </div>
-            <div className="md:hidden divide-y" style={{ borderColor: 'var(--border-default)' }}>
-              {filteredFacturas.map(f => (
-                <button key={f.id} type="button" onClick={() => setFacturaSeleccionada(f)} className="w-full p-4 text-left active:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-[-2px]" style={{ color: 'var(--text-primary)' }}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-bold truncate">{f.consecutivo}</p>
-                      <p className="text-sm mt-1 truncate" style={{ color: 'var(--text-secondary)' }}>{getCliente(f.clienteId)?.nombre || 'Desconocido'}</p>
+            <div className="md:hidden space-y-2 p-3" style={{ borderColor: 'var(--border-default)' }}>
+              {filteredFacturas.length > 1 && <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setFacturasExpandOf(new Set(filteredFacturas.map(f => String(f.id))))} className="min-h-9 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Expandir todo</button>
+                <button type="button" onClick={() => setFacturasExpandOf(new Set())} className="min-h-9 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Contraer todo</button>
+              </div>}
+              {filteredFacturas.map(f => {
+                const expandida = facturasExpandOf.has(String(f.id));
+                return <article key={f.id} className="rounded-xl border p-3" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+                  <button type="button" aria-expanded={expandida} onClick={() => setFacturasExpandOf(prev => { const next = new Set(prev); const id = String(f.id); if (next.has(id)) next.delete(id); else next.add(id); return next; })} className="flex min-h-12 w-full items-center justify-between gap-3 text-left" style={{ color: 'var(--text-primary)' }}>
+                    <span className="min-w-0"><span className="block truncate text-sm font-extrabold">{f.consecutivo}</span><span className="mt-1 block truncate text-xs" style={{ color: 'var(--text-secondary)' }}>{getCliente(f.clienteId)?.nombre || 'Desconocido'} · {new Date(f.fecha).toLocaleDateString('es-CR')}</span></span>
+                    <span className="shrink-0 text-right"><span className="block text-sm font-extrabold">{formatoCRC(Number(f.total))}</span><span className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold" style={f.estado === 'Pagada' ? { background: 'var(--status-success-soft)', color: 'var(--status-success)' } : f.estado === 'Pendiente' ? { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' } : { background: 'var(--status-danger-soft)', color: 'var(--status-danger)' }}>{f.estado}</span></span>
+                    <span className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--brand-primary)' }}>{expandida ? '−' : '+'}</span>
+                  </button>
+                  {expandida && <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border-default)' }}>
+                    <p className="mb-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{f.condicion_pago === 'Credito' ? 'Crédito' : 'Contado'}{f.metodo_pago ? ` · ${f.metodo_pago}` : ''}</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <button type="button" onClick={() => abrirFactura(f)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><FileText className="mr-1 inline h-4 w-4" />Ver factura</button>
+                      <button type="button" onClick={() => abrirFactura(f)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Send className="mr-1 inline h-4 w-4" />Reenviar</button>
+                      <button type="button" onClick={() => imprimirFacturaDesdeLista(f)} className="min-h-10 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Printer className="mr-1 inline h-4 w-4" />Imprimir</button>
                     </div>
-                    <span className="shrink-0 px-2 py-1 rounded-full text-[11px] font-bold" style={f.estado === 'Pagada' ? { background: 'var(--status-success-soft)', color: 'var(--status-success)' } : f.estado === 'Pendiente' ? { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' } : { background: 'var(--status-danger-soft)', color: 'var(--status-danger)' }}>{f.estado}</span>
-                  </div>
-                  <div className="mt-3 flex items-end justify-between gap-3">
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{new Date(f.fecha).toLocaleDateString()} · {f.condicion_pago}</span>
-                    <span className="font-black">₡{f.total.toLocaleString()}</span>
-                  </div>
-                  <span className="mt-2 inline-flex items-center gap-1 text-xs font-bold" style={{ color: 'var(--text-link)' }}><FileText className="w-3.5 h-3.5" /> Ver factura</span>
-                </button>
-              ))}
+                  </div>}
+                </article>;
+              })}
               {filteredFacturas.length === 0 && <p className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>No se encontraron facturas.</p>}
             </div>
           </section>
@@ -1182,10 +1202,14 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
               <div className="invoice-bottom-grid"><div className="invoice-received"><span>RECIBIDO CONFORME</span><i /><small>Nombre y firma del cliente</small></div><div className="invoice-totals"><div><span>Subtotal</span><b>{formatoCRC(facturaSeleccionada.subtotal)}</b></div>{facturaSeleccionada.descuento > 0 && <div><span>Descuento</span><b>− {formatoCRC(facturaSeleccionada.descuento)}</b></div>}{Number(documentoFiscalFactura?.impuestos || 0) > 0 && <div><span>Impuestos</span><b>{formatoCRC(Number(documentoFiscalFactura?.impuestos))}</b></div>}<div className="invoice-grand-total"><span>TOTAL</span><strong>{formatoCRC(facturaSeleccionada.total)}</strong></div>{facturaSeleccionada.saldoPendiente != null && facturaSeleccionada.saldoPendiente > 0 && <div className="invoice-balance"><span>Saldo pendiente</span><b>{formatoCRC(facturaSeleccionada.saldoPendiente)}</b></div>}</div></div>
               <footer className="invoice-paper-footer"><span>Gracias por su compra</span><small>Representación de demostración · Formato de referencia basado en comprobantes electrónicos 4.4</small></footer>
             </div>
+            <label className="no-print mx-4 mb-3 block text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>
+              Correo para reenviar
+              <input type="email" value={correoReenvioFactura} onChange={event => setCorreoReenvioFactura(event.target.value)} placeholder="cliente@correo.com" autoComplete="email" className="mt-1 min-h-11 w-full rounded-lg border px-3 py-2 text-sm font-normal" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} />
+            </label>
             <div className="invoice-actions no-print">
               <button type="button" onClick={() => setFacturaSeleccionada(null)} className="invoice-secondary-action">Cerrar</button>
-              <button type="button" onClick={handleEnviarCorreoFactura} className="invoice-secondary-action" title={clienteFactura?.email ? `Preparar correo para ${clienteFactura.email}` : 'Este cliente no tiene correo registrado'}>
-                <Send className="w-4 h-4" /> Enviar por correo
+              <button type="button" onClick={handleEnviarCorreoFactura} className="invoice-secondary-action" title="Preparar reenvío de la factura">
+                <Send className="w-4 h-4" /> Preparar reenvío
               </button>
               <button type="button" onClick={handleImprimirFactura} className="invoice-primary-action"><Printer className="w-4 h-4" /> Imprimir factura</button>
             </div>
