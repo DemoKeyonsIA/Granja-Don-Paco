@@ -1,6 +1,6 @@
 import React from "react";
 import { lazy, Suspense, useState, useRef, useEffect, useMemo } from "react";
-import { Bot, ChevronRight, ChevronDown, DollarSign, LogOut, Plus, Send, Settings, User as UserIcon, X, Info, Sparkles, Menu, Search, Egg, Sun, Moon, Shield, FileText, ClipboardList, Users, CreditCard, Tag, Mail, Truck } from 'lucide-react';
+import { Bot, ChevronRight, ChevronDown, DollarSign, LogOut, Send, Settings, User as UserIcon, X, Info, Sparkles, Menu, Search, Shield, FileText } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { cn } from './lib/utils';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -59,18 +59,12 @@ export default function App() {
     }
     return null;
   });
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('darkMode') === 'true' ||
-        (!localStorage.getItem('darkMode') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    }
-    return false;
-  });
+  const darkMode = false;
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode);
-    localStorage.setItem('darkMode', String(darkMode));
-  }, [darkMode]);
+    document.documentElement.classList.remove('dark');
+    localStorage.setItem('darkMode', 'false');
+  }, []);
 
   const handleLogout = () => {
     const session = loadSession();
@@ -95,14 +89,14 @@ export default function App() {
         </ErrorBoundary>
       ) : (
         <ErrorBoundary>
-          <AppLayout currentUser={currentUser} onLogout={handleLogout} darkMode={darkMode} onToggleDark={() => setDarkMode(!darkMode)} />
+          <AppLayout currentUser={currentUser} onLogout={handleLogout} />
         </ErrorBoundary>
       )}
     </>
   );
 }
 
-function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentUser: User, onLogout: () => void, darkMode: boolean, onToggleDark: () => void }) {
+function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () => void }) {
   const ROLE_LABELS: Record<string, string> = {
     Admin: 'Administrador',
     Socio: 'Socio',
@@ -158,8 +152,6 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEstelaOpen, setIsEstelaOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isNuevoOpen, setIsNuevoOpen] = useState(false);
-  const nuevoMenuRef = useRef<HTMLDivElement>(null);
   const [isRegistroGastoOpen, setIsRegistroGastoOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const ocultarEstelaEnMovil = currentUser.role === 'Comercial' || activeTab === 'operaciones' || activeTab === 'admin' || activeTab === 'clientes' || activeTab === 'inventario';
@@ -169,20 +161,6 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
   const [messages, setMessages] = useState<{role: 'user' | 'assistant', content: string}[]>([]);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (!isNuevoOpen) return;
-    const cerrarAlHacerClickFuera = (event: PointerEvent) => {
-      if (event.target instanceof Node && !nuevoMenuRef.current?.contains(event.target)) setIsNuevoOpen(false);
-    };
-    const cerrarConEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setIsNuevoOpen(false); };
-    document.addEventListener('pointerdown', cerrarAlHacerClickFuera);
-    document.addEventListener('keydown', cerrarConEscape);
-    return () => {
-      document.removeEventListener('pointerdown', cerrarAlHacerClickFuera);
-      document.removeEventListener('keydown', cerrarConEscape);
-    };
-  }, [isNuevoOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -219,76 +197,6 @@ function AppLayout({ currentUser, onLogout, darkMode, onToggleDark }: { currentU
       setLoading(false);
     }
   };
-
-  /**
- * ¿Este rol no tiene nada que crear en el módulo actual?
- *
- * El fallback de abajo ofrecía "Guía de Despacho" a cualquiera. Para un Socio en
- * Finanzas eso era un botón a un módulo que no ve en su sidebar. En el único
- * caso donde el módulo no aporta ninguna acción (Finanzas para no-Admin) el
- * menú se oculta en vez de mentir.
- */
-const finanzasEsSoloLectura = activeTab === 'finanzas' && !userRoles.includes('Admin');
-
-const nuevoItems = useMemo(() => {
-    // `accion` abre un formulario en vez de navegar: se usa para el gasto, que
-    // dejó de ser un tab y pasó a ser una acción del menú.
-    const items: { label: string; icon: any; tab: string; subTab?: string; accion?: 'gasto' }[] = [];
-    if (currentUser.role === 'Despachador' || currentUser.role === 'Bodeguero') return items;
-    if (activeTab === 'clientes') {
-      if (userRoles.includes('Admin')) items.push({ label: 'Cliente', icon: Users, tab: 'clientes' });
-    } else if (activeTab === 'admin') {
-      items.push({ label: 'Producto Catálogo', icon: Tag, tab: 'admin', subTab: 'productos' });
-      items.push({ label: 'Camión', icon: Truck, tab: 'admin', subTab: 'infraestructura' });
-      items.push({ label: 'Usuario', icon: Users, tab: 'admin', subTab: 'usuarios' });
-    } else if (activeTab === 'finanzas') {
-      // Registrar un gasto es de Admin: el gasto baja utilidad, y un Socio
-      // puede verla pero no moverla. Se lee de `userRoles`, no de `role`: un
-      // usuario con Admin como segundo rol es Admin aunque su rol principal sea
-      // otro, y en el resto de la app ya se le trata así.
-      if (userRoles.includes('Admin')) {
-        items.push({ label: 'Gasto', icon: DollarSign, tab: 'finanzas', accion: 'gasto' });
-      }
-    } else if (activeTab === 'operaciones') {
-      // Las acciones se leen de la fila que el usuario ya ve. Así Remisión y Venta
-      // (Caja) dejan de ser dos puertas fijas que se ofrecían a cualquiera —un
-      // Camionero con "Nuevo > Producción" lo llevaba a un id que no montaba
-      // nada— y pasan a existir donde está el trabajo: Admin y Comercial las ven,
-      // un Bodeguero no.
-      if (esRolMovil(userRoles)) {
-        const tabsMoviles = new Set(subTabsOperacionesMovil(userRoles).map(t => t.id));
-        if (tabsMoviles.has('venta-movil')) items.push({ label: 'Venta', icon: CreditCard, tab: 'operaciones', subTab: 'venta-movil' });
-        if (tabsMoviles.has('facturar-movil')) items.push({ label: 'Factura o nota', icon: FileText, tab: 'operaciones', subTab: 'facturar-movil' });
-        if (tabsMoviles.has('cargas-comercial') || tabsMoviles.has('confirmar')) items.push({ label: 'Mi ruta', icon: Truck, tab: 'operaciones', subTab: tabsMoviles.has('cargas-comercial') ? 'cargas-comercial' : 'confirmar' });
-        if (tabsMoviles.has('carga')) items.push({ label: 'Nueva carga', icon: Truck, tab: 'operaciones', subTab: 'carga' });
-        if (tabsMoviles.has('recibir')) items.push({ label: 'Recibir', icon: Truck, tab: 'operaciones', subTab: 'recibir' });
-      } else {
-        const grupos = new Set(subTabsDe('operaciones', userRoles).map(t => t.id));
-        if (grupos.has('bodega')) items.push({ label: 'Remisión', icon: FileText, tab: 'operaciones', subTab: 'bodega-entradas' });
-        if (grupos.has('despacho')) {
-          items.push({ label: 'Guía de despacho', icon: ClipboardList, tab: 'operaciones', subTab: 'despacho-guias' });
-          items.push({ label: 'Venta (Caja)', icon: CreditCard, tab: 'operaciones', subTab: 'despacho-ventas' });
-        }
-        // El alta de Granja sigue siendo de Admin, que es lo que declara
-        // SUBTABS_GRANJA. Antes vivía en el módulo Granja que ya no existe.
-        if (grupos.has('granja')) items.push({ label: 'Granja', icon: Egg, tab: 'operaciones', subTab: 'granja' });
-      }
-    } else if (activeTab === 'office') {
-      // Office tiene dos espacios y los dos dan de alta: conectar una cuenta de
-      // correo y subir un documento. "Nueva regla" ya no vive acá, está en Admin.
-      if (userRoles.includes('Admin')) {
-        items.push({ label: 'Conectar cuenta', icon: Mail, tab: 'office', subTab: 'correo' });
-        items.push({ label: 'Subir documento', icon: FileText, tab: 'office', subTab: 'documentos' });
-      }
-    }
-    if (items.length === 0 && userRoles.includes('Admin') && !finanzasEsSoloLectura && !esRolMovil(userRoles)) {
-      // Quien está en un módulo sin acciones propias (Logística desapareció en
-      // la Fase 8 y todo el resto declara su "+ Nuevo") recibe el alta de
-      // Cliente, que es la única creación transversal que no depende del módulo.
-      items.push({ label: 'Cliente', icon: Users, tab: 'clientes' });
-    }
-    return items;
-  }, [activeTab, subTab, userRoles, finanzasEsSoloLectura]);
 
   /**
    * Navegación de la búsqueda hacia un grupo del hub de Operaciones.
@@ -377,8 +285,8 @@ const nuevoItems = useMemo(() => {
         navegarAModuloVisible('finanzas', userRoles.includes('Admin') ? 'documentos' : 'resumen');
       }
     } else if (lower.includes('gasto')) {
-      // El gasto ya no es un tab: es la acción "+ Nuevo → Gasto", que es de
-      // Admin. Quien no es Admin aterriza en el primer tab que sí ve, no en
+      // El registro de gastos se ofrece dentro de Finanzas al Administrador.
+      // Quien no es Admin aterriza en el primer tab que sí ve, no en
       // `resumen` a ciegas.
       if (userRoles.includes('Comercial')) setIsRegistroGastoOpen(true);
       else navegarAModuloVisible('finanzas', subTabPorDefecto('finanzas', userRoles));
@@ -605,54 +513,6 @@ const nuevoItems = useMemo(() => {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <button
-              aria-label={darkMode ? 'Activar modo claro' : 'Activar modo oscuro'}
-              onClick={onToggleDark}
-              className="p-2 rounded-lg transition-colors"
-              style={{ color: 'var(--text-secondary)' }}
-              title={darkMode ? 'Modo claro' : 'Modo oscuro'}
-            >
-              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
-            <div className="relative" ref={nuevoMenuRef}>
-              {nuevoItems.length > 0 && (
-                <>
-                  <button aria-expanded={isNuevoOpen} onClick={() => setIsNuevoOpen(!isNuevoOpen)} className="flex items-center space-x-1 px-3 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-[0.97]" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)', boxShadow: '0 2px 10px color-mix(in srgb, var(--brand-primary) 35%, transparent)', border: '1px solid color-mix(in srgb, var(--brand-primary) 60%, transparent)' }}>
-                    <Plus className="w-4 h-4" />
-                    <span className="hidden sm:inline">Nuevo</span>
-                  </button>
-                  {isNuevoOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-56 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in py-1" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-                        {nuevoItems.map((item) => {
-                          const Icon = item.icon;
-                          return (
-                            <button key={item.label} onClick={() => {
-                              if (item.accion === 'gasto') { setIsRegistroGastoOpen(true); }
-                              else {
-                                // La sub-vista viene escrita en el ítem, así que el
-                                // reseteo por cambio de módulo no debe pisarla.
-                                subTabManual.current = true;
-                                setActiveTab(item.tab as any);
-                                if (item.subTab) setSubTab(item.subTab);
-                              }
-                              setIsNuevoOpen(false);
-                            }}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--brand-primary)]" style={{ color: 'var(--text-primary)' }}
-                              onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)'; }}
-                              onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-                              onFocus={e => { e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)'; }}
-                              onBlur={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}>
-                              <Icon className="w-4 h-4" style={{ color: 'var(--brand-primary)' }} />
-                              {item.label}
-                            </button>
-                          );
-                        })}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
             {/* User Dropdown Menu */}
             <div className="relative">
               <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
@@ -897,6 +757,13 @@ const nuevoItems = useMemo(() => {
 
           {activeTab === 'finanzas' && modulos.some(m => m.id === 'finanzas') && (
             <div className="space-y-6" data-testid="finanzas-hub">
+              {userRoles.includes('Admin') && (
+                <div className="flex justify-end">
+                  <button type="button" onClick={() => setIsRegistroGastoOpen(true)} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold shadow-sm" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
+                    <DollarSign className="h-4 w-4" /> Registrar gasto
+                  </button>
+                </div>
+              )}
               {renderFilaTabs(
                 subTabsDe('finanzas', userRoles),
                 'primario',

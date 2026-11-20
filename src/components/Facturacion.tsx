@@ -462,7 +462,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6 animate-in fade-in pb-20">
+    <div className="mx-auto w-full min-w-0 max-w-6xl overflow-x-hidden p-3 pb-36 md:space-y-6 md:p-6 md:pb-20 space-y-5 animate-in fade-in">
       <Breadcrumb items={[
         { label: 'Finanzas' },
         { label: 'Documentos' }
@@ -510,7 +510,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
       )}
 
       {isCreating ? (
-        <div className="p-2 md:p-6 rounded-3xl animate-in slide-in-from-top-4" style={{ background: 'var(--bg-muted)' }}>
+        <div className="min-w-0 overflow-x-hidden rounded-3xl p-3 pb-36 animate-in slide-in-from-top-4 md:p-6 md:pb-6" style={{ background: 'var(--bg-muted)' }}>
           <WizardProgress
             steps={[
               { number: 1, label: 'Productos' },
@@ -522,29 +522,29 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
 
           {/* Step 1: Productos */}
           {wizardStep === 1 && (
-            <div className="space-y-6 animate-in fade-in">
-              <div className="p-4 rounded-2xl shadow-sm border" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-bold text-lg flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+            <div className="min-w-0 space-y-4 animate-in fade-in md:space-y-6">
+              <div className="min-w-0 rounded-2xl border p-3 shadow-sm sm:p-4" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+                <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="flex items-center gap-2 text-base font-bold sm:text-lg" style={{ color: 'var(--text-primary)' }}>
                     <Package className="w-5 h-5" style={{ color: 'var(--brand-primary)' }} /> Seleccionar Productos
                   </h3>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 p-1 rounded-xl" style={{ background: 'var(--bg-muted)' }}>
+                  <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                    <div className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-xl p-1 sm:w-auto sm:gap-2" style={{ background: 'var(--bg-muted)' }}>
                       <button type="button" onClick={() => setTipoDocumento('Factura')}
-                        className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center",
+                        className={cn("flex min-h-11 min-w-0 items-center justify-center rounded-lg px-2 py-2 text-xs font-bold leading-tight transition-colors sm:px-3",
                           tipoDocumento === 'Factura' ? "shadow-sm" : "")}
                         style={tipoDocumento === 'Factura' ? { background: 'var(--bg-card)', color: 'var(--text-link)' } : { color: 'var(--text-muted)' }}>
-                        <FileText className="w-3.5 h-3.5 mr-1" /> Factura
+                        <FileText className="mr-1 h-3.5 w-3.5 shrink-0" /> <span>Factura</span>
                       </button>
                       <button type="button" onClick={() => { setTipoDocumento('Tiquete'); setSelectedCliente(''); }}
-                        className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center",
+                        className={cn("flex min-h-11 min-w-0 items-center justify-center rounded-lg px-2 py-2 text-xs font-bold leading-tight transition-colors sm:px-3",
                           tipoDocumento === 'Tiquete' ? "shadow-sm" : "")}
                         style={tipoDocumento === 'Tiquete' ? { background: 'var(--bg-card)', color: 'var(--text-link)' } : { color: 'var(--text-muted)' }}>
-                        <Ticket className="w-3.5 h-3.5 mr-1" /> {NOMBRE_NOTA_VENTA}
+                        <Ticket className="mr-1 h-3.5 w-3.5 shrink-0" /> <span>{NOMBRE_NOTA_VENTA}</span>
                       </button>
                     </div>
                     <button type="button" onClick={handleScanBarcode}
-                      className="min-h-10 text-xs font-bold flex items-center px-3 py-1.5 rounded-lg transition-colors"
+                      className="flex min-h-11 w-full items-center justify-center rounded-lg px-3 py-2 text-xs font-bold transition-colors sm:w-auto"
                       style={{ color: 'var(--text-secondary)', background: 'var(--bg-muted)' }}>
                       <ScanLine className="w-4 h-4 mr-1.5" /> Escanear (demo)
                     </button>
