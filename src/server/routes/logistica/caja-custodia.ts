@@ -83,6 +83,8 @@ export function registrarRutasCajaCustodia(
   app.post("/api/logistica/caja/venta", requirePermission(['ventas', 'facturacion'], 'create'), async (req, res) => {
     try {
       const { guiaId, clienteId, producto, precioUnitario, descuento, cobro } = req.body;
+      const tipoDocumento = String(req.body?.tipoDocumento || 'Factura');
+      if (!['Factura', 'Tiquete'].includes(tipoDocumento)) return res.status(400).json({ error: 'Seleccione factura electrónica o tiquete electrónico.' });
       const cantidadKg = Number(req.body?.cantidadKg ?? req.body?.cantidad);
       const usuarioId = String(req.usuario?.id || '');
 
@@ -136,7 +138,7 @@ export function registrarRutasCajaCustodia(
       if (!Number.isFinite(descuentoNum) || descuentoNum < 0 || descuentoNum > descuentoMaximo) {
         return res.status(409).json({ error: `Descuento fuera del rango autorizado. Máximo permitido: ₡${Math.floor(descuentoMaximo).toLocaleString('es-CR')}.` });
       }
-      const total = subtotal - descuentoNum;
+      const total = round2(subtotal - descuentoNum);
       if (total < 0) return res.status(400).json({ error: "El descuento no puede superar el subtotal" });
       const metodosPermitidos = ['Efectivo', 'Transferencia', 'SINPE', 'Tarjeta', 'Cheque', 'Plataforma Digital', 'Otro'];
       const pagosEntrada = Array.isArray(req.body?.pagos)
@@ -149,7 +151,7 @@ export function registrarRutasCajaCustodia(
       }
       if (new Set(mediosPago.map((pago: any) => pago.metodo)).size !== mediosPago.length) return res.status(400).json({ error: 'Use una sola línea por medio de pago y ajuste su monto.' });
       const totalRecibido = round2(mediosPago.reduce((suma: number, pago: any) => suma + pago.monto, 0));
-      if (totalRecibido > total + 0.01) return res.status(400).json({ error: 'Los medios recibidos superan el total de la factura.' });
+      if (totalRecibido > total) return res.status(400).json({ error: 'Los medios recibidos no pueden superar el total de la venta.' });
       const saldoCredito = round2(Math.max(0, total - totalRecibido));
       const creditoAutorizado = String(clientePrecio?.condicion_pago || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('credito');
       const limiteCredito = Number(clientePrecio?.limite_credito || 0);
@@ -285,13 +287,14 @@ export function registrarRutasCajaCustodia(
         const emisorNombre = perfilFiscalEmisor?.razonSocial || 'DEMO · Granja Don Paco';
         const emisorCedula = perfilFiscalEmisor?.identificacion || 'DEMO-SIN-IDENTIFICACION';
         const emisorCorreo = perfilFiscalEmisor?.correo || null;
-        const fiscalSeq = await siguienteConsecutivo(tx, 'DOCUMENTO_FISCAL', 'Factura', 'FE', 10);
+        const prefijoFiscal = tipoDocumento === 'Tiquete' ? 'TE' : 'FE';
+        const fiscalSeq = await siguienteConsecutivo(tx, 'DOCUMENTO_FISCAL', tipoDocumento, prefijoFiscal, 10);
         fiscalConsecutivo = fiscalSeq.s;
         fiscalClave = `${emisorCedula.replace(/-/g, '')}${fechaFactura.slice(0, 10).replace(/-/g, '')}${fiscalConsecutivo.replace(/-/g, '')}`;
         const fiscalVigenteEnFecha = Boolean(productoVenta.fiscalVigenteDesde && productoVenta.fiscalVigenteDesde <= fechaFactura.slice(0, 10) && (!productoVenta.fiscalVigenteHasta || productoVenta.fiscalVigenteHasta >= fechaFactura.slice(0, 10)));
         const snapshotFiscal = {
-          versionSnapshot: 1, creadoEn: fechaFactura, modo: 'SIMULACION_NO_FISCAL', moneda: perfilFiscalEmisor?.monedaPresentacion || 'CRC',
-          aviso: 'Instantánea de demostración; no valida datos contra Hacienda, no representa comprobante fiscal y no aplica un cálculo oficial de impuestos.',
+          versionSnapshot: 1, creadoEn: fechaFactura, modo: 'SIMULACION_NO_FISCAL', tipoDocumento, moneda: perfilFiscalEmisor?.monedaPresentacion || 'CRC',
+          aviso: 'Comprobante simulado; no se transmite a Hacienda, no representa un comprobante fiscal válido y no aplica un cálculo oficial de impuestos.',
           emisor: { nombre: emisorNombre, tipoIdentificacion: perfilFiscalEmisor?.identificacionTipo || null, identificacion: emisorCedula, actividadEconomica: perfilFiscalEmisor?.actividadEconomica || null, nombreComercial: perfilFiscalEmisor?.nombreComercial || null, correo: emisorCorreo, telefono: perfilFiscalEmisor?.telefono || null, provincia: perfilFiscalEmisor?.provincia || null, canton: perfilFiscalEmisor?.canton || null, distrito: perfilFiscalEmisor?.distrito || null, barrio: perfilFiscalEmisor?.barrio || null, otrasSenas: perfilFiscalEmisor?.otrasSenas || null, estadoRevisionDeclarada: perfilFiscalEmisor?.estadoRevision || 'Sin perfil', referenciaRevision: perfilFiscalEmisor?.referenciaEvidencia || null },
           receptor: { nombre: clientePrecio?.nombre || null, tipoIdentificacion: clientePrecio?.tipo_documento || null, identificacion: clientePrecio?.documento_id || null, actividadEconomica: clientePrecio?.actividad_economica || null, correo: clientePrecio?.email || null, telefono: clientePrecio?.telefono || null, provincia: clientePrecio?.provincia || null, canton: clientePrecio?.canton || null, distrito: clientePrecio?.distrito || null, direccion: clientePrecio?.direccion || null, clienteId: clientePrecio?.id || null },
           condicionPago: condicionPagoFinal, mediosPago, saldoCredito,
@@ -299,14 +302,14 @@ export function registrarRutasCajaCustodia(
           lineas: [{ descripcionFactura: productoVenta.nombre, cantidad: cantidadKg, unidad: productoVenta.unidad, precioUnitario: precio, subtotal, productoCatalogoId: productoVenta.id, cabysCodigo: productoVenta.cabysCodigo || null, cabysDescripcion: productoVenta.cabysDescripcion || null, tratamientoFiscal: productoVenta.tratamientoFiscal || null, tarifaImpuesto: productoVenta.tarifaImpuesto ?? null, exoneracionReferencia: productoVenta.exoneracionReferencia || null, fiscalVigenteDesde: productoVenta.fiscalVigenteDesde || null, fiscalVigenteHasta: productoVenta.fiscalVigenteHasta || null, estadoRevisionFiscal: productoVenta.fiscalEstado || 'Pendiente', referenciaAprobacion: productoVenta.fiscalAprobacionReferencia || null, revisorDeclarado: productoVenta.fiscalRevisorNombre || null, credencialDeclarada: productoVenta.fiscalRevisorCredencial || null, vigenteEnFechaDocumento: fiscalVigenteEnFecha }],
           alertas: [!perfilFiscalEmisor?.razonSocial || !perfilFiscalEmisor?.identificacion ? 'Perfil del emisor incompleto; se usaron valores de demostración.' : null, perfilFiscalEmisor && perfilFiscalEmisor.estadoRevision !== 'Revisado declarado' ? 'Perfil del emisor pendiente de revisión documental declarada.' : null, !clientePrecio?.documento_id ? 'Cliente sin identificación tributaria registrada.' : null, !clientePrecio?.actividad_economica ? 'Cliente sin actividad económica registrada.' : null, productoVenta.fiscalEstado !== 'Aprobado' ? 'Clasificación fiscal del producto sin aprobación declarada.' : null, !productoVenta.cabysCodigo ? 'Producto sin código CABYS.' : null, !fiscalVigenteEnFecha ? 'Clasificación fiscal sin vigencia para la fecha de venta.' : null].filter(Boolean),
         };
-        const payloadFiscal = JSON.stringify({ facturaId, tipoDocumento: 'Factura', emisorNombre, emisorCedula, emisorCorreo, receptorNombre: clientePrecio?.nombre || null, receptorCedula: clientePrecio?.documento_id || null, receptorCorreo: clientePrecio?.email || null, condicionPago: condicionPagoFinal, mediosPago, saldoCredito, ambiente: 'Pruebas', proveedor: 'Simulado', snapshotFiscal });
+        const payloadFiscal = JSON.stringify({ facturaId, tipoDocumento, emisorNombre, emisorCedula, emisorCorreo, receptorNombre: clientePrecio?.nombre || null, receptorCedula: clientePrecio?.documento_id || null, receptorCorreo: clientePrecio?.email || null, condicionPago: condicionPagoFinal, mediosPago, saldoCredito, ambiente: 'Pruebas', proveedor: 'Simulado', snapshotFiscal });
         await tx.insert(facturas_electronicas).values({
-          id: crypto.randomUUID(), facturaId, tipoDocumento: 'Factura', consecutivo: fiscalConsecutivo,
+          id: crypto.randomUUID(), facturaId, tipoDocumento, consecutivo: fiscalConsecutivo,
           clave: fiscalClave, fechaEmision: fechaFactura, emisorNombre, emisorCedula, emisorCorreo,
           receptorNombre: clientePrecio?.nombre || null, receptorCedula: clientePrecio?.documento_id || null,
           receptorCorreo: clientePrecio?.email || null, subtotal, descuento: descuentoNum, impuestos: 0, total,
           condicionPago: condicionPagoFinal, medioPago: etiquetaMediosPago, estado: 'Borrador',
-          ambiente: 'Pruebas', proveedor: 'Simulado', idempotencyKey: `documento:${facturaId}:Factura`, idempotencyPayload: payloadFiscal, datosFiscalSnapshot: JSON.stringify(snapshotFiscal),
+          ambiente: 'Pruebas', proveedor: 'Simulado', idempotencyKey: `documento:${facturaId}:${tipoDocumento}`, idempotencyPayload: payloadFiscal, datosFiscalSnapshot: JSON.stringify(snapshotFiscal),
         });
 
         // 3. Registrar venta en ruta
@@ -428,6 +431,7 @@ export function registrarRutasCajaCustodia(
         producto,
         facturaId,
         facturaConsecutivo,
+        tipoDocumento,
         documentoFiscalConsecutivo: fiscalConsecutivo,
         cantidadKg,
         unidad: 'kg',

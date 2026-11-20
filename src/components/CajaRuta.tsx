@@ -13,6 +13,7 @@ interface CajaRutaProps {
 }
 
 const fmtCRC = (n: number) => new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 0 }).format(n || 0);
+const roundMoney = (amount: number) => Math.round((amount + Number.EPSILON) * 100) / 100;
 const fmtHora = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' });
 const fmtFechaHora = (iso: string) => new Date(iso).toLocaleString('es-CR', { dateStyle: 'medium', timeStyle: 'short' });
 const METODOS_PAGO_RUTA = ['Efectivo', 'Transferencia', 'SINPE', 'Tarjeta', 'Cheque', 'Plataforma Digital', 'Otro'];
@@ -57,7 +58,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const [cuadre, setCuadre] = useState<any>(null);
   const [efectivoContado, setEfectivoContado] = useState('');
   const [pasoVenta, setPasoVenta] = useState(1);
-  const [tipoDocumentoRuta, setTipoDocumentoRuta] = useState<'Factura' | 'Proforma'>('Factura');
+  const [tipoDocumentoRuta, setTipoDocumentoRuta] = useState<'Factura' | 'Tiquete' | 'Proforma'>('Factura');
   const [proformaOrigenIdRuta, setProformaOrigenIdRuta] = useState<string | null>(null);
 
   const fetchBase = useCallback(async () => {
@@ -225,11 +226,11 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
     if (!precioAutorizado || precioVenta < precioMinimo || precioVenta > precioMaximo) return toast.error(`El precio debe estar entre ${fmtCRC(precioMinimo)} y ${fmtCRC(precioMaximo)} por kg.`);
     if (!cantidad || cantidad <= 0) return toast.error('Indique una cantidad');
     if (cantidad > stockProducto) return toast.error(`Solo quedan ${stockProducto.toFixed(2)} kg de ${producto} en el camión.`);
-    const mediosPago = pagosVenta.map((pago) => ({ metodo: pago.metodo, monto: pago.monto === 'total' ? total : Number(pago.monto) })).filter((pago) => pago.monto > 0);
-    const montoRecibido = mediosPago.reduce((suma, pago) => suma + pago.monto, 0);
-    const saldoCredito = Math.max(0, Math.round((total - montoRecibido) * 100) / 100);
-    if (tipoDocumentoRuta === 'Factura' && montoRecibido > total + 0.01) return toast.error('Los montos recibidos no pueden superar el total de la factura.');
-    if (tipoDocumentoRuta === 'Factura' && saldoCredito > 0 && (!creditoDisponible || saldoCredito > Math.max(0, limiteCreditoCliente - saldoPendienteCliente))) return toast.error(mensajeCreditoNoDisponible);
+    const mediosPago = pagosVenta.map((pago) => ({ metodo: pago.metodo, monto: pago.monto === 'total' ? total : roundMoney(Number(pago.monto)) })).filter((pago) => pago.monto > 0);
+    const montoRecibido = roundMoney(mediosPago.reduce((suma, pago) => suma + pago.monto, 0));
+    const saldoCredito = Math.max(0, roundMoney(total - montoRecibido));
+    if (tipoDocumentoRuta !== 'Proforma' && montoRecibido > roundMoney(total)) return toast.error('Los montos recibidos no pueden superar el total de la venta.');
+    if (tipoDocumentoRuta !== 'Proforma' && saldoCredito > 0 && (!creditoDisponible || saldoCredito > Math.max(0, limiteCreditoCliente - saldoPendienteCliente))) return toast.error(mensajeCreditoNoDisponible);
     setLoading(true);
     try {
       if (tipoDocumentoRuta === 'Proforma') {
@@ -245,7 +246,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
       const res = await fetch('/api/logistica/caja/venta', {
         method: 'POST', headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify({
-          guiaId, clienteId,
+          guiaId, clienteId, tipoDocumento: tipoDocumentoRuta,
           producto, cantidadKg: cantidad, unidad: 'kg', precioUnitario: precioVenta, descuento: descuento || undefined, pagos: mediosPago,
         })
       });
@@ -258,7 +259,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
         }
         setTiquete(data);
         setVentas(prev => [...prev, { ...data, estado: 'Emitida' }].sort((a: any, b: any) => String(a.tiqueteConsecutivo).localeCompare(String(b.tiqueteConsecutivo))));
-        toast.success(`Venta registrada · factura ${data.facturaConsecutivo || 'creada'} en Documentos`);
+        toast.success(`Venta registrada · ${tipoDocumentoRuta === 'Factura' ? 'factura electrónica' : 'tiquete electrónico'} ${data.documentoFiscalConsecutivo || ''} en Documentos`);
         resetPos();
         setPasoVenta(1);
         await loadGuia(guiaId);
@@ -359,15 +360,26 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const montoCreditoDisponible = Math.max(0, limiteCreditoCliente - saldoPendienteCliente);
   const creditoDisponible = condicionCreditoCliente && montoCreditoDisponible > 0;
   const mensajeCreditoNoDisponible = !condicionCreditoCliente ? 'Este cliente no tiene crédito autorizado. El administrador debe aprobar su condición de crédito.' : montoCreditoDisponible <= 0 ? 'El cliente ya alcanzó el límite de crédito autorizado.' : `El saldo supera el crédito disponible de ${fmtCRC(montoCreditoDisponible)}.`;
-  const mediosPagoActuales = pagosVenta.map((pago) => ({ metodo: pago.metodo, monto: pago.monto === 'total' ? total : Math.max(0, Number(pago.monto) || 0) })).filter((pago) => pago.monto > 0);
-  const recibidoActual = mediosPagoActuales.reduce((suma, pago) => suma + pago.monto, 0);
-  const saldoCreditoActual = Math.max(0, Math.round((total - recibidoActual) * 100) / 100);
-  const errorPago = recibidoActual > total + 0.01 ? 'Los montos recibidos superan el total.' : saldoCreditoActual > 0 && (!creditoDisponible || saldoCreditoActual > montoCreditoDisponible) ? mensajeCreditoNoDisponible : '';
+  const mediosPagoActuales = pagosVenta.map((pago) => ({ metodo: pago.metodo, monto: pago.monto === 'total' ? total : roundMoney(Math.max(0, Number(pago.monto) || 0)) })).filter((pago) => pago.monto > 0);
+  const recibidoActual = roundMoney(mediosPagoActuales.reduce((suma, pago) => suma + pago.monto, 0));
+  const saldoCreditoActual = Math.max(0, roundMoney(total - recibidoActual));
+  const errorPago = recibidoActual > roundMoney(total) ? 'Los montos recibidos superan el total.' : saldoCreditoActual > 0 && (!creditoDisponible || saldoCreditoActual > montoCreditoDisponible) ? mensajeCreditoNoDisponible : '';
+  const maximoPagoPorLinea = (index: number) => roundMoney(Math.max(0, total - pagosVenta.reduce((suma, pago, i) => i === index ? suma : suma + (pago.monto === 'total' ? total : Math.max(0, Number(pago.monto) || 0)), 0)));
+  const cambiarMontoPago = (index: number, valor: string) => {
+    const limpio = valor.replace(/[^\d.,]/g, '').replace(',', '.');
+    const [entero = '', ...decimales] = limpio.split('.');
+    const enteroSinCeros = entero.replace(/^0+(?=\d)/, '');
+    const normalizado = decimales.length ? `${enteroSinCeros || '0'}.${decimales.join('').slice(0, 2)}` : enteroSinCeros;
+    const maximo = maximoPagoPorLinea(index);
+    const monto = normalizado === '' || normalizado.endsWith('.') ? null : Number(normalizado);
+    const montoFinal = monto !== null && Number.isFinite(monto) && monto > maximo ? maximo.toFixed(2).replace(/\.00$/, '') : normalizado;
+    setPagosVenta((prev) => prev.map((item, i) => i === index ? { ...item, monto: montoFinal } : item));
+  };
   const camionSeleccionado = camiones.find((cam: any) => cam.id === guia?.camionId);
   const guiaListado = guias.find((g: any) => g.id === guia?.id);
   const nombreRutaAsignada = guiaListado?.rutaNombre || camionSeleccionado?.ruta_defecto || guia?.rutaNombre || 'Ruta asignada';
   const estadoRutaLabel = guia?.estado === 'EnRuta' ? 'En ruta' : guia?.estado === 'Cargada' ? 'Lista para iniciar' : guia?.estadoLogico || guia?.estado;
-  const ventaDeshabilitada = loading || guia?.estado !== 'EnRuta' || cajaCerrada || cargandoPrecio || !clienteId || !producto || !politicaPrecio?.precio || Boolean(politicaPrecio?.error) || precioVenta < precioMinimo || precioVenta > precioMaximo || cantidad <= 0 || cantidad > stockProducto || descuento < 0 || descuento > descuentoPermitido || (tipoDocumentoRuta === 'Factura' && Boolean(errorPago));
+  const ventaDeshabilitada = loading || guia?.estado !== 'EnRuta' || cajaCerrada || cargandoPrecio || !clienteId || !producto || !politicaPrecio?.precio || Boolean(politicaPrecio?.error) || precioVenta < precioMinimo || precioVenta > precioMaximo || cantidad <= 0 || cantidad > stockProducto || descuento < 0 || descuento > descuentoPermitido || (tipoDocumentoRuta !== 'Proforma' && Boolean(errorPago));
   const previsualizarTiquete = (muestraGeneral = false) => {
     if (!muestraGeneral && (!clienteId || !producto || !Number.isFinite(cantidad) || cantidad <= 0)) return toast.error('Seleccione cliente, producto y kilos para ver la muestra.');
     const cantidadMuestra = muestraGeneral ? 10 : cantidad;
@@ -479,10 +491,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
         <>
         <div role="status" aria-live="polite" className="rounded-2xl p-4 flex items-start justify-between gap-4 no-print" style={{ background: 'var(--bg-card)', border: '1px solid var(--status-success)' }}>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{tiquete.demo ? 'Muestra · no registra una venta' : 'Venta registrada · factura en Documentos'}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{tiquete.demo ? 'Muestra · no registra una venta' : 'Venta registrada · documento en Documentos'}</p>
             <p className="text-2xl font-extrabold" style={{ color: 'var(--brand-primary)' }}>{tiquete.demo ? 'VISTA PREVIA' : tiquete.tiqueteConsecutivo}</p>
             <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{tiquete.producto} × {Number(tiquete.cantidadKg ?? tiquete.cartones).toFixed(2)} kg — {fmtCRC(tiquete.total)}</p>
-            {!tiquete.demo && <p className="mt-1 text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Factura {tiquete.facturaConsecutivo} · documento fiscal {tiquete.documentoFiscalConsecutivo} en borrador de pruebas</p>}
+            {!tiquete.demo && <p className="mt-1 text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{tiquete.tipoDocumento === 'Tiquete' ? 'Tiquete electrónico' : 'Factura electrónica'} {tiquete.documentoFiscalConsecutivo} · simulación sin envío a Hacienda</p>}
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{fmtHora(tiquete.fechaHora)} · {tiquete.cobro}</p>
           </div>
           <div className="flex gap-2">
@@ -711,9 +723,9 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
             {pasoVenta === 4 && <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-base font-extrabold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}><span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>4</span>Documento de la venta</p>
               <div className="grid grid-cols-2 gap-2 rounded-xl p-1" style={{ background: 'var(--bg-muted)' }}>
-                {(['Factura', 'Proforma'] as const).map(tipo => <button key={tipo} type="button" onClick={() => setTipoDocumentoRuta(tipo)} className="min-h-11 rounded-lg px-2 text-sm font-bold" style={tipoDocumentoRuta === tipo ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)' } : { background: 'transparent', color: 'var(--text-secondary)' }}>{tipo === 'Factura' ? 'Factura electrónica · demo' : 'Proforma · no fiscal'}</button>)}
+                {(['Factura', 'Tiquete', 'Proforma'] as const).map(tipo => <button key={tipo} type="button" onClick={() => setTipoDocumentoRuta(tipo)} className={`min-h-11 rounded-lg px-2 text-sm font-bold ${tipo === 'Proforma' ? 'col-span-2' : ''}`} style={tipoDocumentoRuta === tipo ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)' } : { background: 'transparent', color: 'var(--text-secondary)' }}>{tipo === 'Factura' ? 'Factura electrónica' : tipo === 'Tiquete' ? 'Tiquete electrónico' : 'Proforma · no fiscal'}</button>)}
               </div>
-              {tipoDocumentoRuta === 'Factura' ? <>
+              {tipoDocumentoRuta !== 'Proforma' ? <>
               <p className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>¿Cuánto recibe ahora?</p>
               <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Agregue los medios usados en este cobro. Si queda un saldo, se registrará como crédito solo si el cliente tiene línea autorizada.</p>
               <div className="space-y-2">
@@ -725,7 +737,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                       </select>
                     </label>
                     <label className="min-w-0 text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>Monto recibido (₡)
-                      <input type="number" min="0" step="0.01" inputMode="decimal" value={pago.monto === 'total' ? total.toFixed(2) : pago.monto} onChange={(e) => setPagosVenta((prev) => prev.map((item, i) => i === index ? { ...item, monto: e.target.value } : item))} className="mt-1 min-h-11 w-full rounded-lg border px-3 text-base font-bold" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }} />
+                      <input type="text" inputMode="decimal" autoComplete="off" value={pago.monto === 'total' ? total.toFixed(2) : pago.monto} onFocus={() => { if (pago.monto === 'total') setPagosVenta((prev) => prev.map((item, i) => i === index ? { ...item, monto: '' } : item)); }} onChange={(e) => cambiarMontoPago(index, e.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3 text-base font-bold tabular-nums" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }} aria-label={`Monto recibido para ${pago.metodo}; máximo ${fmtCRC(maximoPagoPorLinea(index))}`} />
                     </label>
                     <button type="button" onClick={() => setPagosVenta((prev) => prev.filter((_, i) => i !== index))} disabled={pagosVenta.length <= 1} className="mb-0.5 flex h-11 w-11 items-center justify-center rounded-lg border disabled:opacity-40" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Quitar medio de pago"><X className="h-4 w-4" /></button>
                   </div>
@@ -750,16 +762,16 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                 {descuento > 0 && <div className="mt-2 flex justify-between gap-3"><span style={{ color: 'var(--text-muted)' }}>Descuento</span><strong style={{ color: 'var(--text-primary)' }}>− {fmtCRC(descuento)}</strong></div>}
                 <div className="mt-3 flex justify-between gap-3 border-t pt-3 font-extrabold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><span>Total</span><span>{fmtCRC(total)}</span></div>
               </div>
-              {tipoDocumentoRuta === 'Factura' && <div className="rounded-xl p-3" style={{ background: 'var(--brand-primary-soft)' }}><p className="text-sm font-bold" style={{ color: 'var(--brand-primary-dark)' }}>Se emitirá la factura con esta venta</p><p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>El documento fiscal queda en borrador de pruebas. En Documentos se completa el envío y se consulta la respuesta.</p></div>}
+              {tipoDocumentoRuta !== 'Proforma' && <div className="rounded-xl p-3" style={{ background: 'var(--brand-primary-soft)' }}><p className="text-sm font-bold" style={{ color: 'var(--brand-primary-dark)' }}>Se registrará la venta con {tipoDocumentoRuta === 'Factura' ? 'una factura electrónica' : 'un tiquete electrónico'}</p><p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>Simulación: el comprobante queda en borrador y no se envía a Hacienda.</p></div>}
               <button onClick={vender} disabled={ventaDeshabilitada}
                 className="min-h-14 w-full flex items-center justify-center gap-2 rounded-xl px-4 py-4 text-lg font-extrabold disabled:opacity-50"
                 style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
-                <CheckCircle2 className="w-5 h-5" /> {tipoDocumentoRuta === 'Proforma' ? 'Guardar proforma' : precioAutorizado ? `Registrar venta y factura · ${fmtCRC(total)}` : 'Precio no configurado'}
+                <CheckCircle2 className="w-5 h-5" /> {tipoDocumentoRuta === 'Proforma' ? 'Guardar proforma' : precioAutorizado ? `Registrar venta y ${tipoDocumentoRuta === 'Factura' ? 'factura' : 'tiquete'} · ${fmtCRC(total)}` : 'Precio no configurado'}
               </button>
-              {tipoDocumentoRuta === 'Factura' && <button type="button" onClick={() => previsualizarTiquete()} disabled={!clienteId || !producto || cantidad <= 0}
+              {tipoDocumentoRuta !== 'Proforma' && <button type="button" onClick={() => previsualizarTiquete()} disabled={!clienteId || !producto || cantidad <= 0}
                 className="min-h-11 w-full rounded-xl border px-4 py-2 text-sm font-bold disabled:opacity-50"
                 style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}>
-                Vista previa del tiquete · no registra venta
+                Vista previa del tiquete de ruta · no registra venta
               </button>}
             </div>}
             <div className="flex gap-2">
