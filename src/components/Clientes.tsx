@@ -272,8 +272,9 @@ export default function Clientes({ currentUser }: ClientesProps) {
   }, [cartera]);
 
   const scorePromedio = useMemo(() => {
-    if (cartera.length === 0) return 0;
-    return Math.round(cartera.reduce((a, c) => a + c.score, 0) / cartera.length);
+    const scores = cartera.map(c => Number(c.score)).filter(Number.isFinite);
+    if (scores.length === 0) return '—';
+    return Math.round(scores.reduce((a, score) => a + score, 0) / scores.length);
   }, [cartera]);
 
   const mejoresVenta = useMemo(() => cartera.slice().sort((a, b) => b.venta12m - a.venta12m).slice(0, 5), [cartera]);
@@ -405,8 +406,8 @@ export default function Clientes({ currentUser }: ClientesProps) {
             )}
 
             <div className="panel" style={{ marginTop: 8 }}>
-              <div className="panelbar">
-                <div style={{ position: 'relative', flex: 1, maxWidth: 380 }}>
+              <div className={cn('panelbar', esVendedor && 'seller-client-toolbar')}>
+                <div className={cn(esVendedor && 'seller-client-search')} style={{ position: 'relative', flex: 1, maxWidth: 380 }}>
                   <Search className="w-4 h-4" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink3)' }} />
                   <input
                     type="text"
@@ -423,7 +424,25 @@ export default function Clientes({ currentUser }: ClientesProps) {
               ) : filtrarCartera.length === 0 ? (
                 <div className="empty">No se encontraron clientes que coincidan con la búsqueda.</div>
               ) : (
-                <div className="cartera-table-scroll" style={{ overflowX: 'auto' }}>
+                <>
+                {esVendedor && <div className="seller-client-list" aria-label="Clientes asignados">
+                  {filtrarCartera.map(c => {
+                    const iniciales = c.nombre.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+                    return <article key={c.id} className="seller-client-card">
+                      <div className="seller-client-card-identity">
+                        <span className="av-mini" aria-hidden="true">{iniciales}</span>
+                        <div className="seller-client-card-copy">
+                          <h2>{c.nombre}</h2>
+                          <p>{Number(c.pedidos90d || 0)} pedidos en los últimos 90 días</p>
+                        </div>
+                      </div>
+                      <button type="button" className="btn sm brand seller-client-card-action" onClick={() => setDrawerCliente({ id: c.id, nombre: c.nombre } as Cliente)}>
+                        Ver pedidos y sugerencia
+                      </button>
+                    </article>;
+                  })}
+                </div>}
+                <div className="cartera-table-scroll" style={{ overflowX: 'auto', display: esVendedor ? 'none' : undefined }}>
                   <table className="gcrm-table">
                     <thead>
                       {esVendedor
@@ -516,10 +535,11 @@ export default function Clientes({ currentUser }: ClientesProps) {
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
-              <div style={{ padding: '10px 16px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, color: 'var(--ink3)', flexWrap: 'wrap', gap: 8 }}>
+              {!esVendedor && <div style={{ padding: '10px 16px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, color: 'var(--ink3)', flexWrap: 'wrap', gap: 8 }}>
                 <span>Ticket = <b>compra promedio por pedido</b> · Riesgo = score 0–100 (Bajo ≤ 40 · Medio 41–70 · Alto 71+) · score promedio de cartera: <b>{scorePromedio}</b></span>
-              </div>
+              </div>}
             </div>
           </>
         )}
