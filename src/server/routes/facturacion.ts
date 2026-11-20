@@ -55,6 +55,19 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
       res.json({ success: true });
     } catch (error: any) { res.status(500).json({ error: error.message || 'No se pudo vincular la factura.' }); }
   });
+  app.post('/api/proformas/:id/anular', requirePermission(['facturacion', 'ventas'], 'create'), async (req: any, res: any) => {
+    try {
+      const usuarioId = String(req.usuario?.id || '');
+      const roles = Array.isArray(req.usuario?.roles) ? req.usuario.roles : String(req.usuario?.roles || req.usuario?.role || '').split(',');
+      const proforma = await db.query.proformas.findFirst({ where: eq(schema.proformas.id, String(req.params.id)) });
+      if (!proforma) return res.status(404).json({ error: 'Proforma no encontrada.' });
+      if (!roles.includes('Admin') && proforma.vendedorId !== usuarioId) return res.status(403).json({ error: 'No tiene permiso para anular esta proforma.' });
+      if (proforma.estado !== 'Vigente' || proforma.facturaId) return res.status(409).json({ error: 'Solo se pueden anular proformas vigentes que no se hayan convertido en venta.' });
+      await db.update(schema.proformas).set({ estado: 'Anulada' }).where(eq(schema.proformas.id, proforma.id));
+      await logAudit(usuarioId, 'AnularProformaNoFiscal', 'Proforma', proforma.id, { estado: proforma.estado }, { estado: 'Anulada', consecutivo: proforma.consecutivo, motivo: String(req.body?.motivo || 'Anulada desde Mi Ruta').slice(0, 300) });
+      return res.json({ success: true, estado: 'Anulada' });
+    } catch (error: any) { return res.status(500).json({ error: error.message || 'No se pudo anular la proforma.' }); }
+  });
   app.get('/api/configuracion-fiscal/emisor', requirePermission('finanzas_resumen', 'view'), async (_req: any, res: any) => {
     try {
       let configuracion = await db.query.configuracionFiscalEmisor.findFirst({ where: eq(schema.configuracionFiscalEmisor.id, 'emisor') });

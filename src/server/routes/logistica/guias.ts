@@ -48,6 +48,9 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
         db.query.clientes.findMany(),
         db.query.cierres_caja_ruta.findFirst({ where: eq(schema.cierres_caja_ruta.guiaId, guia.id) }).catch(() => null),
       ]);
+      const documentosElectronicosData = facturasData.length
+        ? await db.query.facturas_electronicas.findMany({ where: inArray(schema.facturas_electronicas.facturaId, facturasData.map((factura: any) => factura.id)) }).catch(() => [] as any[])
+        : [];
 
       // Las tablas de ventas y retornos pueden faltar en bases demo/legacy.
       let ventasRutaData: any[] = [];
@@ -117,10 +120,17 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
           ventanaIni: c.ventana_entrega_ini,
           ventanaFin: c.ventana_entrega_fin,
         }));
-      const ventas = ventasRutaData.map((v: any) => ({
+      const ventas = ventasRutaData.map((v: any) => {
+        const factura = facturasData.find((f: any) => f.id === v.facturaId);
+        const documentoFiscal = documentosElectronicosData.find((documento: any) => documento.facturaId === v.facturaId);
+        return ({
         ventaId: v.id,
         tiqueteConsecutivo: v.tiqueteConsecutivo,
         clienteId: v.clienteId || null,
+        facturaConsecutivo: factura?.consecutivo || null,
+        tipoDocumento: documentoFiscal?.tipoDocumento || (v.facturaId ? 'Factura' : 'Tiquete'),
+        documentoFiscalConsecutivo: documentoFiscal?.consecutivo || null,
+        estadoFiscal: documentoFiscal?.estado || null,
         producto: v.producto,
         cartones: Number(v.cartones),
         cantidadKg: Number(v.cantidadKg ?? v.cartones),
@@ -133,7 +143,8 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
         etiquetaId: v.etiquetaId || null,
         lotesAsignados: v.asignacionesEtiquetas || [],
         estado: v.estado,
-      }));
+      });
+      });
 
       return res.json({
         ...guia,

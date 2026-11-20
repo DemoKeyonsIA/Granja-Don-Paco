@@ -190,6 +190,48 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
     window.print();
   };
 
+  const abrirDocumentoVenta = (venta: any, cliente: any) => {
+    setTiquete({
+      ...venta,
+      demo: false,
+      tiqueteConsecutivo: venta.tiqueteConsecutivo || venta.facturaConsecutivo || 'Documento de ruta',
+      fechaHora: venta.fechaHora || new Date().toISOString(),
+      cliente: { nombre: cliente?.nombre || 'Cliente', ...(venta.cliente || {}) },
+      camionNombre: guia?.camionNombre || '',
+      guiaConsecutivo: guia?.consecutivo || '',
+      vendedorNombre: currentUser.name,
+      subtotal: Number(venta.subtotal ?? venta.total ?? 0),
+      total: Number(venta.total || 0),
+      cantidadKg: Number(venta.cantidadKg ?? venta.cartones ?? 0),
+      precioUnitario: Number(venta.precioUnitario || 0),
+      mediosPago: venta.pagos || [],
+      tipoDocumento: venta.tipoDocumento || 'Tiquete',
+    });
+    setPreviewTiqueteAbierto(true);
+  };
+
+  const imprimirProformaRuta = (proforma: any, cliente: any) => {
+    const escapar = (valor: unknown) => String(valor ?? '').replace(/[&<>"']/g, (caracter) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[caracter] as string));
+    const lineas = (proforma.detalles || []).map((linea: any) => `<tr><td>${escapar(linea.producto)}</td><td>${Number(linea.cantidad || 0).toLocaleString('es-CR')} kg</td><td>${fmtCRC(Number(linea.precio_unitario || 0))}</td><td>${fmtCRC(Number(linea.subtotal || 0))}</td></tr>`).join('');
+    const ventana = window.open('', '_blank', 'width=820,height=900');
+    if (!ventana) return toast.error('Permita las ventanas emergentes para ver la proforma.');
+    ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapar(proforma.consecutivo)} · Proforma</title><style>body{font:15px Arial,sans-serif;color:#172033;max-width:760px;margin:32px auto;padding:24px}h1{margin-bottom:4px}.muted{color:#687386}.notice{margin:20px 0;padding:12px;background:#fff6dd;border:1px solid #e6c46b;border-radius:8px;font-weight:bold}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}td:nth-child(n+2),th:nth-child(n+2){text-align:right}.total{text-align:right;font-size:22px;font-weight:bold;margin-top:18px}</style></head><body><h1>Proforma / cotización</h1><p class="muted">${escapar(proforma.consecutivo)} · ${new Date(proforma.fecha).toLocaleString('es-CR')}</p><p>Cliente: <b>${escapar(cliente?.nombre || 'Cliente')}</b></p><div class="notice">Documento comercial no fiscal. No es factura ni comprobante electrónico.</div><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Precio / kg</th><th>Total</th></tr></thead><tbody>${lineas}</tbody></table><p>Subtotal: ${fmtCRC(Number(proforma.subtotal || 0))}</p><p>Descuento: ${fmtCRC(Number(proforma.descuento || 0))}</p><div class="total">Total cotizado: ${fmtCRC(Number(proforma.total || 0))}</div><p class="muted">Esta cotización no registra una venta, cobro ni salida de inventario.</p></body></html>`);
+    ventana.document.close(); ventana.focus(); ventana.print();
+  };
+
+  const anularProformaRuta = async (proforma: any) => {
+    if (!window.confirm(`¿Anular la proforma ${proforma.consecutivo}? La cotización dejará de estar vigente; no se modifica una venta ni el inventario.`)) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/proformas/${proforma.id}/anular`, { method: 'POST', headers: sessionHeaders(currentUser.id, true), body: JSON.stringify({ motivo: 'Anulada desde el resumen de clientes de Mi Ruta' }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo anular la proforma.');
+      toast.success(`${proforma.consecutivo} anulada. Puede preparar una nueva cotización para este cliente.`);
+      await loadGuia(guiaId);
+    } catch (error: any) { toast.error(error.message); }
+    setLoading(false);
+  };
+
   const productosDisponibles = stockCamion.filter((i: any) => Number(i.cantidad) > 0);
   const stockOrigen = Number(stockCamion.find((i: any) => i.producto === producto)?.cantidad || 0);
   const productoActivo = productosDisponibles.find((i: any) => i.producto === producto);
@@ -486,11 +528,6 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
         </div>
       </div>
 
-      {!!proformasRuta.length && <section className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-        <div className="mb-3"><h3 className="font-extrabold" style={{ color: 'var(--text-primary)' }}>Proformas de esta ruta</h3><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Cotizaciones no fiscales; no han descontado kilos del camión.</p></div>
-        <div className="space-y-2">{proformasRuta.map((proforma: any) => <div key={proforma.id} className="flex flex-col gap-2 rounded-xl p-3 sm:flex-row sm:items-center sm:justify-between" style={{ background: 'var(--bg-muted)' }}><div><b style={{ color: 'var(--text-primary)' }}>{proforma.consecutivo}</b><p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{proforma.detalles?.[0]?.producto} · {Number(proforma.detalles?.[0]?.cantidad || 0).toFixed(2)} kg · {fmtCRC(Number(proforma.total))}</p></div>{proforma.estado === 'Vigente' && <button type="button" onClick={() => { const linea = proforma.detalles?.[0]; if (!linea) return; setProformaOrigenIdRuta(proforma.id); setClienteId(proforma.clienteId || ''); setProducto(linea.producto); setCantidadTexto(String(linea.cantidad)); setDescuentoTexto(String(proforma.descuento || 0)); setTipoDocumentoRuta('Factura'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setPasoVenta(3); toast.info('Revise el precio autorizado y la cantidad antes de registrar la venta.'); }} className="min-h-10 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Preparar venta</button>}</div>)}</div>
-      </section>}
-
       {cajaCerrada && (
         <div className="rounded-2xl p-4 flex items-center gap-3" style={{ background: 'var(--status-danger-soft)', color: 'var(--status-danger)', border: '1px solid var(--status-danger)' }}>
           <X className="w-5 h-5 shrink-0" />
@@ -527,8 +564,8 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
         <section className={`route-ticket-print-overlay${previewTiqueteAbierto ? ' route-ticket-preview-screen' : ''}`} aria-label="Tiquete de ruta para impresión">
           {previewTiqueteAbierto && <button type="button" className="route-ticket-preview-close no-print" onClick={() => setPreviewTiqueteAbierto(false)} aria-label="Cerrar vista previa"><X className="h-5 w-5" /></button>}
           <article className="route-ticket-paper">
-            <header className="route-ticket-header"><img src="/granja-don-paco-logo.png" alt="Granja Don Paco" /><div><span>GRANJA DON PACO</span><strong>TIQUETE DE RUTA</strong><small>Control de venta y entrega</small></div><div className="route-ticket-number"><small>{tiquete.demo ? 'MUESTRA' : 'N.º'}</small><strong>{tiquete.demo ? 'VISTA PREVIA' : tiquete.tiqueteConsecutivo}</strong></div></header>
-            <p className="route-ticket-demo">{tiquete.demo ? 'VISTA PREVIA · NO REGISTRA UNA VENTA NI ES UN COMPROBANTE FISCAL' : 'COMPROBANTE INTERNO DE RUTA · NO SUSTITUYE EL TIQUETE ELECTRÓNICO DE HACIENDA'}</p>
+            <header className="route-ticket-header"><img src="/granja-don-paco-logo.png" alt="Granja Don Paco" /><div><span>GRANJA DON PACO</span><strong>{tiquete.demo ? 'VISTA PREVIA DE RUTA' : tiquete.tipoDocumento === 'Factura' ? 'FACTURA ELECTRÓNICA · DEMO' : tiquete.tipoDocumento === 'Tiquete' ? 'TIQUETE ELECTRÓNICO · DEMO' : 'COMPROBANTE DE RUTA'}</strong><small>{tiquete.facturaConsecutivo ? `Factura ${tiquete.facturaConsecutivo}` : 'Control de venta y entrega'}</small></div><div className="route-ticket-number"><small>{tiquete.demo ? 'MUESTRA' : 'N.º DOCUMENTO'}</small><strong>{tiquete.demo ? 'VISTA PREVIA' : tiquete.documentoFiscalConsecutivo || tiquete.tiqueteConsecutivo}</strong></div></header>
+            <p className="route-ticket-demo">{tiquete.demo ? 'VISTA PREVIA · NO REGISTRA UNA VENTA NI ES UN COMPROBANTE FISCAL' : tiquete.tipoDocumento === 'Factura' || tiquete.tipoDocumento === 'Tiquete' ? 'SIMULACIÓN · NO ES UN COMPROBANTE ELECTRÓNICO VÁLIDO NI SE HA ENVIADO A HACIENDA' : 'COMPROBANTE INTERNO DE RUTA · NO SUSTITUYE EL COMPROBANTE ELECTRÓNICO'}</p>
             <div className="route-ticket-meta"><span><b>FECHA Y HORA</b>{fmtFechaHora(tiquete.fechaHora)}</span><span><b>CONDICIÓN</b>{Number(tiquete.saldoCredito || 0) > 0 ? 'Crédito con abono' : 'Contado'}</span><span><b>RECIBIDO</b>{(tiquete.mediosPago || []).map((p: any) => `${p.metodo}: ${fmtCRC(Number(p.monto))}`).join(' · ') || 'Pendiente de pago'}</span></div>
             <section className="route-ticket-customer"><h3>CLIENTE</h3><strong>{tiquete.cliente?.nombre || 'Cliente'}</strong><div>{tiquete.cliente?.documentoId ? `Cédula: ${tiquete.cliente.documentoId}` : ''}{tiquete.cliente?.telefono ? ` · Tel.: ${tiquete.cliente.telefono}` : ''}</div><div>{[tiquete.cliente?.direccion, tiquete.cliente?.distrito, tiquete.cliente?.canton, tiquete.cliente?.provincia].filter(Boolean).join(', ')}</div></section>
             <div className="route-ticket-meta"><span><b>VENDEDOR</b>{tiquete.vendedorNombre || currentUser.name}</span><span><b>CAMIÓN</b>{tiquete.camionNombre || guia?.camionNombre || '—'}{tiquete.placa ? ` · ${tiquete.placa}` : ''}</span><span><b>GUÍA</b>{tiquete.guiaConsecutivo || guia?.consecutivo || '—'}</span></div>
@@ -593,13 +630,27 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                 ))}
                 {vistaClientesRuta === 'completados' && clientesConEntregaCompletada.map((c: any) => {
                   const resumen = resumenEntregaCliente(c.clienteId);
+                  const proformasCliente = proformasRuta.filter((proforma: any) => String(proforma.clienteId) === String(c.clienteId));
                   return <article key={c.clienteId} className="min-w-0 rounded-xl border p-3" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0"><h3 className="truncate text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{c.nombre}</h3><p className="mt-1 text-xs font-semibold" style={{ color: 'var(--status-success)' }}>Entrega completada{resumen.masReciente?.fechaHora ? ` · ${fmtHora(resumen.masReciente.fechaHora)}` : ''}</p></div>
                       {resumen.masReciente?.tiqueteConsecutivo && <span className="shrink-0 rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>{resumen.masReciente.tiqueteConsecutivo}</span>}
                     </div>
                     <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{resumen.productos || 'Productos entregados'} · {resumen.kilos.toFixed(2)} kg</p>
-                    <div className="mt-2 flex items-center justify-between gap-2"><span className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{fmtCRC(resumen.total)}</span><button type="button" onClick={() => iniciarEntregaCliente(c.clienteId)} className="min-h-10 rounded-lg px-3 text-xs font-extrabold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Realizar nueva entrega</button></div>
+                    <div className="mt-1 flex items-center justify-between gap-2"><span className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>Total entregado: {fmtCRC(resumen.total)}</span><span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{resumen.entregas.length} documento(s)</span></div>
+                    <div className="mt-3 space-y-2 border-t pt-3" style={{ borderColor: 'var(--border-default)' }}>
+                      <p className="text-[11px] font-extrabold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Ventas y documentos de esta ruta</p>
+                      {resumen.entregas.slice().sort((a: any, b: any) => String(b.fechaHora || '').localeCompare(String(a.fechaHora || ''))).map((venta: any) => <div key={venta.ventaId} className="rounded-lg p-2.5" style={{ background: 'var(--bg-muted)' }}>
+                        <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-extrabold" style={{ color: 'var(--text-primary)' }}>{venta.tipoDocumento === 'Tiquete' ? 'Tiquete electrónico' : 'Factura electrónica'} · {venta.documentoFiscalConsecutivo || venta.facturaConsecutivo || venta.tiqueteConsecutivo}</p><p className="mt-0.5 text-[11px]" style={{ color: 'var(--text-secondary)' }}>{venta.producto} · {Number(venta.cantidadKg ?? venta.cartones ?? 0).toFixed(2)} kg · {fmtCRC(Number(venta.total || 0))}{venta.fechaHora ? ` · ${fmtHora(venta.fechaHora)}` : ''}</p></div><span className="shrink-0 rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: venta.estado === 'Anulada' ? 'var(--status-danger-soft)' : 'var(--status-success-soft)', color: venta.estado === 'Anulada' ? 'var(--status-danger)' : 'var(--status-success)' }}>{venta.estado}</span></div>
+                        <div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => abrirDocumentoVenta(venta, c)} className="min-h-9 rounded-lg border px-3 text-xs font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Eye className="mr-1 inline h-3.5 w-3.5" />Ver documento</button>{venta.estado === 'Emitida' && <button type="button" onClick={() => { setDevSel(venta); setModoDevolucion(true); setCierreRutaAbierto(false); }} disabled={cajaCerrada} className="min-h-9 rounded-lg px-3 text-xs font-bold disabled:opacity-50" style={{ background: 'var(--status-danger-soft)', color: 'var(--status-danger)' }}>Anular y corregir</button>}</div>
+                        {venta.estado === 'Emitida' && <p className="mt-1 text-[10px]" style={{ color: 'var(--text-muted)' }}>La anulación se completa cuando Bodega confirma la devolución física.</p>}
+                      </div>)}
+                    </div>
+                    {proformasCliente.length > 0 && <div className="mt-3 space-y-2 border-t pt-3" style={{ borderColor: 'var(--border-default)' }}><p className="text-[11px] font-extrabold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Proformas de esta ruta</p>{proformasCliente.map((proforma: any) => {
+                      const linea = (proforma.detalles || [])[0];
+                      return <div key={proforma.id} className="rounded-lg p-2.5" style={{ background: 'var(--bg-muted)' }}><div className="flex items-center justify-between gap-2"><div><p className="text-xs font-extrabold" style={{ color: 'var(--text-primary)' }}>Proforma · {proforma.consecutivo}</p><p className="mt-0.5 text-[11px]" style={{ color: 'var(--text-secondary)' }}>{(proforma.detalles || []).map((detalle: any) => `${detalle.producto} · ${Number(detalle.cantidad || 0).toFixed(2)} kg`).join(' / ')} · {fmtCRC(Number(proforma.total || 0))}</p></div><span className="rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: proforma.estado === 'Vigente' ? 'var(--status-warning-soft)' : 'var(--bg-card)', color: 'var(--text-secondary)' }}>{proforma.estado}</span></div><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => imprimirProformaRuta(proforma, c)} className="min-h-9 rounded-lg border px-3 text-xs font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Eye className="mr-1 inline h-3.5 w-3.5" />Ver proforma</button>{proforma.estado === 'Vigente' && linea && <button type="button" onClick={() => { setProformaOrigenIdRuta(proforma.id); setClienteId(proforma.clienteId || ''); setProducto(linea.producto); setCantidadTexto(String(linea.cantidad)); setDescuentoTexto(String(proforma.descuento || 0)); setTipoDocumentoRuta('Factura'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setPasoVenta(3); }} className="min-h-9 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Preparar venta</button>}{proforma.estado === 'Vigente' && <button type="button" onClick={() => void anularProformaRuta(proforma)} className="min-h-9 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', color: 'var(--status-danger)' }}>Anular proforma</button>}</div></div>;
+                    })}</div>}
+                    <div className="mt-3 flex justify-end"><button type="button" onClick={() => iniciarEntregaCliente(c.clienteId)} className="min-h-10 rounded-lg px-3 text-xs font-extrabold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Realizar nueva entrega</button></div>
                   </article>;
                 })}
               </div>
@@ -930,7 +981,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                   <p className="text-sm font-semibold mt-1" style={{ color: 'var(--text-primary)' }}>{fmtCRC(devSel.total)}</p>
                 </div>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  La devolución devolverá los kilos al camión{devSel.cobro === 'Credito' ? ' y anulará el crédito' : ''}. ¿Desea continuar?
+                  Este paso registra la devolución física de los kilos al camión{devSel.cobro === 'Credito' ? ' y deja pendiente el ajuste del crédito' : ''}. La anulación del documento se completa cuando Bodega confirma la recepción. Confirme solo si el producto regresa físicamente.
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   <button onClick={() => setDevSel(null)} className="rounded-xl px-3 py-3 text-sm font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}>
