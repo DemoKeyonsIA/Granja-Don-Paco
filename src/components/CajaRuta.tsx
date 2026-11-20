@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Truck, PackageOpen, User as UserIcon, RotateCcw, Printer, CheckCircle2, X, AlertTriangle, Minus, Plus, Eye } from 'lucide-react';
+import { Truck, PackageOpen, User as UserIcon, Banknote, CreditCard, ArrowLeftRight, RotateCcw, Printer, CheckCircle2, X, AlertTriangle, Minus, Plus, Eye } from 'lucide-react';
 import { User } from '../types';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
