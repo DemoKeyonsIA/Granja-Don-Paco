@@ -60,6 +60,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const [efectivoContado, setEfectivoContado] = useState('');
   const [pasoVenta, setPasoVenta] = useState(1);
   const [vistaClientesRuta, setVistaClientesRuta] = useState<'pendientes' | 'completados'>('pendientes');
+  const [clientesCompletadosExpandidos, setClientesCompletadosExpandidos] = useState<Set<string>>(() => new Set());
   const [tipoDocumentoRuta, setTipoDocumentoRuta] = useState<'Factura' | 'Tiquete' | 'Proforma'>('Factura');
   const [selectorDocumentoAbierto, setSelectorDocumentoAbierto] = useState(false);
   const [proformaOrigenIdRuta, setProformaOrigenIdRuta] = useState<string | null>(null);
@@ -630,6 +631,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                   <button type="button" role="tab" aria-selected={vistaClientesRuta === 'completados'} onClick={() => setVistaClientesRuta('completados')} className="min-h-9 flex-1 rounded-lg px-3 text-xs font-bold sm:flex-none" style={{ background: vistaClientesRuta === 'completados' ? 'var(--bg-card)' : 'transparent', color: vistaClientesRuta === 'completados' ? 'var(--brand-primary)' : 'var(--text-secondary)' }}>Entrega completada <span className="ml-1">{clientesConEntregaCompletada.length}</span></button>
                 </div>
               </div>
+              {vistaClientesRuta === 'completados' && clientesConEntregaCompletada.length > 1 && <div className="mb-3 flex justify-end gap-2">
+                <button type="button" onClick={() => setClientesCompletadosExpandidos(new Set(clientesConEntregaCompletada.map((c: any) => String(c.clienteId))))} className="min-h-9 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Expandir todo</button>
+                <button type="button" onClick={() => setClientesCompletadosExpandidos(new Set())} className="min-h-9 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Contraer todo</button>
+              </div>}
               <div className="route-pos-choice-grid">
                 {vistaClientesRuta === 'pendientes' && clientesPorEntregar.map((c: any) => (
                   <button
@@ -648,11 +653,13 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                 {vistaClientesRuta === 'completados' && clientesConEntregaCompletada.map((c: any) => {
                   const resumen = resumenEntregaCliente(c.clienteId);
                   const proformasCliente = proformasRuta.filter((proforma: any) => String(proforma.clienteId) === String(c.clienteId));
+                  const clienteExpandido = clientesCompletadosExpandidos.has(String(c.clienteId));
                   return <article key={c.clienteId} className="min-w-0 rounded-xl border p-3" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0"><h3 className="truncate text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{c.nombre}</h3><p className="mt-1 text-xs font-semibold" style={{ color: 'var(--status-success)' }}>Entrega completada{resumen.masReciente?.fechaHora ? ` · ${fmtHora(resumen.masReciente.fechaHora)}` : ''}</p></div>
-                      {resumen.masReciente?.tiqueteConsecutivo && <span className="shrink-0 rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>{resumen.masReciente.tiqueteConsecutivo}</span>}
-                    </div>
+                    <button type="button" aria-expanded={clienteExpandido} onClick={() => setClientesCompletadosExpandidos(prev => { const next = new Set(prev); const id = String(c.clienteId); if (next.has(id)) next.delete(id); else next.add(id); return next; })} className="flex min-h-12 w-full items-center justify-between gap-3 text-left">
+                      <span className="min-w-0"><span className="block truncate text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{c.nombre}</span><span className="mt-1 block text-xs font-semibold" style={{ color: 'var(--status-success)' }}>Entrega completada{resumen.masReciente?.fechaHora ? ` · ${fmtHora(resumen.masReciente.fechaHora)}` : ''} · {resumen.kilos.toFixed(2)} kg · {fmtCRC(resumen.total)}</span></span>
+                      <span className="shrink-0 rounded-lg px-3 py-2 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--brand-primary)' }}>{clienteExpandido ? 'Contraer −' : 'Expandir +'}</span>
+                    </button>
+                    {clienteExpandido && <>
                     <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{resumen.productos || 'Productos entregados'} · {resumen.kilos.toFixed(2)} kg</p>
                     <div className="mt-1 flex items-center justify-between gap-2"><span className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>Total entregado: {fmtCRC(resumen.total)}</span><span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{resumen.entregas.length} documento(s)</span></div>
                     <div className="mt-3 space-y-2 border-t pt-3" style={{ borderColor: 'var(--border-default)' }}>
@@ -668,6 +675,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                       return <div key={proforma.id} className="rounded-lg p-2.5" style={{ background: 'var(--bg-muted)' }}><div className="flex items-center justify-between gap-2"><div><p className="text-xs font-extrabold" style={{ color: 'var(--text-primary)' }}>Proforma · {proforma.consecutivo}</p><p className="mt-0.5 text-[11px]" style={{ color: 'var(--text-secondary)' }}>{(proforma.detalles || []).map((detalle: any) => `${detalle.producto} · ${Number(detalle.cantidad || 0).toFixed(2)} kg`).join(' / ')} · {fmtCRC(Number(proforma.total || 0))}</p></div><span className="rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: proforma.estado === 'Vigente' ? 'var(--status-warning-soft)' : 'var(--bg-card)', color: 'var(--text-secondary)' }}>{proforma.estado}</span></div><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => imprimirProformaRuta(proforma, c)} className="min-h-9 rounded-lg border px-3 text-xs font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Eye className="mr-1 inline h-3.5 w-3.5" />Ver proforma</button>{proforma.estado === 'Vigente' && linea && <button type="button" onClick={() => { setProformaOrigenIdRuta(proforma.id); setClienteId(proforma.clienteId || ''); setProducto(linea.producto); setCantidadTexto(String(linea.cantidad)); setDescuentoTexto(String(proforma.descuento || 0)); setTipoDocumentoRuta('Factura'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setPasoVenta(3); }} className="min-h-9 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Preparar venta</button>}{proforma.estado === 'Vigente' && <button type="button" onClick={() => void anularProformaRuta(proforma)} className="min-h-9 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', color: 'var(--status-danger)' }}>Anular proforma</button>}</div></div>;
                     })}</div>}
                     <div className="mt-3 flex justify-end"><button type="button" onClick={() => iniciarEntregaCliente(c.clienteId)} className="min-h-10 rounded-lg px-3 text-xs font-extrabold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Realizar nueva entrega</button></div>
+                    </>}
                   </article>;
                 })}
               </div>
