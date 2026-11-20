@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Truck, PackageOpen, User as UserIcon, Banknote, CreditCard, ArrowLeftRight, RotateCcw, Printer, CheckCircle2, X, AlertTriangle, Minus, Plus, Eye } from 'lucide-react';
+import { Truck, PackageOpen, User as UserIcon, Banknote, CreditCard, ArrowLeftRight, RotateCcw, Printer, CheckCircle2, X, AlertTriangle, Minus, Plus, Eye, Mail } from 'lucide-react';
 import { User } from '../types';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -44,6 +44,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const [pagosVenta, setPagosVenta] = useState<Array<{ metodo: string; monto: string }>>([{ metodo: 'Efectivo', monto: 'total' }]);
   const [tiquete, setTiquete] = useState<any>(null);
   const [previewTiqueteAbierto, setPreviewTiqueteAbierto] = useState(false);
+  const [documentoCreado, setDocumentoCreado] = useState<any>(null);
   const [cierreRutaAbierto, setCierreRutaAbierto] = useState(initialOpenClosure);
   const [ventas, setVentas] = useState<any[]>([]);
   const [gastosRuta, setGastosRuta] = useState<any[]>([]);
@@ -220,6 +221,18 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
     ventana.document.close(); ventana.focus(); ventana.print();
   };
 
+  const prepararCorreoDocumento = (documento: any) => {
+    const { tipo, data, cliente } = documento || {};
+    const correo = cliente?.email || cliente?.correo || '';
+    if (!correo) return toast.error('Este cliente no tiene correo registrado. Agréguelo en su perfil para preparar el envío.');
+    const consecutivo = tipo === 'Proforma' ? data.consecutivo : (data.documentoFiscalConsecutivo || data.tiqueteConsecutivo || 'Documento de ruta');
+    const nombreTipo = tipo === 'Proforma' ? 'Proforma' : tipo === 'Tiquete' ? 'Tiquete electrónico' : 'Factura electrónica';
+    const productoDoc = data.producto || data.detalles?.map((linea: any) => `${linea.producto} · ${Number(linea.cantidad || 0).toFixed(2)} kg`).join(', ') || '';
+    const asunto = `${nombreTipo} ${consecutivo} · Granja Don Paco`;
+    const cuerpo = [`Hola ${cliente?.nombre || 'cliente'},`, '', `Te compartimos el detalle de ${nombreTipo.toLowerCase()} ${consecutivo}.`, productoDoc, `Total: ${fmtCRC(Number(data.total || 0))}`, '', tipo === 'Proforma' ? 'Esta proforma es una cotización comercial; no registra cobro ni salida de inventario.' : 'Este documento se encuentra en simulación y no ha sido enviado a Hacienda.', '', 'Granja Don Paco'].join('\n');
+    window.location.href = `mailto:${encodeURIComponent(correo)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  };
+
   const anularProformaRuta = async (proforma: any) => {
     if (!window.confirm(`¿Anular la proforma ${proforma.consecutivo}? La cotización dejará de estar vigente; no se modifica una venta ni el inventario.`)) return;
     setLoading(true);
@@ -289,6 +302,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'No se pudo guardar la proforma.');
         toast.success(`${data.consecutivo} guardada como proforma; no se registró venta ni se descontó inventario.`);
+        setDocumentoCreado({ tipo: 'Proforma', data, cliente: clienteSeleccionado });
         resetPos(); setPasoVenta(1); await loadGuia(guiaId);
       } else {
       const res = await fetch('/api/logistica/caja/venta', {
@@ -306,6 +320,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
           setProformaOrigenIdRuta(null);
         }
         setTiquete(data);
+        setDocumentoCreado({ tipo: tipoDocumentoRuta, data, cliente: clienteSeleccionado });
         setVentas(prev => [...prev, { ...data, clienteId, estado: 'Emitida' }].sort((a: any, b: any) => String(a.tiqueteConsecutivo).localeCompare(String(b.tiqueteConsecutivo))));
         toast.success(`Venta registrada · ${tipoDocumentoRuta === 'Factura' ? 'factura electrónica' : 'tiquete electrónico'} ${data.documentoFiscalConsecutivo || ''} en Documentos`);
         resetPos();
@@ -545,26 +560,6 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
       {/* Tiquete emitido */}
       {tiquete && (
         <>
-        {pasoVenta === 1 && <div role="status" aria-live="polite" className="rounded-2xl p-4 flex items-start justify-between gap-4 no-print" style={{ background: 'var(--bg-card)', border: '1px solid var(--status-success)' }}>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{tiquete.demo ? 'Muestra · no registra una venta' : 'Venta registrada · documento en Documentos'}</p>
-            <p className="text-2xl font-extrabold" style={{ color: 'var(--brand-primary)' }}>{tiquete.demo ? 'VISTA PREVIA' : tiquete.tiqueteConsecutivo}</p>
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{tiquete.producto} × {Number(tiquete.cantidadKg ?? tiquete.cartones).toFixed(2)} kg — {fmtCRC(tiquete.total)}</p>
-            {!tiquete.demo && <p className="mt-1 text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{tiquete.tipoDocumento === 'Tiquete' ? 'Tiquete electrónico' : 'Factura electrónica'} {tiquete.documentoFiscalConsecutivo} · simulación sin envío a Hacienda</p>}
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{fmtHora(tiquete.fechaHora)} · {tiquete.cobro}</p>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setPreviewTiqueteAbierto(true)} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }} aria-label="Ver tiquete">
-              <Eye className="w-4 h-4" />
-            </button>
-            <button onClick={imprimirTiquete} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }} aria-label="Imprimir tiquete">
-              <Printer className="w-4 h-4" />
-            </button>
-            <button onClick={() => { setTiquete(null); setPreviewTiqueteAbierto(false); }} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }} aria-label="Cerrar tiquete">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>}
         <section className={`route-ticket-print-overlay${previewTiqueteAbierto ? ' route-ticket-preview-screen' : ''}`} aria-label="Tiquete de ruta para impresión">
           {previewTiqueteAbierto && <button type="button" className="route-ticket-preview-close no-print" onClick={() => setPreviewTiqueteAbierto(false)} aria-label="Cerrar vista previa"><X className="h-5 w-5" /></button>}
           <article className="route-ticket-paper">
@@ -580,6 +575,24 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
           </article>
         </section>
         </>
+      )}
+
+      {documentoCreado && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4" onMouseDown={event => { if (event.target === event.currentTarget) setDocumentoCreado(null); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="documento-creado-titulo" className="w-full max-w-md rounded-2xl p-5 shadow-2xl" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+            <div className="flex items-start justify-between gap-3">
+              <div><p className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--status-success)' }}>{documentoCreado.tipo === 'Proforma' ? 'Proforma guardada' : 'Entrega registrada'}</p><h2 id="documento-creado-titulo" className="mt-1 text-xl font-extrabold" style={{ color: 'var(--text-primary)' }}>{documentoCreado.tipo === 'Proforma' ? documentoCreado.data.consecutivo : documentoCreado.data.documentoFiscalConsecutivo || documentoCreado.data.tiqueteConsecutivo}</h2><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>{documentoCreado.cliente?.nombre || 'Cliente'} · {fmtCRC(Number(documentoCreado.data.total || 0))}</p></div>
+              <button type="button" onClick={() => setDocumentoCreado(null)} aria-label="Cerrar" className="rounded-lg p-2" style={{ color: 'var(--text-secondary)' }}><X className="h-5 w-5" /></button>
+            </div>
+            {documentoCreado.tipo !== 'Proforma' && <p className="mt-3 rounded-lg p-3 text-xs" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}>Comprobante de demostración: no se envió a Hacienda.</p>}
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <button type="button" onClick={() => { if (documentoCreado.tipo === 'Proforma') imprimirProformaRuta(documentoCreado.data, documentoCreado.cliente); else { setDocumentoCreado(null); setPreviewTiqueteAbierto(true); } }} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Eye className="h-4 w-4" />Ver documento</button>
+              <button type="button" onClick={() => { if (documentoCreado.tipo === 'Proforma') imprimirProformaRuta(documentoCreado.data, documentoCreado.cliente); else imprimirTiquete(); }} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Printer className="h-4 w-4" />Imprimir</button>
+              <button type="button" onClick={() => prepararCorreoDocumento(documentoCreado)} disabled={!documentoCreado.cliente?.email && !documentoCreado.cliente?.correo} className="flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50 sm:col-span-2" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Mail className="h-4 w-4" />Preparar correo para el cliente</button>
+            </div>
+            <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>{documentoCreado.cliente?.email || documentoCreado.cliente?.correo ? `Se abrirá el correo dirigido a ${documentoCreado.cliente.email || documentoCreado.cliente.correo}.` : 'El cliente no tiene correo registrado. Agréguelo en su perfil para habilitar el envío.'} El correo se abrirá como borrador en su aplicación de email.</p>
+          </section>
+        </div>
       )}
 
       {!guia ? (
@@ -818,7 +831,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
               </div>
               {saldoCreditoActual > 0 && <p className="rounded-lg p-3 text-sm" role={errorPago ? 'alert' : undefined} style={{ background: errorPago ? 'var(--status-danger-soft)' : 'var(--bg-muted)', color: errorPago ? 'var(--status-danger)' : 'var(--text-secondary)' }}>{errorPago || `Crédito disponible: ${fmtCRC(Math.max(0, limiteCreditoCliente - saldoPendienteCliente))}. La factura quedará con saldo pendiente.`}</p>}
               {pagosVenta.length === 0 && !creditoDisponible && <p className="text-sm font-semibold" style={{ color: 'var(--status-danger)' }}>{mensajeCreditoNoDisponible}</p>}
-              </> : <div className="rounded-xl border p-3 text-sm" style={{ background: 'var(--status-warning-soft)', borderColor: 'var(--status-warning)', color: 'var(--text-primary)' }}><b>Proforma comercial · no fiscal</b><p className="mt-1">Se guardará la cotización para el cliente. No registra cobro, venta ni salida de inventario.</p></div>}
+              </> : null}
               <div className="rounded-xl p-3 text-sm" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
                 <div className="flex justify-between gap-3"><span style={{ color: 'var(--text-muted)' }}>Cliente</span><strong className="text-right" style={{ color: 'var(--text-primary)' }}>{clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || '—'}</strong></div>
                 <div className="mt-2 flex justify-between gap-3"><span style={{ color: 'var(--text-muted)' }}>Producto y cantidad</span><strong className="text-right" style={{ color: 'var(--text-primary)' }}>{producto} · {cantidad.toFixed(2)} kg</strong></div>
