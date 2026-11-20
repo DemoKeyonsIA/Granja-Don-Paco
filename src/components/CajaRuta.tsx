@@ -60,6 +60,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const [pasoVenta, setPasoVenta] = useState(1);
   const [vistaClientesRuta, setVistaClientesRuta] = useState<'pendientes' | 'completados'>('pendientes');
   const [tipoDocumentoRuta, setTipoDocumentoRuta] = useState<'Factura' | 'Tiquete' | 'Proforma'>('Factura');
+  const [selectorDocumentoAbierto, setSelectorDocumentoAbierto] = useState(false);
   const [proformaOrigenIdRuta, setProformaOrigenIdRuta] = useState<string | null>(null);
 
   const fetchBase = useCallback(async () => {
@@ -784,9 +785,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
             {/* Cobro + accion */}
             {pasoVenta === 4 && <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-base font-extrabold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}><span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>4</span>Documento de la venta</p>
-              <div className="grid grid-cols-2 gap-2 rounded-xl p-1" style={{ background: 'var(--bg-muted)' }}>
-                {(['Factura', 'Tiquete', 'Proforma'] as const).map(tipo => <button key={tipo} type="button" onClick={() => setTipoDocumentoRuta(tipo)} className={`min-h-11 rounded-lg px-2 text-sm font-bold ${tipo === 'Proforma' ? 'col-span-2' : ''}`} style={tipoDocumentoRuta === tipo ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)' } : { background: 'transparent', color: 'var(--text-secondary)' }}>{tipo === 'Factura' ? 'Factura electrónica' : tipo === 'Tiquete' ? 'Tiquete electrónico' : 'Proforma · no fiscal'}</button>)}
-              </div>
+              <button type="button" onClick={() => setSelectorDocumentoAbierto(true)} aria-haspopup="dialog" className="flex min-h-12 w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>
+                <span><span className="block text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Tipo de documento</span><span className="mt-0.5 block">{tipoDocumentoRuta === 'Factura' ? 'Factura electrónica' : tipoDocumentoRuta === 'Tiquete' ? 'Tiquete electrónico' : 'Proforma'}</span></span>
+                <span aria-hidden="true" style={{ color: 'var(--text-secondary)' }}>⌄</span>
+              </button>
               {tipoDocumentoRuta !== 'Proforma' ? <>
               <p className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>¿Cuánto recibe ahora?</p>
               <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Agregue los medios usados en este cobro. Si queda un saldo, se registrará como crédito solo si el cliente tiene línea autorizada.</p>
@@ -1033,6 +1035,19 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
               <button onClick={() => void reportarMerma()} disabled={loading || !etiquetaMerma || cantidadMerma <= 0} className="w-full min-h-12 rounded-xl px-4 py-3 text-base font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-danger)', color: '#10122A' }}>GUARDAR MERMA</button>
             </div>
           </div>
+        </div>
+      )}
+      {selectorDocumentoAbierto && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onMouseDown={event => { if (event.target === event.currentTarget) setSelectorDocumentoAbierto(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="tipo-documento-titulo" className="w-full max-w-sm rounded-2xl p-5 shadow-2xl" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div><h2 id="tipo-documento-titulo" className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>Tipo de documento</h2><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Seleccione cómo registrar esta operación.</p></div>
+              <button type="button" onClick={() => setSelectorDocumentoAbierto(false)} aria-label="Cerrar" className="rounded-lg p-2" style={{ color: 'var(--text-secondary)' }}><X className="h-5 w-5" /></button>
+            </div>
+            <div className="space-y-2">
+              {(['Factura', 'Tiquete', 'Proforma'] as const).map(tipo => <button key={tipo} type="button" onClick={() => { setTipoDocumentoRuta(tipo); setSelectorDocumentoAbierto(false); }} className="flex min-h-12 w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-bold" style={tipoDocumentoRuta === tipo ? { background: 'var(--brand-primary-soft)', borderColor: 'var(--brand-primary)', color: 'var(--brand-primary-dark)' } : { background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><span>{tipo === 'Factura' ? 'Factura electrónica' : tipo === 'Tiquete' ? 'Tiquete electrónico' : 'Proforma'}</span>{tipoDocumentoRuta === tipo && <CheckCircle2 className="h-5 w-5" />}</button>)}
+            </div>
+          </section>
         </div>
       )}
     </div>
