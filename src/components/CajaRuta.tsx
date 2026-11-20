@@ -220,6 +220,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
     setClienteId(''); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setTipoDocumentoRuta('Factura'); setProformaOrigenIdRuta(null);
   };
 
+  const iniciarEntregaCliente = (id: string) => {
+    setClienteId(id); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setTipoDocumentoRuta('Factura'); setProformaOrigenIdRuta(null); setPasoVenta(2);
+  };
+
   const vender = async () => {
     if (!guiaId) return toast.error('Seleccione una guía activa');
     if (!producto) return toast.error('Seleccione un producto');
@@ -359,6 +363,17 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const clientesPorEntregar = clientesRuta.filter((cliente: any) => !clientesCompletadosIds.has(String(cliente.clienteId)));
   const clientesConEntregaCompletada = clientesRuta.filter((cliente: any) => clientesCompletadosIds.has(String(cliente.clienteId)));
   const clientesVisibles = vistaClientesRuta === 'pendientes' ? clientesPorEntregar : clientesConEntregaCompletada;
+  const resumenEntregaCliente = (id: string) => {
+    const entregas = ventas.filter((venta: any) => venta.estado === 'Emitida' && String(venta.clienteId) === String(id));
+    const masReciente = entregas.slice().sort((a: any, b: any) => String(b.fechaHora || '').localeCompare(String(a.fechaHora || '')))[0];
+    return {
+      entregas,
+      kilos: entregas.reduce((suma: number, venta: any) => suma + Number(venta.cantidadKg ?? venta.cartones ?? 0), 0),
+      total: entregas.reduce((suma: number, venta: any) => suma + Number(venta.total || 0), 0),
+      productos: [...new Set(entregas.map((venta: any) => String(venta.producto || 'Producto')))].join(', '),
+      masReciente,
+    };
+  };
   const clienteSeleccionado = clientesRuta.find((c: any) => c.clienteId === clienteId);
   const limiteCreditoCliente = Number(clienteSeleccionado?.limiteCredito ?? clienteSeleccionado?.limite_credito ?? 0);
   const saldoPendienteCliente = Number(clienteSeleccionado?.saldoPendiente ?? clienteSeleccionado?.saldo_pendiente ?? 0);
@@ -562,10 +577,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                 </div>
               </div>
               <div className="route-pos-choice-grid">
-                {clientesVisibles.map((c: any) => (
+                {vistaClientesRuta === 'pendientes' && clientesPorEntregar.map((c: any) => (
                   <button
                     key={c.clienteId}
-                    onClick={() => { setClienteId(c.clienteId); setPasoVenta(2); }}
+                    onClick={() => iniciarEntregaCliente(c.clienteId)}
                     aria-pressed={clienteId === c.clienteId}
                     className={cn('min-h-14 rounded-xl px-4 py-3 text-left text-base font-bold transition-all border focus-visible:ring-2', clienteId === c.clienteId && 'ring-2')}
                     style={clienteId === c.clienteId
@@ -576,6 +591,17 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                     {c.ventanaIni && <span className="block text-[10px] font-medium opacity-80">{c.ventanaIni}–{c.ventanaFin}</span>}
                   </button>
                 ))}
+                {vistaClientesRuta === 'completados' && clientesConEntregaCompletada.map((c: any) => {
+                  const resumen = resumenEntregaCliente(c.clienteId);
+                  return <article key={c.clienteId} className="min-w-0 rounded-xl border p-3" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0"><h3 className="truncate text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{c.nombre}</h3><p className="mt-1 text-xs font-semibold" style={{ color: 'var(--status-success)' }}>Entrega completada{resumen.masReciente?.fechaHora ? ` · ${fmtHora(resumen.masReciente.fechaHora)}` : ''}</p></div>
+                      {resumen.masReciente?.tiqueteConsecutivo && <span className="shrink-0 rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>{resumen.masReciente.tiqueteConsecutivo}</span>}
+                    </div>
+                    <p className="mt-2 text-xs" style={{ color: 'var(--text-secondary)' }}>{resumen.productos || 'Productos entregados'} · {resumen.kilos.toFixed(2)} kg</p>
+                    <div className="mt-2 flex items-center justify-between gap-2"><span className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{fmtCRC(resumen.total)}</span><button type="button" onClick={() => iniciarEntregaCliente(c.clienteId)} className="min-h-10 rounded-lg px-3 text-xs font-extrabold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Realizar nueva entrega</button></div>
+                  </article>;
+                })}
               </div>
               {clientesVisibles.length === 0 && (
                 <p className="rounded-xl p-3 text-sm" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>{vistaClientesRuta === 'pendientes' ? (clientesRuta.length === 0 ? 'Esta ruta no tiene clientes asignados. Pida al administrador que los agregue antes de iniciar la venta.' : 'Todos los clientes de esta ruta ya tienen una entrega registrada.') : 'Las entregas completadas aparecerán aquí.'}</p>
