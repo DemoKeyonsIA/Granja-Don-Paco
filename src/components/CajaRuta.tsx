@@ -15,6 +15,7 @@ interface CajaRutaProps {
 const fmtCRC = (n: number) => new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 0 }).format(n || 0);
 const fmtHora = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' });
 const fmtFechaHora = (iso: string) => new Date(iso).toLocaleString('es-CR', { dateStyle: 'medium', timeStyle: 'short' });
+const METODOS_PAGO_RUTA = ['Efectivo', 'Transferencia', 'SINPE', 'Tarjeta', 'Cheque', 'Plataforma Digital', 'Otro'];
 
 type SugerenciaVenta = { producto: string; kilos: number; precio: number; pedidosAnalizados: number; precioMinimo: number; precioMaximo: number; metodo: string };
 
@@ -30,7 +31,6 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const [preciosProductos, setPreciosProductos] = useState<Record<string, any>>({});
   const [sugerenciasVenta, setSugerenciasVenta] = useState<Record<string, SugerenciaVenta>>({});
   const [cargandoSugerencia, setCargandoSugerencia] = useState(false);
-  const [sugerenciaUsaIA, setSugerenciaUsaIA] = useState(false);
   const [precioNegociado, setPrecioNegociado] = useState(0);
   const [cargandoPrecio, setCargandoPrecio] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -40,12 +40,13 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const [producto, setProducto] = useState<string>('');
   const [cantidadTexto, setCantidadTexto] = useState('1');
   const [descuentoTexto, setDescuentoTexto] = useState('0');
-  const [cobro, setCobro] = useState<'Efectivo' | 'Credito' | 'Transferencia'>('Efectivo');
+  const [pagosVenta, setPagosVenta] = useState<Array<{ metodo: string; monto: string }>>([{ metodo: 'Efectivo', monto: 'total' }]);
   const [tiquete, setTiquete] = useState<any>(null);
   const [previewTiqueteAbierto, setPreviewTiqueteAbierto] = useState(false);
   const [cierreRutaAbierto, setCierreRutaAbierto] = useState(initialOpenClosure);
   const [ventas, setVentas] = useState<any[]>([]);
   const [gastosRuta, setGastosRuta] = useState<any[]>([]);
+  const [proformasRuta, setProformasRuta] = useState<any[]>([]);
   const [modoDevolucion, setModoDevolucion] = useState(false);
   const [devSel, setDevSel] = useState<any>(null);
   const [modoMerma, setModoMerma] = useState(false);
@@ -56,6 +57,8 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const [cuadre, setCuadre] = useState<any>(null);
   const [efectivoContado, setEfectivoContado] = useState('');
   const [pasoVenta, setPasoVenta] = useState(1);
+  const [tipoDocumentoRuta, setTipoDocumentoRuta] = useState<'Factura' | 'Proforma'>('Factura');
+  const [proformaOrigenIdRuta, setProformaOrigenIdRuta] = useState<string | null>(null);
 
   const fetchBase = useCallback(async () => {
     try {
@@ -96,6 +99,9 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
         setStockCamion((await invRes.json()).filter((i: any) => i.ubicacion === det.camionNombre));
         const gastosRes = await fetch(`/api/gastos/guia/${id}`, { headers: sessionHeaders(currentUser.id) }).catch(() => null);
         setGastosRuta(gastosRes?.ok ? await gastosRes.json() : []);
+        const proformasRes = await fetch('/api/proformas', { headers: sessionHeaders(currentUser.id) }).catch(() => null);
+        const proformasData = proformasRes?.ok ? await proformasRes.json() : [];
+        setProformasRuta(Array.isArray(proformasData) ? proformasData.filter((proforma: any) => proforma.guiaId === id) : []);
       }
     } catch { toast.error('Error al cargar la guía.'); }
   }, [currentUser.id]);
@@ -136,7 +142,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   }, [clienteId, currentUser.id, stockCamion]);
 
   useEffect(() => {
-    if (!clienteId) { setSugerenciasVenta({}); setSugerenciaUsaIA(false); setCargandoSugerencia(false); return; }
+    if (!clienteId) { setSugerenciasVenta({}); setCargandoSugerencia(false); return; }
     const productos = Array.from(new Set(stockCamion.filter((item: any) => Number(item.cantidad) > 0).map((item: any) => String(item.producto))));
     if (productos.length === 0) { setSugerenciasVenta({}); return; }
     const controller = new AbortController();
@@ -152,7 +158,6 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
       const mapa: Record<string, SugerenciaVenta> = {};
       for (const item of data.recomendaciones || []) mapa[item.producto] = item;
       setSugerenciasVenta(mapa);
-      setSugerenciaUsaIA(Boolean(data.usoIA));
     }).catch(error => { if (error.name !== 'AbortError') setSugerenciasVenta({}); })
       .finally(() => { if (!controller.signal.aborted) setCargandoSugerencia(false); });
     return () => controller.abort();
@@ -210,7 +215,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const unidadRuta = 'kg';
 
   const resetPos = () => {
-    setClienteId(''); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0'); setCobro('Efectivo');
+    setClienteId(''); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setTipoDocumentoRuta('Factura'); setProformaOrigenIdRuta(null);
   };
 
   const vender = async () => {
@@ -220,17 +225,37 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
     if (!precioAutorizado || precioVenta < precioMinimo || precioVenta > precioMaximo) return toast.error(`El precio debe estar entre ${fmtCRC(precioMinimo)} y ${fmtCRC(precioMaximo)} por kg.`);
     if (!cantidad || cantidad <= 0) return toast.error('Indique una cantidad');
     if (cantidad > stockProducto) return toast.error(`Solo quedan ${stockProducto.toFixed(2)} kg de ${producto} en el camión.`);
+    const mediosPago = pagosVenta.map((pago) => ({ metodo: pago.metodo, monto: pago.monto === 'total' ? total : Number(pago.monto) })).filter((pago) => pago.monto > 0);
+    const montoRecibido = mediosPago.reduce((suma, pago) => suma + pago.monto, 0);
+    const saldoCredito = Math.max(0, Math.round((total - montoRecibido) * 100) / 100);
+    if (tipoDocumentoRuta === 'Factura' && montoRecibido > total + 0.01) return toast.error('Los montos recibidos no pueden superar el total de la factura.');
+    if (tipoDocumentoRuta === 'Factura' && saldoCredito > 0 && (!creditoDisponible || saldoCredito > Math.max(0, limiteCreditoCliente - saldoPendienteCliente))) return toast.error(mensajeCreditoNoDisponible);
     setLoading(true);
     try {
+      if (tipoDocumentoRuta === 'Proforma') {
+        const res = await fetch('/api/proformas', {
+          method: 'POST', headers: sessionHeaders(currentUser.id, true),
+          body: JSON.stringify({ clienteId, guiaId, detalles: [{ producto, cantidad, precio_unitario: precioVenta, subtotal: cantidad * precioVenta }], descuento }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'No se pudo guardar la proforma.');
+        toast.success(`${data.consecutivo} guardada como proforma; no se registró venta ni se descontó inventario.`);
+        resetPos(); setPasoVenta(1); await loadGuia(guiaId);
+      } else {
       const res = await fetch('/api/logistica/caja/venta', {
         method: 'POST', headers: sessionHeaders(currentUser.id, true),
         body: JSON.stringify({
           guiaId, clienteId,
-          producto, cantidadKg: cantidad, unidad: 'kg', precioUnitario: precioVenta, descuento: descuento || undefined, cobro
+          producto, cantidadKg: cantidad, unidad: 'kg', precioUnitario: precioVenta, descuento: descuento || undefined, pagos: mediosPago,
         })
       });
       if (res.ok) {
         const data = await res.json();
+        if (proformaOrigenIdRuta && data.facturaId) {
+          const conversion = await fetch(`/api/proformas/${proformaOrigenIdRuta}/convertir`, { method: 'POST', headers: sessionHeaders(currentUser.id, true), body: JSON.stringify({ facturaId: data.facturaId }) });
+          if (!conversion.ok) toast.error('La venta quedó registrada, pero la proforma no se pudo marcar como convertida.');
+          setProformaOrigenIdRuta(null);
+        }
         setTiquete(data);
         setVentas(prev => [...prev, { ...data, estado: 'Emitida' }].sort((a: any, b: any) => String(a.tiqueteConsecutivo).localeCompare(String(b.tiqueteConsecutivo))));
         toast.success(`Venta registrada · factura ${data.facturaConsecutivo || 'creada'} en Documentos`);
@@ -238,6 +263,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
         setPasoVenta(1);
         await loadGuia(guiaId);
       } else { const d = await res.json(); toast.error(`Error: ${d.error}`); }
+      }
     } catch (e: any) { toast.error(`Error: ${e.message}`); }
     setLoading(false);
   };
@@ -270,10 +296,9 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
         const d = await res.json();
         const cantidadDevuelta = Number(d.cantidadKg ?? d.cartones ?? 0);
         toast.success(cantidadDevuelta > 0
-          ? (d.tiqueteAnulado ? `Devolución registrada: ${cantidadDevuelta} kg (tiquete de ruta ${d.tiqueteAnulado} anulado)` : `Devolución registrada: ${cantidadDevuelta} kg`)
+          ? `Devolución registrada: ${cantidadDevuelta} kg. Bodega debe confirmar la recepción para aplicar el ajuste a la factura${d.tiquetePendienteAceptacion ? ` ${d.tiquetePendienteAceptacion}` : ''}.`
           : 'Devolución registrada');
-        // La API decide si una devolución parcial conserva el tiquete emitido;
-        // recargar desde el servidor evita marcarlo como anulado por defecto.
+        // El tiquete y su crédito solo se revierten cuando Bodega acepta físicamente el retorno.
         await loadGuia(guiaId);
       } else { const d = await res.json(); toast.error(`Error: ${d.error}`); }
     } catch (e: any) { toast.error(`Error: ${e.message}`); }
@@ -328,11 +353,21 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
     .reduce((s: number, i: any) => s + Number(i.cantidad || 0), 0);
   const clientesRuta = (guia?.rutaOrden || []).length > 0 ? guia.rutaOrden : (guia?.clientesRuta || []);
   const clienteSeleccionado = clientesRuta.find((c: any) => c.clienteId === clienteId);
+  const limiteCreditoCliente = Number(clienteSeleccionado?.limiteCredito ?? clienteSeleccionado?.limite_credito ?? 0);
+  const saldoPendienteCliente = Number(clienteSeleccionado?.saldoPendiente ?? clienteSeleccionado?.saldo_pendiente ?? 0);
+  const condicionCreditoCliente = String(clienteSeleccionado?.condicionPago ?? clienteSeleccionado?.condicion_pago ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('credito');
+  const montoCreditoDisponible = Math.max(0, limiteCreditoCliente - saldoPendienteCliente);
+  const creditoDisponible = condicionCreditoCliente && montoCreditoDisponible > 0;
+  const mensajeCreditoNoDisponible = !condicionCreditoCliente ? 'Este cliente no tiene crédito autorizado. El administrador debe aprobar su condición de crédito.' : montoCreditoDisponible <= 0 ? 'El cliente ya alcanzó el límite de crédito autorizado.' : `El saldo supera el crédito disponible de ${fmtCRC(montoCreditoDisponible)}.`;
+  const mediosPagoActuales = pagosVenta.map((pago) => ({ metodo: pago.metodo, monto: pago.monto === 'total' ? total : Math.max(0, Number(pago.monto) || 0) })).filter((pago) => pago.monto > 0);
+  const recibidoActual = mediosPagoActuales.reduce((suma, pago) => suma + pago.monto, 0);
+  const saldoCreditoActual = Math.max(0, Math.round((total - recibidoActual) * 100) / 100);
+  const errorPago = recibidoActual > total + 0.01 ? 'Los montos recibidos superan el total.' : saldoCreditoActual > 0 && (!creditoDisponible || saldoCreditoActual > montoCreditoDisponible) ? mensajeCreditoNoDisponible : '';
   const camionSeleccionado = camiones.find((cam: any) => cam.id === guia?.camionId);
   const guiaListado = guias.find((g: any) => g.id === guia?.id);
   const nombreRutaAsignada = guiaListado?.rutaNombre || camionSeleccionado?.ruta_defecto || guia?.rutaNombre || 'Ruta asignada';
   const estadoRutaLabel = guia?.estado === 'EnRuta' ? 'En ruta' : guia?.estado === 'Cargada' ? 'Lista para iniciar' : guia?.estadoLogico || guia?.estado;
-  const ventaDeshabilitada = loading || guia?.estado !== 'EnRuta' || cajaCerrada || cargandoPrecio || !clienteId || !producto || !politicaPrecio?.precio || Boolean(politicaPrecio?.error) || precioVenta < precioMinimo || precioVenta > precioMaximo || cantidad <= 0 || cantidad > stockProducto || descuento < 0 || descuento > descuentoPermitido;
+  const ventaDeshabilitada = loading || guia?.estado !== 'EnRuta' || cajaCerrada || cargandoPrecio || !clienteId || !producto || !politicaPrecio?.precio || Boolean(politicaPrecio?.error) || precioVenta < precioMinimo || precioVenta > precioMaximo || cantidad <= 0 || cantidad > stockProducto || descuento < 0 || descuento > descuentoPermitido || (tipoDocumentoRuta === 'Factura' && Boolean(errorPago));
   const previsualizarTiquete = (muestraGeneral = false) => {
     if (!muestraGeneral && (!clienteId || !producto || !Number.isFinite(cantidad) || cantidad <= 0)) return toast.error('Seleccione cliente, producto y kilos para ver la muestra.');
     const cantidadMuestra = muestraGeneral ? 10 : cantidad;
@@ -352,7 +387,9 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
       precioUnitario: precioMuestra,
       subtotal: subtotalMuestra,
       descuento: descuentoMuestra,
-      cobro: muestraGeneral ? 'Efectivo' : cobro,
+      cobro: muestraGeneral ? 'Efectivo' : (saldoCreditoActual > 0 ? (recibidoActual > 0 ? 'Mixto' : 'Credito') : (mediosPagoActuales.length > 1 ? 'Mixto' : mediosPagoActuales[0]?.metodo || 'Efectivo')),
+      mediosPago: muestraGeneral ? [{ metodo: 'Efectivo', monto: subtotalMuestra - descuentoMuestra }] : mediosPagoActuales,
+      saldoCredito: muestraGeneral ? 0 : saldoCreditoActual,
       total: subtotalMuestra - descuentoMuestra,
     });
     setPreviewTiqueteAbierto(true);
@@ -422,6 +459,11 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
         </div>
       </div>
 
+      {!!proformasRuta.length && <section className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+        <div className="mb-3"><h3 className="font-extrabold" style={{ color: 'var(--text-primary)' }}>Proformas de esta ruta</h3><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Cotizaciones no fiscales; no han descontado kilos del camión.</p></div>
+        <div className="space-y-2">{proformasRuta.map((proforma: any) => <div key={proforma.id} className="flex flex-col gap-2 rounded-xl p-3 sm:flex-row sm:items-center sm:justify-between" style={{ background: 'var(--bg-muted)' }}><div><b style={{ color: 'var(--text-primary)' }}>{proforma.consecutivo}</b><p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{proforma.detalles?.[0]?.producto} · {Number(proforma.detalles?.[0]?.cantidad || 0).toFixed(2)} kg · {fmtCRC(Number(proforma.total))}</p></div>{proforma.estado === 'Vigente' && <button type="button" onClick={() => { const linea = proforma.detalles?.[0]; if (!linea) return; setProformaOrigenIdRuta(proforma.id); setClienteId(proforma.clienteId || ''); setProducto(linea.producto); setCantidadTexto(String(linea.cantidad)); setDescuentoTexto(String(proforma.descuento || 0)); setTipoDocumentoRuta('Factura'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setPasoVenta(3); toast.info('Revise el precio autorizado y la cantidad antes de registrar la venta.'); }} className="min-h-10 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Preparar venta</button>}</div>)}</div>
+      </section>}
+
       {cajaCerrada && (
         <div className="rounded-2xl p-4 flex items-center gap-3" style={{ background: 'var(--status-danger-soft)', color: 'var(--status-danger)', border: '1px solid var(--status-danger)' }}>
           <X className="w-5 h-5 shrink-0" />
@@ -460,11 +502,12 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
           <article className="route-ticket-paper">
             <header className="route-ticket-header"><img src="/granja-don-paco-logo.png" alt="Granja Don Paco" /><div><span>GRANJA DON PACO</span><strong>TIQUETE DE RUTA</strong><small>Control de venta y entrega</small></div><div className="route-ticket-number"><small>{tiquete.demo ? 'MUESTRA' : 'N.º'}</small><strong>{tiquete.demo ? 'VISTA PREVIA' : tiquete.tiqueteConsecutivo}</strong></div></header>
             <p className="route-ticket-demo">{tiquete.demo ? 'VISTA PREVIA · NO REGISTRA UNA VENTA NI ES UN COMPROBANTE FISCAL' : 'COMPROBANTE INTERNO DE RUTA · NO SUSTITUYE EL TIQUETE ELECTRÓNICO DE HACIENDA'}</p>
-            <div className="route-ticket-meta"><span><b>FECHA Y HORA</b>{fmtFechaHora(tiquete.fechaHora)}</span><span><b>CONDICIÓN</b>{tiquete.cobro === 'Credito' ? 'Crédito' : 'Contado'}</span><span><b>MEDIO DE PAGO</b>{tiquete.cobro === 'Credito' ? 'Crédito' : tiquete.cobro}</span></div>
+            <div className="route-ticket-meta"><span><b>FECHA Y HORA</b>{fmtFechaHora(tiquete.fechaHora)}</span><span><b>CONDICIÓN</b>{Number(tiquete.saldoCredito || 0) > 0 ? 'Crédito con abono' : 'Contado'}</span><span><b>RECIBIDO</b>{(tiquete.mediosPago || []).map((p: any) => `${p.metodo}: ${fmtCRC(Number(p.monto))}`).join(' · ') || 'Pendiente de pago'}</span></div>
             <section className="route-ticket-customer"><h3>CLIENTE</h3><strong>{tiquete.cliente?.nombre || 'Cliente'}</strong><div>{tiquete.cliente?.documentoId ? `Cédula: ${tiquete.cliente.documentoId}` : ''}{tiquete.cliente?.telefono ? ` · Tel.: ${tiquete.cliente.telefono}` : ''}</div><div>{[tiquete.cliente?.direccion, tiquete.cliente?.distrito, tiquete.cliente?.canton, tiquete.cliente?.provincia].filter(Boolean).join(', ')}</div></section>
             <div className="route-ticket-meta"><span><b>VENDEDOR</b>{tiquete.vendedorNombre || currentUser.name}</span><span><b>CAMIÓN</b>{tiquete.camionNombre || guia?.camionNombre || '—'}{tiquete.placa ? ` · ${tiquete.placa}` : ''}</span><span><b>GUÍA</b>{tiquete.guiaConsecutivo || guia?.consecutivo || '—'}</span></div>
             <table className="route-ticket-lines"><thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO / KG</th><th>TOTAL</th></tr></thead><tbody><tr><td>{cantidadTiquete.toLocaleString('es-CR', { maximumFractionDigits: 2 })} kg</td><td>{tiquete.producto}</td><td>{fmtCRC(precioUnitarioTiquete)}</td><td>{fmtCRC(Number(tiquete.total || 0))}</td></tr></tbody></table>
             <div className="route-ticket-totals"><div><span>Subtotal</span><b>{fmtCRC(Number(tiquete.subtotal ?? tiquete.total ?? 0))}</b></div>{Number(tiquete.descuento || 0) > 0 && <div><span>Descuento</span><b>− {fmtCRC(Number(tiquete.descuento))}</b></div>}<div className="route-ticket-total"><span>TOTAL</span><strong>{fmtCRC(Number(tiquete.total || 0))}</strong></div></div>
+            {Number(tiquete.saldoCredito || 0) > 0 && <div className="route-ticket-totals"><div className="route-ticket-total"><span>SALDO A CRÉDITO</span><strong>{fmtCRC(Number(tiquete.saldoCredito))}</strong></div></div>}
             <footer className="route-ticket-signature"><div><i /><span>RECIBIDO CONFORME · Nombre y firma</span></div><small>Conserve este comprobante para cualquier consulta sobre su entrega.</small></footer>
           </article>
         </section>
@@ -557,6 +600,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                       {!clienteId ? 'Elija cliente para ver precio' : cargandoPrecio ? 'Consultando precio…' : Number(preciosProductos[i.producto]?.precio) > 0
                         ? `${fmtCRC(Number(preciosProductos[i.producto].precio))} por kg · ${fmtCRC(Number(preciosProductos[i.producto].precioMinimo ?? preciosProductos[i.producto].precio))}–${fmtCRC(Number(preciosProductos[i.producto].precioMaximo ?? preciosProductos[i.producto].precio))}`
                         : preciosProductos[i.producto]?.error ? 'No se pudo consultar el precio' : 'Precio no configurado'}</span>
+                    {sugerenciasVenta[i.producto] && <span className="mt-1 block text-xs font-bold" style={{ color: producto === i.producto ? 'var(--text-on-action)' : 'var(--brand-primary)' }}>Sugerido: {sugerenciasVenta[i.producto].kilos > 0 ? `${sugerenciasVenta[i.producto].kilos.toFixed(2)} kg · ` : ''}{fmtCRC(sugerenciasVenta[i.producto].precio)}/kg</span>}
                   </button>
                 ))}
               </div>
@@ -594,7 +638,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                 {producto && clienteId && sugerenciaProducto && <div className="rounded-xl p-3" style={{ background: 'var(--brand-primary-soft)', border: '1px solid var(--border-default)' }}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{sugerenciaUsaIA ? 'Sugerencia de IA basada en pedidos anteriores' : 'Sugerencia basada en el historial'}</p>
+                      <p className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{sugerenciaProducto.pedidosAnalizados === 0 ? 'Precio recomendado por Administración' : sugerenciaProducto.metodo === 'ia_con_historial' ? 'Sugerencia de IA basada en pedidos anteriores' : 'Sugerencia basada en el historial'}</p>
                       <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>{sugerenciaProducto.pedidosAnalizados > 0 ? `${sugerenciaProducto.pedidosAnalizados} pedidos · ` : 'Sin pedidos históricos · '}{sugerenciaProducto.kilos > 0 ? `${sugerenciaProducto.kilos.toFixed(2)} kg` : 'cantidad a definir'} · {fmtCRC(sugerenciaProducto.precio)}/kg</p>
                       <p className="mt-1 text-[11px]" style={{ color: 'var(--text-secondary)' }}>Precio permitido por Administración: {fmtCRC(sugerenciaProducto.precioMinimo)}–{fmtCRC(sugerenciaProducto.precioMaximo)}/kg</p>
                     </div>
@@ -665,33 +709,40 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
 
             {/* Cobro + accion */}
             {pasoVenta === 4 && <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
-              <p className="text-base font-extrabold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}><span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>4</span>¿Cómo paga?</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <button onClick={() => setCobro('Efectivo')}
-                  aria-pressed={cobro === 'Efectivo'} className={cn('min-h-14 flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-base font-bold border transition-all')}
-                  style={cobro === 'Efectivo'
-                    ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)', borderColor: 'transparent' }
-                    : { background: 'var(--bg-muted)', color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }}
-                >
-                  <Banknote className="w-5 h-5" /> Efectivo
-                </button>
-                <button onClick={() => setCobro('Transferencia')}
-                  aria-pressed={cobro === 'Transferencia'} className={cn('min-h-14 flex items-center justify-center gap-2 rounded-xl px-2 py-3 text-base font-bold border transition-all')}
-                  style={cobro === 'Transferencia'
-                    ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)', borderColor: 'transparent' }
-                    : { background: 'var(--bg-muted)', color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }}
-                >
-                  <ArrowLeftRight className="w-5 h-5" /> Transferencia
-                </button>
-                <button onClick={() => setCobro('Credito')}
-                  aria-pressed={cobro === 'Credito'} className={cn('min-h-14 flex items-center justify-center gap-2 rounded-xl px-2 py-3 text-base font-bold border transition-all')}
-                  style={cobro === 'Credito'
-                    ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)', borderColor: 'transparent' }
-                    : { background: 'var(--bg-muted)', color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }}
-                >
-                  <CreditCard className="w-5 h-5" /> Crédito
-                </button>
+              <p className="text-base font-extrabold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}><span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>4</span>Documento de la venta</p>
+              <div className="grid grid-cols-2 gap-2 rounded-xl p-1" style={{ background: 'var(--bg-muted)' }}>
+                {(['Factura', 'Proforma'] as const).map(tipo => <button key={tipo} type="button" onClick={() => setTipoDocumentoRuta(tipo)} className="min-h-11 rounded-lg px-2 text-sm font-bold" style={tipoDocumentoRuta === tipo ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)' } : { background: 'transparent', color: 'var(--text-secondary)' }}>{tipo === 'Factura' ? 'Factura electrónica · demo' : 'Proforma · no fiscal'}</button>)}
               </div>
+              {tipoDocumentoRuta === 'Factura' ? <>
+              <p className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>¿Cuánto recibe ahora?</p>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Agregue los medios usados en este cobro. Si queda un saldo, se registrará como crédito solo si el cliente tiene línea autorizada.</p>
+              <div className="space-y-2">
+                {pagosVenta.map((pago, index) => (
+                  <div key={`${index}-${pago.metodo}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
+                    <label className="min-w-0 text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>Medio de pago
+                      <select value={pago.metodo} onChange={(e) => setPagosVenta((prev) => prev.map((item, i) => i === index ? { ...item, metodo: e.target.value } : item))} className="mt-1 min-h-11 w-full rounded-lg border px-2 text-sm" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}>
+                        {METODOS_PAGO_RUTA.filter((metodo) => metodo === pago.metodo || !pagosVenta.some((otro, i) => i !== index && otro.metodo === metodo)).map((metodo) => <option key={metodo} value={metodo}>{metodo}</option>)}
+                      </select>
+                    </label>
+                    <label className="min-w-0 text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>Monto recibido (₡)
+                      <input type="number" min="0" step="0.01" inputMode="decimal" value={pago.monto === 'total' ? total.toFixed(2) : pago.monto} onChange={(e) => setPagosVenta((prev) => prev.map((item, i) => i === index ? { ...item, monto: e.target.value } : item))} className="mt-1 min-h-11 w-full rounded-lg border px-3 text-base font-bold" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }} />
+                    </label>
+                    <button type="button" onClick={() => setPagosVenta((prev) => prev.filter((_, i) => i !== index))} disabled={pagosVenta.length <= 1} className="mb-0.5 flex h-11 w-11 items-center justify-center rounded-lg border disabled:opacity-40" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Quitar medio de pago"><X className="h-4 w-4" /></button>
+                  </div>
+                ))}
+                <div className="flex flex-wrap gap-2">
+                  {pagosVenta.length < 4 && <button type="button" onClick={() => { const metodo = METODOS_PAGO_RUTA.find((candidato) => !pagosVenta.some((pago) => pago.metodo === candidato)); if (metodo) setPagosVenta((prev) => [...prev, { metodo, monto: '0' }]); }} className="min-h-10 rounded-lg border px-3 text-sm font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--brand-primary)' }}>+ Agregar otro medio</button>}
+                  {creditoDisponible && <button type="button" onClick={() => setPagosVenta([])} className="min-h-10 rounded-lg border px-3 text-sm font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>Todo a crédito</button>}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-2 rounded-xl p-3 text-sm sm:grid-cols-3" style={{ background: 'var(--brand-primary-soft)' }}>
+                <div><span style={{ color: 'var(--text-secondary)' }}>Total factura</span><strong className="block" style={{ color: 'var(--text-primary)' }}>{fmtCRC(total)}</strong></div>
+                <div><span style={{ color: 'var(--text-secondary)' }}>Recibido ahora</span><strong className="block" style={{ color: 'var(--text-primary)' }}>{fmtCRC(recibidoActual)}</strong></div>
+                <div><span style={{ color: 'var(--text-secondary)' }}>Saldo a crédito</span><strong className="block" style={{ color: 'var(--text-primary)' }}>{fmtCRC(saldoCreditoActual)}</strong></div>
+              </div>
+              {saldoCreditoActual > 0 && <p className="rounded-lg p-3 text-sm" role={errorPago ? 'alert' : undefined} style={{ background: errorPago ? 'var(--status-danger-soft)' : 'var(--bg-muted)', color: errorPago ? 'var(--status-danger)' : 'var(--text-secondary)' }}>{errorPago || `Crédito disponible: ${fmtCRC(Math.max(0, limiteCreditoCliente - saldoPendienteCliente))}. La factura quedará con saldo pendiente.`}</p>}
+              {pagosVenta.length === 0 && !creditoDisponible && <p className="text-sm font-semibold" style={{ color: 'var(--status-danger)' }}>{mensajeCreditoNoDisponible}</p>}
+              </> : <div className="rounded-xl border p-3 text-sm" style={{ background: 'var(--status-warning-soft)', borderColor: 'var(--status-warning)', color: 'var(--text-primary)' }}><b>Proforma comercial · no fiscal</b><p className="mt-1">Se guardará la cotización para el cliente. No registra cobro, venta ni salida de inventario.</p></div>}
               <div className="rounded-xl p-3 text-sm" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
                 <div className="flex justify-between gap-3"><span style={{ color: 'var(--text-muted)' }}>Cliente</span><strong className="text-right" style={{ color: 'var(--text-primary)' }}>{clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || '—'}</strong></div>
                 <div className="mt-2 flex justify-between gap-3"><span style={{ color: 'var(--text-muted)' }}>Producto y cantidad</span><strong className="text-right" style={{ color: 'var(--text-primary)' }}>{producto} · {cantidad.toFixed(2)} kg</strong></div>
@@ -699,17 +750,17 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                 {descuento > 0 && <div className="mt-2 flex justify-between gap-3"><span style={{ color: 'var(--text-muted)' }}>Descuento</span><strong style={{ color: 'var(--text-primary)' }}>− {fmtCRC(descuento)}</strong></div>}
                 <div className="mt-3 flex justify-between gap-3 border-t pt-3 font-extrabold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><span>Total</span><span>{fmtCRC(total)}</span></div>
               </div>
-              <div className="rounded-xl p-3" style={{ background: 'var(--brand-primary-soft)' }}><p className="text-sm font-bold" style={{ color: 'var(--brand-primary-dark)' }}>Se emitirá la factura con esta venta</p><p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>El documento fiscal queda en borrador de pruebas. En Documentos se completa el envío y se consulta la respuesta.</p></div>
+              {tipoDocumentoRuta === 'Factura' && <div className="rounded-xl p-3" style={{ background: 'var(--brand-primary-soft)' }}><p className="text-sm font-bold" style={{ color: 'var(--brand-primary-dark)' }}>Se emitirá la factura con esta venta</p><p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>El documento fiscal queda en borrador de pruebas. En Documentos se completa el envío y se consulta la respuesta.</p></div>}
               <button onClick={vender} disabled={ventaDeshabilitada}
                 className="min-h-14 w-full flex items-center justify-center gap-2 rounded-xl px-4 py-4 text-lg font-extrabold disabled:opacity-50"
                 style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
-                <CheckCircle2 className="w-5 h-5" /> {precioAutorizado ? `Registrar venta y factura · ${fmtCRC(total)}` : 'Precio no configurado'}
+                <CheckCircle2 className="w-5 h-5" /> {tipoDocumentoRuta === 'Proforma' ? 'Guardar proforma' : precioAutorizado ? `Registrar venta y factura · ${fmtCRC(total)}` : 'Precio no configurado'}
               </button>
-              <button type="button" onClick={() => previsualizarTiquete()} disabled={!clienteId || !producto || cantidad <= 0}
+              {tipoDocumentoRuta === 'Factura' && <button type="button" onClick={() => previsualizarTiquete()} disabled={!clienteId || !producto || cantidad <= 0}
                 className="min-h-11 w-full rounded-xl border px-4 py-2 text-sm font-bold disabled:opacity-50"
                 style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}>
                 Vista previa del tiquete · no registra venta
-              </button>
+              </button>}
             </div>}
             <div className="flex gap-2">
               {pasoVenta > 1 && <button type="button" onClick={() => setPasoVenta(v => Math.max(1, v - 1))} className="min-h-12 flex-1 rounded-xl border px-4 text-sm font-bold" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }}>Volver</button>}

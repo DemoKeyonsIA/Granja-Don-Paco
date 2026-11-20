@@ -24,6 +24,7 @@ beforeAll(async () => {
   // Seed
   await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['1', 'Despachador', 'despacho@test.com', 'Despachador'] });
   await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['3', 'Vendedor', 'vendedor@test.com', 'Vendedor'] });
+  await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['2', 'Bodeguero', 'bodeguero@test.com', 'Bodeguero'] });
   await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['admin-f3', 'Admin', 'admin-f3@test.com', 'Admin'] });
   await client.execute({ sql: `INSERT INTO users (id, name, email, role) VALUES (?, ?, ?, ?)`, args: ['admin-f3-2', 'Admin Dos', 'admin-f3-2@test.com', 'Admin'] });
   await client.execute({
@@ -39,8 +40,8 @@ beforeAll(async () => {
     args: ['c3', 'Cliente Sin Límite', 10.2, -84.2, 'R1', 'Credito', 'Activo', 1000, 0]
   });
   await client.execute({
-    sql: `INSERT INTO rutas (id, nombre, cliente_ids, centroide_lat, centroide_lng, capacidad_max_cartones, estado) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    args: ['r1', 'Ruta 1', JSON.stringify(['c1', 'c2', 'c3']), 10.1, -84.1, 500, 'Activa']
+    sql: `INSERT INTO rutas (id, nombre, cliente_ids, vendedor_asignado, centroide_lat, centroide_lng, capacidad_max_cartones, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: ['r1', 'Ruta 1', JSON.stringify(['c1', 'c2', 'c3']), '3', 10.1, -84.1, 500, 'Activa']
   });
   await client.execute({
     sql: `INSERT INTO inventario (id, producto, cantidad, unidad, ubicacion, ultima_actualizacion) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -199,8 +200,8 @@ describe('F3 — Caja del vendedor: ventas en ruta, tiquetes, retornos, tablero 
     const dentroDeBanda = await authRequest().post('/api/logistica/caja/venta').send({
       guiaId: guia.id, clienteId: 'c1', etiquetaId: 'e2', producto: 'Huevos - Grande', cantidadKg: 9999, precioUnitario: 16500, cobro: 'Efectivo'
     });
-    expect(dentroDeBanda.status).toBe(409);
-    expect(dentroDeBanda.body.error).toContain('etiqueta solo tiene');
+    expect(dentroDeBanda.status).toBe(400);
+    expect(dentroDeBanda.body.error).toContain('Stock insuficiente en Camión');
   });
 
   it('Tiquete consecutivo TQ-0002 con cobro crédito: aumenta saldo del cliente', async () => {
@@ -258,40 +259,59 @@ describe('F3 — Caja del vendedor: ventas en ruta, tiquetes, retornos, tablero 
         precioUnitario: 16000,
         cobro: 'Efectivo'
       });
-    expectApi(res, 409, 'Venta sobre saldo etiqueta no asignada');
-    expect(res.body.error).toContain('etiqueta seleccionada');
+    expectApi(res, 400, 'Venta sobre saldo etiqueta no asignada');
+    expect(res.body.error).toContain('Stock insuficiente en Camión');
   });
 
-  it('Venta de guía inexistente → 404', async () => {
+  it('Venta de guía inexistente → 400', async () => {
     const res = await authRequest().post('/api/logistica/caja/venta')
       .send({ guiaId: 'no-existe', producto: 'Huevos - Grande', cantidadKg: 1, cobro: 'Efectivo' });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
   });
 
-  it('Devolución: anula TQ-0002, libera inventario al camión, etiqueta Retornada y revierte saldo crédito', async () => {
+  it('Devolución: mantiene saldo hasta aceptación de Bodega y emite NC de demostración al recibir', async () => {
     const res = await authRequest().post('/api/logistica/caja/devolucion')
       .send({ guiaId: guia.id, etiquetaId: 'e2', ventaRutaId: v2.ventaId, cantidadKg: 40, responsable: 'Vendedor' });
     expect(res.status).toBe(201);
     expect(res.body.tiqueteAnulado).toBe('TQ-0002');
+    const ticketAntesDeRecibir = await client.execute({ sql: `SELECT estado FROM ventas_ruta_kg WHERE id = ?`, args: [v2.ventaId] });
+    expect(ticketAntesDeRecibir.rows[0].estado).toBe('Anulada');
+
+    const saldoAntesDeRecibir = await authRequest().get('/api/clientes');
+    expect(saldoAntesDeRecibir.body.find((c: any) => c.id === 'c2').saldo_pendiente).toBe(640000);
+    const pendientes = await authRequest().get(`/api/logistica/retornos/pendientes?guiaId=${guia.id}`);
+    expect(pendientes.body).toHaveLength(1);
+    const aceptado = await requestAs(app, '2').post('/api/logistica/bodega/retorno/aceptar')
+      .send({ retornoId: pendientes.body[0].id });
+    expect(aceptado.status).toBe(200);
+    expect(aceptado.body.estado).toBe('AceptadoBodega');
+    const reintentoAceptacion = await requestAs(app, '2').post('/api/logistica/bodega/retorno/aceptar')
+      .send({ retornoId: pendientes.body[0].id });
+    expect(reintentoAceptacion.status).toBe(200);
+    expect(reintentoAceptacion.body.idempotente).toBe(true);
 
     const inv = await authRequest().get('/api/inventario');
     const camion = inv.body.find((i: any) => i.ubicacion === 'Camión Ruta 5' && i.producto === 'Huevos - Grande');
-    expect(camion.cantidad).toBe(80); // 40 kg restantes de e3 + 40 kg devueltos
+    expect(camion.cantidad).toBe(40); // el retorno aceptado ya se transfirió a Bodega
 
     const etiquetas = await authRequest().get('/api/etiquetas');
     const e2 = etiquetas.body.find((e: any) => e.id === 'e2');
-    expect(e2.estado).toBe('Retornada');
+    expect(e2.estado).toBe('EnBodega');
+    const ticketTrasAceptar = await client.execute({ sql: `SELECT estado FROM ventas_ruta_kg WHERE id = ?`, args: [v2.ventaId] });
+    expect(ticketTrasAceptar.rows[0].estado).toBe('Anulada');
 
     const saldo = await authRequest().get('/api/clientes');
     const c2 = saldo.body.find((c: any) => c.id === 'c2');
     expect(c2.saldo_pendiente).toBe(0);
+    const docs = await authRequest().get('/api/facturacion/documentos');
+    expect(docs.body.filter((doc: any) => doc.tipoDocumento === 'NotaCredito' && doc.notasCreditoId === v2.facturaId && doc.total === 640000)).toHaveLength(1);
   });
 
   it('Venta a crédito que excede el límite → rechazada', async () => {
     const res = await authRequest().post('/api/logistica/caja/venta')
       .send({ guiaId: guia.id, clienteId: 'c3', etiquetaId: 'e3', producto: 'Huevos - Grande', cantidadKg: 1, precioUnitario: 16000, cobro: 'Credito' });
-    expectApi(res, 400, 'Crédito excedido');
-    expect(res.body.error).toContain('excede límite de crédito');
+    expectApi(res, 409, 'Crédito excedido');
+    expect(res.body.error).toContain('crédito disponible');
   });
 
   it('Tablero: estados/horas, cartones, $, retornos, merma y sin saltos de secuencia', async () => {
@@ -307,7 +327,7 @@ describe('F3 — Caja del vendedor: ventas en ruta, tiquetes, retornos, tablero 
     expect(linea.totalEfectivo).toBe(640000);
     expect(linea.totalCredito).toBe(0);
     expect(linea.cartonesRetornados).toBe(40);
-    expect(linea.restanteCamion).toBe(80);
+    expect(linea.restanteCamion).toBe(40);
     expect(linea.mermaPreliminar).toBe(0); // el residuo no se infiere como merma
     expect(linea.avance).toBe(33);
     // Sin huecos: TQ-0002 existe (anulado registrado)
@@ -334,6 +354,8 @@ describe('F3 — Caja del vendedor: ventas en ruta, tiquetes, retornos, tablero 
     const activas = await authRequest().get('/api/logistica/guias-activas');
     const guia2 = activas.body.find((x: any) => x.camionId === cam.body.id);
     expect(guia2).toBeTruthy();
+    const inicio = await requestAs(app, '3').post(`/api/logistica/guias/${guia2.id}/marcar-en-ruta`);
+    expect(inicio.status).toBe(200);
 
     // La identidad no se infiere desde el cuerpo ni se asigna como respaldo.
     const anonima = await request(app).post('/api/logistica/caja/venta')
@@ -393,6 +415,8 @@ describe('F3 — Caja del vendedor: ventas en ruta, tiquetes, retornos, tablero 
     expect(creada.status).toBe(201);
     const activas = await authRequest().get('/api/logistica/guias-activas');
     const guiaDiferencia = activas.body.find((g: any) => g.camionId === cam.body.id);
+    const inicio = await requestAs(app, '3').post(`/api/logistica/guias/${guiaDiferencia.id}/marcar-en-ruta`);
+    expect(inicio.status).toBe(200);
     const transferencia = await authRequest().post('/api/logistica/caja/venta').set('x-user-id', '3').send({
       guiaId: guiaDiferencia.id, clienteId: 'c1', etiquetaId: 'e5', producto: 'Huevos - Grande', cantidadKg: 2, cobro: 'Transferencia',
     });

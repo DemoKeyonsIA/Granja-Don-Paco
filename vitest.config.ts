@@ -5,6 +5,16 @@ export default defineConfig({
     globals: true,
     testTimeout: 30000,
     hookTimeout: 30000,
+    // Ignore scratch snapshots of the repository; otherwise Vitest executes
+    // duplicate stale copies of the test suite under .audit-run-*.
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/cypress/**',
+      '**/.{idea,git,cache,output,temp}/**',
+      '**/.audit-run-*/**',
+      '**/.tmp-vitest-local/**',
+    ],
 
     /**
      * El pool se deja como venga (`forks`) a propósito.

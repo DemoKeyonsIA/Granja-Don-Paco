@@ -93,6 +93,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
     nombre: '',
     tipo_documento: 'Fisica',
     documento_id: '',
+    actividad_economica: '',
     telefono: '',
     email: '',
     direccion: '',
@@ -147,7 +148,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
 
   const resetForm = () => {
     setNewCliente({
-      nombre: '', tipo_documento: 'Fisica', documento_id: '', telefono: '', email: '', direccion: '',
+      nombre: '', tipo_documento: 'Fisica', documento_id: '', actividad_economica: '', telefono: '', email: '', direccion: '',
       provincia: '', canton: '', distrito: '',
       ruta: '', condicion_pago: 'Contado', precio_especial: null, limite_credito: 0, notas: ''
     });
@@ -159,6 +160,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
       nombre: cliente.nombre,
       tipo_documento: cliente.tipo_documento || 'Fisica',
       documento_id: cliente.documento_id || '',
+      actividad_economica: cliente.actividad_economica || '',
       telefono: cliente.telefono || '',
       email: cliente.email || '',
       direccion: cliente.direccion || '',
@@ -370,6 +372,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
                         </select>
                       </div>
                       <div className="field"><label>Nº Documento</label><input type="text" value={newCliente.documento_id} onChange={e => setNewCliente({ ...newCliente, documento_id: e.target.value })} placeholder="Cédula o jurídica" /></div>
+                      <div className="field"><label>Actividad económica (opcional)</label><input type="text" value={newCliente.actividad_economica || ''} onChange={e => setNewCliente({ ...newCliente, actividad_economica: e.target.value })} placeholder="Código informado por el cliente" /></div>
                       <div className="field"><label>Teléfono</label><input type="text" value={newCliente.telefono} onChange={e => setNewCliente({ ...newCliente, telefono: e.target.value })} placeholder="8888-8888" /></div>
                       <div className="field"><label>Email</label><input type="email" value={newCliente.email} onChange={e => setNewCliente({ ...newCliente, email: e.target.value })} placeholder="correo@ejemplo.com" /></div>
                       <div className="field"><label>Ruta {esVendedor && <span className="req">*</span>}</label>

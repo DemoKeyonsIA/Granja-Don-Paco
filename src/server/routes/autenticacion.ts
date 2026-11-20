@@ -14,7 +14,9 @@ export function registrarRutasAutenticacion(app: any, db: any, authUser: any, ge
       if (!usuario || !verifyPassword(password, usuario.password_hash || '')) {
         return res.status(401).json({ error: "Credenciales incorrectas" });
       }
-      if ((usuario.activo ?? true) === false) {
+      // SQLite rows may surface PostgreSQL boolean columns as integer 0/1 when
+      // a shared server schema is used by the local/test adapter.
+      if (usuario.activo === false || usuario.activo === 0 || usuario.activo === '0') {
         return res.status(401).json({ error: "Cuenta inactiva. Contacte al administrador" });
       }
       const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');

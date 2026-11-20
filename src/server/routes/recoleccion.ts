@@ -6,7 +6,9 @@ export function registrarRutaRecoleccion(app: any, db: any, requirePermission: (
   const { galerones, lotes_aves, inventario, produccion_diaria, movimientosInventario } = schema;
   app.post("/api/produccion/recoleccion", requirePermission('produccion', 'create'), async (req, res) => {
     try {
-      const { galeron, galeronId, granjaId, detalles, cargaId } = req.body;
+      const { galeron, galeronId, granjaId, detalles, cargaId, responsable: responsableDeclarado } = req.body;
+      const actorId = req.usuario?.id || req.headers['x-user-id'] || null;
+      const responsable = String(responsableDeclarado || req.usuario?.name || '').trim() || null;
 
       if ((!galeron && !galeronId) || !detalles || !Array.isArray(detalles)) {
         return res.status(400).json({ error: "Datos de recolección inválidos" });
@@ -152,6 +154,8 @@ export function registrarRutaRecoleccion(app: any, db: any, requirePermission: (
             granjaId: galeronRecord.granjaId,
             galeronId: galeronRecord.id,
             fecha: fecha,
+            registradoPor: actorId ? String(actorId) : null,
+            responsable,
             tipo_producto: productName,
             cantidad: cantidadProducida,
             unidad: unidad
@@ -167,9 +171,16 @@ export function registrarRutaRecoleccion(app: any, db: any, requirePermission: (
             origen: galeronRecord.id,
             destino: 'Granja',
             fecha: fecha,
-            referencia_id: prodId
+            referencia_id: prodId,
+            registradoPor: actorId ? String(actorId) : null,
+            lote: loteRecord?.id || null
           });
         }
+        if (detallesActivos.length) await tx.insert(schema.auditoria).values({
+          id: crypto.randomUUID(), usuarioId: actorId ? String(actorId) : 'sistema', accion: 'RegistrarRecoleccion', modulo: 'Produccion',
+          referenciaId: String(cargaId || `${galeronRecord.id}-${fecha}`), valoresDespues: JSON.stringify({ galeronId: galeronRecord.id, granjaId: galeronRecord.granjaId, loteId, registradoPor: actorId, responsable, fecha, productos: detallesActivos.map((d: any) => ({ producto: nombreProducto(d), cantidad: cantidadDetalle(d), unidad: unidadDetalle(d) || 'según catálogo' })) }),
+          motivo: 'Registro de recolección y entrada a inventario de Granja', fecha
+        });
         return { duplicada: false as const, conflicto: false as const };
       });
 

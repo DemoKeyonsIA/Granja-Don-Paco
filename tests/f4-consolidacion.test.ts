@@ -55,10 +55,13 @@ async function crearGuia(camionId: string, etiquetas: string[]) {
     .send({ camionId, rutaId: 'r1', etiquetasIds: etiquetas, responsablesCarga: 'Bodeguero', responsableTransporte: 'Vendedor' });
   expect(gu.status).toBe(201);
   const list = await requestAs(app, '9').get('/api/logistica/guias');
-  return list.body.find((g: any) => g.camionId === camionId);
+  const guia = list.body.find((g: any) => g.camionId === camionId);
+  const salida = await requestAs(app, '9').post(`/api/logistica/guias/${guia.id}/marcar-en-ruta`);
+  expect(salida.status).toBe(200);
+  return guia;
 }
 
-describe('F4 — Consolidación de ruta → facturación electrónica (factura por cliente + NC por devolución)', () => {
+describe('F4 — Facturación inmediata por tiquete y NC por devolución aceptada', () => {
   it('Preparación: guía 90ct, 3 tiquetes (c1 efvo, c2 crédito, c1 efvo), devolución y cuadre que cierra', async () => {
     const cam = await crearCamion('Camión Consolidación');
     refs.guia = await crearGuia(cam.id, ['e10', 'e11', 'e12']);
@@ -93,59 +96,18 @@ describe('F4 — Consolidación de ruta → facturación electrónica (factura p
     expect(cuadre.body.estado).toBe('Cerrada');
   });
 
-  it('Consolidar: una factura por cliente (contado + crédito) y NC por la devolución, tiquetes enlazados', async () => {
-    // El precio auditado debe conservar lo que se vendió en ruta aunque el catálogo cambie antes de consolidar.
-    await client.execute({ sql: `UPDATE productos_catalogo SET precio_base = ? WHERE id = ?`, args: [19000, 'p1'] });
-    const res = await requestAs(app, '9').post('/api/facturacion/consolidar-ruta')
-      .set('x-user-id', '9')
-      .send({ guiaId: refs.guia.id, emisorNombre: 'Granja Don Paco', emisorCedula: '3-101-000000' });
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.emitidas).toBe(2);
-    expect(res.body.anuladas).toBe(1);
-    // 2 facturas (c2 crédito, c1 efectivo) + 1 NC
-    expect(res.body.facturas).toHaveLength(2);
-    expect(res.body.documentos).toHaveLength(3);
-
-    const factContado = res.body.facturas.find((f: any) => f.cliente === 'Cliente A');
-    const factCredito = res.body.facturas.find((f: any) => f.cliente === 'Cliente B');
-    expect(factContado.total).toBe(costo(30));
-    expect(factCredito.total).toBe(costo(30));
-    expect(factCredito.condicion).toBe('Credito');
-
-    const libro = await requestAs(app, '9').get('/api/facturas');
-    const facturaCreditoId = libro.body.find((f: any) => f.clienteId === 'c2' && f.estado !== 'NotaCredito').id;
-    const detalleConsolidado = await client.execute({ sql: `SELECT resolucion_precio_json, precio_unitario FROM detalles_factura WHERE factura_id = ?`, args: [facturaCreditoId] });
-    expect(Number(detalleConsolidado.rows[0].precio_unitario)).toBe(16000);
-    const resolucionConsolidada = JSON.parse(String(detalleConsolidado.rows[0].resolucion_precio_json));
-    expect(resolucionConsolidada.tipo).toBe('ConsolidacionTiquetes');
-    expect(resolucionConsolidada.componentes).toHaveLength(1);
-    expect(resolucionConsolidada.componentes[0].resolucionPrecio.precioAplicado).toBe(16000);
-
+  it('Venta emite una factura por tiquete y la recepción del retorno crea NC simulada vinculada', async () => {
     const docs = await requestAs(app, '9').get('/api/facturacion/documentos');
-    const feC2 = docs.body.find((d: any) => d.tipoDocumento === 'Factura' && d.receptorNombre === 'Cliente B');
-    const feC1 = docs.body.find((d: any) => d.tipoDocumento === 'Factura' && d.receptorNombre === 'Cliente A');
-    const nc = docs.body.find((d: any) => d.tipoDocumento === 'NotaCredito');
-    expect(feC2).toMatchObject({ estado: 'Borrador', condicionPago: 'Credito', medioPago: 'Credito', total: costo(30) });
-    expect(feC1).toMatchObject({ estado: 'Borrador', condicionPago: 'Contado', total: costo(30) });
-    expect(nc).toMatchObject({ estado: 'Borrador', total: costo(30) });
-    expect(nc.notasCreditoId).toBe(refs.v1.ventaId);
+    const facturasRuta = docs.body.filter((d: any) => d.tipoDocumento === 'Factura');
+    const nc = docs.body.find((d: any) => d.tipoDocumento === 'NotaCredito' && d.notasCreditoId === refs.v1.facturaId);
+    expect(facturasRuta).toHaveLength(3); // una factura inmediata por venta, incluida la que se devolvió
+    expect(nc).toMatchObject({ estado: 'Borrador', total: costo(30), notasCreditoId: refs.v1.facturaId });
+    const original = await client.execute({ sql: `SELECT subtotal, precio_unitario FROM detalles_factura WHERE factura_id = ?`, args: [refs.v2.facturaId] });
+    expect(Number(original.rows[0].precio_unitario)).toBe(16000);
 
-    // Facturas en el libro: c1 Pagada, c2 Pendiente, NC fuera de ingresos
-    const facturas = await requestAs(app, '9').get('/api/facturas');
-    const fC1 = facturas.body.find((f: any) => f.clienteId === 'c1' && f.estado !== 'NotaCredito');
-    const fC2 = facturas.body.find((f: any) => f.clienteId === 'c2');
-    const fNC = facturas.body.find((f: any) => f.estado === 'NotaCredito');
-    expect(fC1).toMatchObject({ estado: 'Pagada', condicion_pago: 'Contado', metodo_pago: 'Efectivo', total: costo(30) });
-    expect(fC2).toMatchObject({ estado: 'Pendiente', condicion_pago: 'Credito', metodo_pago: 'Credito', total: costo(30) });
-    expect(fNC.total).toBe(costo(30));
-
-    // Tiquetes vinculados a la factura consolidada
-    const ventas = await client.execute({ sql: `SELECT tiquete_consecutivo, factura_id FROM ventas_ruta WHERE guia_id = ? UNION ALL SELECT tiquete_consecutivo, factura_id FROM ventas_ruta_kg WHERE guia_id = ?`, args: [refs.guia.id, refs.guia.id] });
-    const link = (t: string) => ventas.rows.find((v: any) => v.tiquete_consecutivo === t)?.factura_id;
-    expect(link('TQ-0002')).toBe(fC2.id); // crédito vivo
-    expect(link('TQ-0003')).toBe(fC1.id); // efectivo vivo
-    expect(link('TQ-0001')).toBeNull(); // anulada no se factura
+    const res = await requestAs(app, '9').post('/api/facturacion/consolidar-ruta').set('x-user-id', '9').send({ guiaId: refs.guia.id });
+    expect(res.status).toBe(409);
+    expect((res.body.error as string)).toContain('ya fue consolidada');
   });
 
   it('Rutas del día: la guía aparece consolidada con su facturación', async () => {
@@ -155,7 +117,7 @@ describe('F4 — Consolidación de ruta → facturación electrónica (factura p
     expect(ruta).toBeTruthy();
     expect(ruta.estado).toBe('Cerrada');
     expect(ruta.consolidada).toBe(true);
-    expect(ruta.nFacturas).toBe(2);
+    expect(ruta.nFacturas).toBe(3); // incluye la factura del tiquete luego devuelto; la NC la referencia
     expect(ruta.tiquetesEmitidos).toBe(2);
     expect(ruta.retornos).toBe(1);
     expect(ruta.totalGenerado).toBe(costo(60));

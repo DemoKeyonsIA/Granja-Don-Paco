@@ -49,6 +49,8 @@ export interface FacturaPago {
   total: number;
   estado?: string | null;
   condicion_pago?: string | null;
+  /** ID de la factura original a la que se aplica esta nota de crédito. */
+  referenciaFacturaId?: string | null;
 }
 
 export interface TiqueteVenta {
@@ -66,6 +68,19 @@ export interface Gasto {
   monto: number;
 }
 
+/** Enlaza las facturas-NotaCredito con su factura origen usando el documento demo. */
+export const vincularNotasCredito = <T extends FacturaPago>(
+  facturas: T[],
+  documentos: { facturaId?: string | null; tipoDocumento?: string | null; notasCreditoId?: string | null }[],
+): (T & { referenciaFacturaId?: string | null })[] => {
+  const origenPorNota = new Map(
+    documentos
+      .filter(d => ['NotaCredito', 'Nota de crédito'].includes(String(d.tipoDocumento)) && d.facturaId && d.notasCreditoId)
+      .map(d => [String(d.facturaId), String(d.notasCreditoId)]),
+  );
+  return facturas.map(f => ({ ...f, referenciaFacturaId: origenPorNota.get(String(f.id ?? '')) ?? f.referenciaFacturaId ?? null }));
+};
+
 export interface RangoPeriodo {
   desde: string;
   hasta: string;
@@ -76,16 +91,17 @@ export interface RangoPeriodo {
  *
  * - Venta normal: suma su total.
  * - Anulada: no cuenta (0). Una venta revertida no es una pérdida.
- * - **NotaCredito: 0, se excluye**, no se resta. Es la convención R3 del
- *   proyecto, documentada en `server.ts:4294`: antes la NC se insertaba como
- *   `Pagada` con monto positivo y era doble ingreso; ahora lleva su propio
- *   estado y finanzas simplemente no la cuentan. No se cambia esa decisión
- *   contable acá — restarla convertiría cada devolución en pérdida y rompería el
- *   snapshot dorado de `e2e-todos-procesos`.
+ * - NotaCredito: resta el monto acreditado en la fecha de la nota.
+ * - Anulada: no cuenta (0); la nota de crédito es el documento que revierte
+ *   una factura emitida, no el estado de anulación de la factura.
  */
 export const signoFacturaDe = (f: FacturaPago): -1 | 0 | 1 => {
   const estado = String(f.estado ?? '');
-  if (estado === 'Anulada' || estado === 'NotaCredito') return 0;
+  if (estado === 'Anulada') return 0;
+  // Algunas NC históricas se emitieron por un tiquete anulado antes de crear
+  // la factura (referencia a ventaRutaId). Solo una NC enlazada a factura
+  // reconocida debe revertir ingreso/cartera.
+  if (estado === 'NotaCredito') return f.referenciaFacturaId ? -1 : 0;
   return 1;
 };
 
@@ -167,7 +183,13 @@ export const cuentasPorCobrarDe = (
       // Una nota de crédito es una devolución: no genera deuda a favor del
       // cliente. `estaSaldada` no la cubre porque su estado es `NotaCredito`.
       .filter(f => signoFacturaDe(f) === 1)
-      .reduce((a, f) => a + saldoDe(f, pagadoPorFactura.get(String(f.id ?? '')) ?? 0), 0),
+      .reduce((a, f) => {
+        const acreditado = facturas
+          .filter(nc => signoFacturaDe(nc) === -1 && String(nc.referenciaFacturaId ?? '') === String(f.id ?? ''))
+          .reduce((s, nc) => s + Number(nc.total || 0), 0);
+        const facturaNeta = { ...f, total: Math.max(0, Number(f.total || 0) - acreditado) };
+        return a + saldoDe(facturaNeta, pagadoPorFactura.get(String(f.id ?? '')) ?? 0);
+      }, 0),
   );
 
 /** Total de gastos del periodo. Una factura anulada no gasta. */

@@ -37,6 +37,8 @@ export function registrarRutasClientes(app: any, db: any, requirePermission: (..
       const ruta = rutas.find((r: any) => String(r.nombre).trim().toLocaleLowerCase() === rutaNombre.toLocaleLowerCase());
       if (!ruta) return res.status(403).json({ error: 'Solo puede solicitar clientes para una ruta que tiene asignada.' });
       const documento = String(req.body?.documento_id || '').trim();
+      const actividadEconomica = String(req.body?.actividad_economica || '').trim();
+      if (actividadEconomica && !/^\d{1,20}$/.test(actividadEconomica)) return res.status(400).json({ error: 'La actividad económica debe ser un código numérico; confirme el valor con el cliente.' });
       if (documento) {
         const existente = await db.query.clientes.findFirst({ where: eq(schema.clientes.documento_id, documento) });
         if (existente) return res.status(409).json({ error: 'Ya existe un cliente con ese documento. Solicite acceso a Administración.' });
@@ -45,6 +47,7 @@ export function registrarRutasClientes(app: any, db: any, requirePermission: (..
         nombre,
         tipo_documento: String(req.body?.tipo_documento || 'Fisica'),
         documento_id: documento || null,
+        actividad_economica: actividadEconomica || null,
         telefono: String(req.body?.telefono || '').trim() || null,
         email: String(req.body?.email || '').trim() || null,
         direccion: String(req.body?.direccion || '').trim() || null,
@@ -66,8 +69,9 @@ export function registrarRutasClientes(app: any, db: any, requirePermission: (..
 
   app.post("/api/clientes", requirePermission('clientes', 'create'), async (req, res) => {
     try {
-      const { nombre, tipo_documento, documento_id, telefono, email, direccion, provincia, canton, distrito, latitud, longitud, ruta, condicion_pago, precio_especial, limite_credito, notas } = req.body;
+      const { nombre, tipo_documento, documento_id, actividad_economica, telefono, email, direccion, provincia, canton, distrito, latitud, longitud, ruta, condicion_pago, precio_especial, limite_credito, notas } = req.body;
       if (!nombre) return res.status(400).json({ error: "Nombre es requerido" });
+      if (actividad_economica && !/^\d{1,20}$/.test(String(actividad_economica).trim())) return res.status(400).json({ error: 'La actividad económica debe ser un código numérico; confirme el valor con el cliente.' });
       
       const id = crypto.randomUUID();
       await db.insert(schema.clientes).values({
@@ -75,6 +79,7 @@ export function registrarRutasClientes(app: any, db: any, requirePermission: (..
         nombre,
         tipo_documento: tipo_documento || 'Fisica',
         documento_id: documento_id || null,
+        actividad_economica: actividad_economica || null,
         telefono: telefono || null,
         email: email || null,
         direccion: direccion || null,
@@ -105,11 +110,13 @@ export function registrarRutasClientes(app: any, db: any, requirePermission: (..
       const { id } = req.params;
       const existente = await db.query.clientes.findFirst({ where: eq(schema.clientes.id, id) });
       if (!existente) return res.status(404).json({ error: "Cliente no encontrado" });
-      const { nombre, tipo_documento, documento_id, telefono, email, direccion, provincia, canton, distrito, latitud, longitud, ruta, condicion_pago, precio_especial, limite_credito, notas, estado } = req.body;
+      const { nombre, tipo_documento, documento_id, actividad_economica, telefono, email, direccion, provincia, canton, distrito, latitud, longitud, ruta, condicion_pago, precio_especial, limite_credito, notas, estado } = req.body;
+      if (actividad_economica && !/^\d{1,20}$/.test(String(actividad_economica).trim())) return res.status(400).json({ error: 'La actividad económica debe ser un código numérico; confirme el valor con el cliente.' });
       const updateData: any = {};
       if (nombre !== undefined) updateData.nombre = nombre;
       if (tipo_documento !== undefined) updateData.tipo_documento = tipo_documento;
       if (documento_id !== undefined) updateData.documento_id = documento_id;
+      if (actividad_economica !== undefined) updateData.actividad_economica = actividad_economica;
       if (telefono !== undefined) updateData.telefono = telefono;
       if (email !== undefined) updateData.email = email;
       if (direccion !== undefined) updateData.direccion = direccion;

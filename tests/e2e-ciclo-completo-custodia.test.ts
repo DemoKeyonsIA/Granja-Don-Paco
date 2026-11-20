@@ -304,7 +304,7 @@ describe('E2E — CUSTODIA COMPLETA DEL HUEVO: del cartón en el galerón hasta 
     expect(inv.find((i: any) => i.producto === 'Huevos - Grande' && i.ubicacion === 'Camión 23')).toMatchObject({ cantidad: 30, unidad: 'kg' });
 
     const clientes = (await authRequest().get('/api/clientes')).body;
-    expect(clientes.find((c: any) => c.id === clienteCreditoId).saldo_pendiente).toBe(0);
+    expect(clientes.find((c: any) => c.id === clienteCreditoId).saldo_pendiente).toBe(30000);
 
     const ret = await client.execute({ sql: `SELECT estado, cartones FROM retornos_camion WHERE guia_id = ?`, args: [guiaDespachoId] });
     expect(ret.rows).toHaveLength(1);
@@ -395,10 +395,10 @@ describe('E2E — CUSTODIA COMPLETA DEL HUEVO: del cartón en el galerón hasta 
     expect(res.body.etiqueta.codigoUnico).toBe(eB.codigoUnico);
 
     const trazas = res.body.traza.map((t: any) => ({ evento: t.tipoEvento, usuario: t.usuarioId, ubicacion: t.ubicacion }));
-    expect(trazas.map((t: any) => t.evento)).toEqual(['Alistamiento', 'Pesada', 'Cargada', 'Entregada', 'Retornada', 'RetornoAceptadoBodega']);
+    expect(trazas.map((t: any) => t.evento)).toEqual(['Alistamiento', 'Pesada', 'Cargada', 'Venta FEFO', 'Retornada', 'RetornoAceptadoBodega']);
     expect(trazas[0].usuario).toBe('u-bod');    // bodeguero alistó
     expect(trazas[2].usuario).toBe('u-log');    // logística cargó
-    expect(trazas[3].usuario).toBe('u-ven');    // comercial entregó
+    expect(trazas[3].usuario).toBe('u-ven');    // vendedor consumió la etiqueta al facturar por FEFO
     expect(trazas[4].usuario).toBe('u-ven');    // comercial registró devolución
     expect(trazas[5].usuario).toBe('u-bod');    // bodeguero aceptó físicamente el retorno
     expect(trazas[5].ubicacion).toBe('Bodega Central');
@@ -417,7 +417,7 @@ describe('E2E — CUSTODIA COMPLETA DEL HUEVO: del cartón en el galerón hasta 
     const res = await authRequest().get(`/api/etiquetas/trazabilidad/${encodeURIComponent(eA.codigoUnico)}`);
     expect(res.status).toBe(200);
     const trazas = res.body.traza.map((t: any) => t.tipoEvento);
-    expect(trazas).toEqual(['Alistamiento', 'Pesada', 'Cargada', 'Entregada']);
+    expect(trazas).toEqual(['Alistamiento', 'Pesada', 'Cargada', 'Venta FEFO']);
   });
 
   it('T3 — El kárdex de inventario registra la cadena completa de movimientos', async () => {

@@ -65,7 +65,10 @@ async function crearGuia(camionId: string, etiquetasIds: string[]) {
     .send({ camionId, rutaId: 'r1', etiquetasIds, responsablesCarga: 'Bodeguero', responsableTransporte: 'Vendedor' });
   expect(gu.status).toBe(201);
   const list = await authRequest().get('/api/logistica/guias');
-  return list.body.find((g: any) => g.camionId === camionId);
+  const guia = list.body.find((g: any) => g.camionId === camionId);
+  const salida = await authRequest().post(`/api/logistica/guias/${guia.id}/marcar-en-ruta`);
+  expect(salida.status).toBe(200);
+  return guia;
 }
 
 describe('F4 — Devolución de venta parcial: restaura el galerón y NO crea descuadre falso', () => {

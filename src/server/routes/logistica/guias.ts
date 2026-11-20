@@ -59,6 +59,12 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
       const gastosEfectivoGuia = round2(gastosRuta
         .filter((g: any) => g.guiaId === guia.id && (g.medioPago || 'Efectivo') === 'Efectivo')
         .reduce((s: number, g: any) => s + Number(g.monto || 0), 0));
+      const pagosPorFactura = new Map<string, any[]>();
+      if (facturasData.length) {
+        const pagosData = await db.query.pagos.findMany({ where: inArray(schema.pagos.facturaId, facturasData.map((factura: any) => factura.id)) }).catch(() => [] as any[]);
+        for (const pago of pagosData) pagosPorFactura.set(pago.facturaId, [...(pagosPorFactura.get(pago.facturaId) || []), { metodo: pago.metodo, monto: Number(pago.monto) }]);
+      }
+      ventasRutaData = ventasRutaData.map((venta: any) => ({ ...venta, pagos: pagosPorFactura.get(venta.facturaId) || [] }));
       const dineroRuta = resumenDineroVentasRuta(ventasRutaData, retornosRutaData);
       const camion = camionesData.find((c: any) => c.id === guia.camionId) || null;
       const detalleConEtiquetas = detalles.map((d: any) => {
@@ -89,12 +95,25 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
       clientesRuta = clientesRuta.filter((c: any) => c.estado !== 'Inactivo');
       if (clientesRuta.length === 0) clientesRuta = clientesData.filter((c: any) => c.estado !== 'Inactivo');
       const ordenVisita = guia.rutaOrdenJson ? JSON.parse(guia.rutaOrdenJson) : [];
+      const ordenVisitaCompleta = (ordenVisita || []).map((o: any) => {
+        const cliente = clientesRuta.find((c: any) => c.id === o.clienteId);
+        return cliente ? {
+          ...o,
+          nombre: o.nombre || cliente.nombre,
+          condicionPago: cliente.condicion_pago || 'Contado',
+          limiteCredito: Number(cliente.limite_credito || 0),
+          saldoPendiente: Number(cliente.saldo_pendiente || 0),
+        } : o;
+      });
       const clientesRutaMap = clientesRuta
         .filter((c: any) => !(ordenVisita || []).some((o: any) => o.clienteId === c.id))
         .map((c: any) => ({
           clienteId: c.id,
           nombre: c.nombre,
           prioridad: c.prioridad || 'Normal',
+          condicionPago: c.condicion_pago || 'Contado',
+          limiteCredito: Number(c.limite_credito || 0),
+          saldoPendiente: Number(c.saldo_pendiente || 0),
           ventanaIni: c.ventana_entrega_ini,
           ventanaFin: c.ventana_entrega_fin,
         }));
@@ -107,6 +126,8 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
         unidad: v.unidad || 'cartones',
         total: Number(v.total),
         cobro: v.cobro,
+        pagos: v.pagos || [],
+        facturaId: v.facturaId || null,
         fechaHora: v.fechaHora,
         etiquetaId: v.etiquetaId || null,
         lotesAsignados: v.asignacionesEtiquetas || [],
@@ -125,8 +146,8 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
         detalle: detalleConEtiquetas,
         facturas: facturasData,
         ventas,
-        rutaOrden: ordenVisita,
-        clientesRuta: [...ordenVisita, ...clientesRutaMap],
+        rutaOrden: ordenVisitaCompleta,
+        clientesRuta: [...ordenVisitaCompleta, ...clientesRutaMap],
       });
     } catch (error: any) {
       return res.status(500).json({ error: error.message });

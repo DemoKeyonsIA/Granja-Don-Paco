@@ -77,10 +77,13 @@ export function registrarRutasAprobaciones(app: any, db: any, deps: { requirePer
               if (contado > 0 && stockCuarentena) await tx.update(inventario).set({ cantidad: Number(stockCuarentena.cantidad) + contado, ultima_actualizacion: ahora }).where(eq(inventario.id, stockCuarentena.id));
               else if (contado > 0) await tx.insert(inventario).values({ id: crypto.randomUUID(), producto: linea.producto, cantidad: contado, unidad: linea.unidad || 'cartones', ubicacion: ubicacionCuarentena, ultima_actualizacion: ahora });
               await tx.update(inventario).set({ cantidad: 0, ultima_actualizacion: ahora }).where(eq(inventario.id, saldoCamion.id));
+              const etiquetasProducto = await tx.query.etiquetas.findMany({ where: and(eq(etiquetas.guiaDespachoId, guia.id), eq(etiquetas.producto, linea.producto)) });
+              const lotesEtiquetas = [...new Set(etiquetasProducto.map((e: any) => String(e.lote || '').trim()).filter(Boolean))];
+              const loteConteo = lotesEtiquetas.length === 1 ? lotesEtiquetas[0] : null;
               const transferido = Math.min(sistema, contado);
-              if (transferido > 0) await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: linea.producto, cantidad: transferido, tipo: 'Retorno a Cuarentena', origen: camion.nombre, destino: ubicacionCuarentena, fecha: ahora, referencia_id: aprobacionPrev.id });
+              if (transferido > 0) await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: linea.producto, cantidad: transferido, tipo: 'Retorno a Cuarentena', origen: camion.nombre, destino: ubicacionCuarentena, fecha: ahora, referencia_id: aprobacionPrev.id, registradoPor: aprobadoPor, lote: loteConteo });
               const delta = contado - sistema;
-              if (Math.abs(delta) > 0.0001) await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: linea.producto, cantidad: Math.abs(delta), tipo: delta > 0 ? 'Ajuste Conteo Positivo' : 'Ajuste Conteo Negativo', origen: delta > 0 ? 'Diferencia física verificada' : camion.nombre, destino: delta > 0 ? ubicacionCuarentena : 'Diferencia de inventario', fecha: ahora, referencia_id: aprobacionPrev.id });
+              if (Math.abs(delta) > 0.0001) await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: linea.producto, cantidad: Math.abs(delta), tipo: delta > 0 ? 'Ajuste Conteo Positivo' : 'Ajuste Conteo Negativo', origen: delta > 0 ? 'Diferencia física verificada' : camion.nombre, destino: delta > 0 ? ubicacionCuarentena : 'Diferencia de inventario', fecha: ahora, referencia_id: aprobacionPrev.id, registradoPor: aprobadoPor, lote: loteConteo });
               if (contado > 0) await tx.insert(retornos_camion).values({
                 id: crypto.randomUUID(), guiaId: guia.id, etiquetaId: null, ventaRutaId: null, fecha: ahora,
                 responsable: segundo.responsable || segundo.usuarioId, producto: linea.producto, cartones: contado,
@@ -88,7 +91,6 @@ export function registrarRutasAprobaciones(app: any, db: any, deps: { requirePer
                 estado: 'AceptadoBodega', aceptadoPor: aprobadoPor, aceptadoEn: ahora, condicion: 'cuarentena', tipo: 'sobrante',
               });
               await tx.update(schema.inventario_cuarentena).set({ estado: 'Aprobada' }).where(eq(schema.inventario_cuarentena.aprobacionId, aprobacionPrev.id));
-              const etiquetasProducto = await tx.query.etiquetas.findMany({ where: and(eq(etiquetas.guiaDespachoId, guia.id), eq(etiquetas.producto, linea.producto)) });
               for (const etiqueta of etiquetasProducto) {
                 // La cantidad/identidad impresa nunca se reescribe por un conteo agregado.
                 // Se bloquea la etiqueta anterior y se conserva evidencia ligada al caso.
@@ -136,7 +138,7 @@ export function registrarRutasAprobaciones(app: any, db: any, deps: { requirePer
           const clienteId = crypto.randomUUID();
           clienteCreado = {
             id: clienteId, nombre: String(datos.nombre || '').trim(), tipo_documento: datos.tipo_documento || 'Fisica',
-            documento_id: doc || null, telefono: datos.telefono || null, email: datos.email || null,
+            documento_id: doc || null, actividad_economica: datos.actividad_economica || null, telefono: datos.telefono || null, email: datos.email || null,
             direccion: datos.direccion || null, provincia: datos.provincia || null, canton: datos.canton || null,
             distrito: datos.distrito || null, ruta: ruta.nombre, condicion_pago: 'Contado', precio_especial: null,
             limite_credito: 0, saldo_pendiente: 0, promedio_compra: 0, estado: 'Activo', notas: null, fecha_creacion: ahora,

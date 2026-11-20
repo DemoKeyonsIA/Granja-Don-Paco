@@ -4,7 +4,7 @@ import { agingPorFacturas } from '../../lib/cobranza';
 import {
   ingresosFacturadosDe, ingresosCobradosDe, cuentasPorCobrarDe, gastosDe,
   gastosPorCategoriaDe, utilidadYMargenDe, variacionDe, cicloDelDineroDe,
-  mesEnCursoDe, periodoAnteriorDe, dentroDePeriodo,
+  mesEnCursoDe, periodoAnteriorDe, dentroDePeriodo, vincularNotasCredito,
 } from '../../lib/finanzas';
 
 /** Registra depósitos, resumen financiero y sus alias de reportes. */
@@ -121,34 +121,41 @@ export function registrarRutasFinanzas(
 
       // `pagos` y `ventas_ruta` no existen en toda instalación vieja: sin ellas
       // el resumen debe servir ceros, no reventar.
-      const [facturas, tiquetes, gastos, pagos, cierresCaja, depositosCaja] = await Promise.all([
+      const [facturas, tiquetes, gastos, pagos, cierresCaja, depositosCaja, documentosFiscales] = await Promise.all([
         db.query.facturas.findMany(),
         db.query.ventas_ruta.findMany({ where: and(gte(schema.ventas_ruta.fechaHora, desdeConsulta), lt(schema.ventas_ruta.fechaHora, hastaExclusivo)) }).catch(() => [] as any[]),
         db.query.gastos.findMany({ where: and(gte(schema.gastos.fecha, desdeConsulta), lt(schema.gastos.fecha, hastaExclusivo)) }),
         db.query.pagos.findMany({ where: and(gte(schema.pagos.fecha, desdeConsulta), lt(schema.pagos.fecha, hastaExclusivo)) }).catch(() => [] as any[]),
         db.query.cierres_caja_ruta.findMany({ where: and(gte(cierres_caja_ruta.fecha, desde), lt(cierres_caja_ruta.fecha, hastaActualExclusivo)) }).catch(() => [] as any[]),
         db.query.depositos_caja.findMany({ where: and(gte(depositos_caja.fecha, desde), lt(depositos_caja.fecha, hastaActualExclusivo)) }).catch(() => [] as any[]),
+        db.query.facturas_electronicas.findMany().catch(() => [] as any[]),
       ]);
+      const facturasConNotas = vincularNotasCredito(facturas as any[], documentosFiscales as any[]);
 
       // La cartera necesita pagos históricos, pero solo se transporta al proceso
       // un total por factura; los pagos del periodo siguen disponibles para caja.
       const pagosAgregados = await db.select({ facturaId: schema.pagos.facturaId, monto: sum(schema.pagos.monto) }).from(schema.pagos).groupBy(schema.pagos.facturaId).catch(() => [] as any[]);
       const pagadoPorFactura = await mapaPagadoPorFactura(facturas as any[], pagosAgregados as any[]);
 
-      const ingresosFacturados = ingresosFacturadosDe(facturas as any[], tiquetes as any[], periodo);
+      const ingresosFacturados = ingresosFacturadosDe(facturasConNotas as any[], tiquetes as any[], periodo);
       const ingresosCobrados = ingresosCobradosDe(facturas as any[], pagos as any[], periodo, tiquetes as any[]);
       const totalGastos = gastosDe(gastos as any[], periodo);
       const { utilidad, margen } = utilidadYMargenDe(ingresosFacturados, totalGastos);
 
       // La cartera es el estado actual, no una medida del periodo: se debe lo que
       // se debe hoy, sin importar cuándo se vendió.
-      const cuentasPorCobrar = cuentasPorCobrarDe(facturas as any[], pagadoPorFactura);
+      const cuentasPorCobrar = cuentasPorCobrarDe(facturasConNotas as any[], pagadoPorFactura);
 
-      const ingresosFacturadosAnterior = ingresosFacturadosDe(facturas as any[], tiquetes as any[], periodoAnterior);
+      const ingresosFacturadosAnterior = ingresosFacturadosDe(facturasConNotas as any[], tiquetes as any[], periodoAnterior);
       const ingresosCobradosAnterior = ingresosCobradosDe(facturas as any[], pagos as any[], periodoAnterior, tiquetes as any[]);
       const gastosAnterior = gastosDe(gastos as any[], periodoAnterior);
 
-      const aging = agingPorFacturas(facturas as any[], pagadoPorFactura);
+      const facturasConSaldoAjustado = facturasConNotas.map((f: any) => {
+        if (f.estado === 'NotaCredito' || !f.id) return f;
+        const credito = facturasConNotas.filter((nc: any) => nc.estado === 'NotaCredito' && String(nc.referenciaFacturaId ?? '') === String(f.id)).reduce((s: number, nc: any) => s + Number(nc.total || 0), 0);
+        return credito ? { ...f, total: Math.max(0, Number(f.total || 0) - credito) } : f;
+      });
+      const aging = agingPorFacturas(facturasConSaldoAjustado as any[], pagadoPorFactura);
       const documentos = facturas.filter((f: any) => String(f.estado ?? '') !== 'Anulada' && dentroDePeriodo(String(f.fecha ?? ''), periodo));
       const cierresCajaPeriodo = (cierresCaja as any[]).filter((c: any) => dentroDePeriodo(String(c.fecha || ''), periodo));
       const depositosCajaPeriodo = (depositosCaja as any[]).filter((d: any) => dentroDePeriodo(String(d.fecha || ''), periodo));
@@ -219,16 +226,18 @@ export function registrarRutasFinanzas(
         return res.status(400).json({ error: "Indique un periodo válido con fecha inicial no posterior a la final." });
       }
       const periodo = { desde, hasta };
-      const [facturas, tiquetes, gastos, pagos] = await Promise.all([
+      const [facturas, tiquetes, gastos, pagos, documentosFiscales] = await Promise.all([
         db.query.facturas.findMany(),
         db.query.ventas_ruta.findMany().catch(() => [] as any[]),
         db.query.gastos.findMany(),
         db.query.pagos.findMany().catch(() => [] as any[]),
+        db.query.facturas_electronicas.findMany().catch(() => [] as any[]),
       ]);
+      const facturasConNotas = vincularNotasCredito(facturas as any[], documentosFiscales as any[]);
       const pagosAgregados = await db.select({ facturaId: schema.pagos.facturaId, monto: sum(schema.pagos.monto) }).from(schema.pagos).groupBy(schema.pagos.facturaId).catch(() => [] as any[]);
       const pagadoPorFactura = await mapaPagadoPorFactura(facturas as any[], pagosAgregados as any[]);
 
-      const totalVentas = ingresosFacturadosDe(facturas as any[], tiquetes as any[], periodo);
+      const totalVentas = ingresosFacturadosDe(facturasConNotas as any[], tiquetes as any[], periodo);
       const totalGastos = gastosDe(gastos as any[], periodo);
       const { utilidad, margen } = utilidadYMargenDe(totalVentas, totalGastos);
 
@@ -236,10 +245,10 @@ export function registrarRutasFinanzas(
         totalVentas,
         totalGastos,
         utilidadNeta: utilidad,
-        cuentasPorCobrar: cuentasPorCobrarDe(facturas as any[], pagadoPorFactura),
+        cuentasPorCobrar: cuentasPorCobrarDe(facturasConNotas as any[], pagadoPorFactura),
         gastosPorCategoria: Object.fromEntries(gastosPorCategoriaDe(gastos as any[], periodo).map(g => [g.categoria, g.monto])),
         margen,
-        ingresosCobrados: ingresosCobradosDe(facturas as any[], pagos as any[], periodo, tiquetes as any[]),
+        ingresosCobrados: ingresosCobradosDe(facturasConNotas as any[], pagos as any[], periodo, tiquetes as any[]),
         periodo,
       });
     } catch (error: any) { res.status(500).json({ error: error.message }); }

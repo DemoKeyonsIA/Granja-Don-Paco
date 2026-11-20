@@ -4,6 +4,7 @@ export type VentaRutaParaResumen = {
   cartones?: number | string | null;
   total?: number | string | null;
   cobro?: string | null;
+  pagos?: Array<{ monto?: number | string | null; metodo?: string | null }>;
 };
 
 export type RetornoRutaParaResumen = {
@@ -29,12 +30,27 @@ export function resumenDineroVentasRuta(ventas: VentaRutaParaResumen[], retornos
     return cantidad > 0 ? Number(venta.total || 0) * (1 - devueltos / cantidad) : 0;
   };
 
-  const efectivo = emitidas.filter((venta) => venta.cobro === 'Efectivo')
-    .reduce((suma, venta) => suma + totalNeto(venta), 0);
-  const credito = emitidas.filter((venta) => venta.cobro === 'Credito')
-    .reduce((suma, venta) => suma + totalNeto(venta), 0);
-  const transferencia = emitidas.filter((venta) => ['Transferencia', 'SINPE'].includes(String(venta.cobro)))
-    .reduce((suma, venta) => suma + totalNeto(venta), 0);
+  let efectivo = 0;
+  let credito = 0;
+  let transferencia = 0;
+  for (const venta of emitidas) {
+    const neto = totalNeto(venta);
+    const pagos = Array.isArray(venta.pagos) ? venta.pagos.filter((pago) => Number(pago.monto) > 0) : [];
+    if (pagos.length) {
+      const totalRecibido = pagos.reduce((suma, pago) => suma + Number(pago.monto || 0), 0);
+      const factorNeto = Number(venta.total) > 0 ? neto / Number(venta.total) : 0;
+      for (const pago of pagos) {
+        const montoNeto = Number(pago.monto || 0) * factorNeto;
+        const metodo = String(pago.metodo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        if (metodo === 'efectivo') efectivo += montoNeto;
+        else transferencia += montoNeto;
+      }
+      credito += Math.max(0, neto - Math.min(neto, totalRecibido * factorNeto));
+    } else if (venta.cobro === 'Credito') credito += neto;
+    else if (['Transferencia', 'SINPE', 'Tarjeta', 'Cheque', 'Otro'].includes(String(venta.cobro))) transferencia += neto;
+    else if (venta.cobro === 'Mixto') credito += neto;
+    else efectivo += neto;
+  }
 
   return {
     efectivo: redondearDinero(efectivo),

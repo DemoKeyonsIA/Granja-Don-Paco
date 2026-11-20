@@ -256,12 +256,13 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
     retornoE2EId = res.body.retornoId;
 
     const clientes = (await requestAs(app, 'u-log').get('/api/clientes')).body;
-    expect(clientes.find((c: any) => c.id === cCred.id).saldo_pendiente).toBe(PRECIO_KG * 30);
+    // La deuda no se revierte hasta que Bodega acepta físicamente el retorno.
+    expect(clientes.find((c: any) => c.id === cCred.id).saldo_pendiente).toBe(2 * PRECIO_KG * 30);
     const inv = await getInventario();
     expect(inv.find((i: any) => i.producto === 'Huevos - Grande' && i.ubicacion === 'Camión 9').cantidad).toBe(30);
   });
 
-  it('E9 — Fin de caja en ruta: cuadre con 2 emitidos, 1 anulado y retorno', async () => {
+  it('E9 — Fin de caja en ruta: cuadre con ventas y retorno pendiente', async () => {
     const res = await requestAs(app, 'u-log').post('/api/logistica/caja/fin-dia').send({ guiaId: guiaDespachoId, responsable: 'u-ven' });
     expect(res.status).toBe(200);
     expect(res.body.estado).toBe('CajaCerrada');
@@ -292,7 +293,7 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
     const atendidos = linea.clientesAtendidos;
     const atendidosTqs = atendidos.map((c: any) => c.codigoUnico || c.tiqueteConsecutivo);
     expect(atendidosTqs).toEqual(expect.arrayContaining(['TQ-0001', 'TQ-0003']));
-    expect(linea.saltosSecuencia.length).toBe(0); // TQ-0001 y TQ-0003 sin huecos: el anulado no cuenta como salto
+    expect(linea.saltosSecuencia.length).toBe(0); // el tiquete devuelto se conserva en la secuencia
     expect(linea.detalleEtiquetas).toHaveLength(3);
   });
 
@@ -461,24 +462,22 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
 
   // ==================== FACTURAS Y TIQUETES ====================
 
-  it('F1 — Consolidar la ruta cerrada → facturas FAC expedidas en línea con los tiquetes', async () => {
+  it('F1 — Venta y factura ya nacen juntas; la consolidación heredada evita duplicar', async () => {
     const res = await requestAs(app, 'u-log').post('/api/facturacion/consolidar-ruta')
       .set('x-user-id', 'u-jef').send({ guiaId: guiaDespachoId });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('ya fue consolidada');
 
     const facturas = (await requestAs(app, 'u-log').get('/api/facturas')).body;
-    const facEfvo = facturas.find((f: any) => f.consecutivo === 'FAC-000001');
-    const facCred = facturas.find((f: any) => f.consecutivo === 'FAC-000002');
-    const ncr = facturas.find((f: any) => f.consecutivo.startsWith('NCR-'));
-    expect(facEfvo).toMatchObject({ clienteId: cEfvo.id, condicion_pago: 'Contado', estado: 'Pagada', total: PRECIO_KG * 30 });
-    expect(facCred).toMatchObject({ clienteId: cCred.id, condicion_pago: 'Credito', estado: 'Pendiente', total: PRECIO_KG * 30 });
-    // La devolución (TQ-0002) emite la nota de crédito receptora (no suma ingresos)
-    expect(ncr).toMatchObject({ estado: 'NotaCredito', total: PRECIO_KG * 30 });
-    expect(facturas).toHaveLength(3);
+    const notas = facturas.filter((f: any) => f.estado === 'NotaCredito');
+    expect(facturas.filter((f: any) => f.estado !== 'NotaCredito')).toHaveLength(3);
+    expect(notas).toHaveLength(1);
+    expect(notas[0].total).toBe(PRECIO_KG * 30);
 
-    // Documentos electrónicos generados: 2 facturas (FE) + 1 nota de crédito (NC)
+    // Cada una de las tres ventas quedó facturada en su registro; la cuarta
+    // factura local es la NC simulada generada al aceptar el retorno en Bodega.
     const docs = (await requestAs(app, 'u-log').get('/api/facturacion/documentos')).body;
-    expect(docs.filter((d: any) => d.tipoDocumento === 'Factura')).toHaveLength(2);
+    expect(docs.filter((d: any) => d.tipoDocumento === 'Factura')).toHaveLength(3);
     expect(docs.filter((d: any) => d.tipoDocumento === 'NotaCredito')).toHaveLength(1);
   });
 
@@ -486,17 +485,16 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
     const res = await requestAs(app, 'u-log').get('/api/dashboard/enterprise');
     expect(res.status).toBe(200);
 
-    // Devengado: las dos facturas del día (contado + crédito), con la nota de
-    // crédito excluida por su estado `NotaCredito` (convención R3).
+    // Tres ventas originales menos la NC que revierte la devolución aceptada.
     expect(res.body.ingresosHoy).toBe(2 * PRECIO_KG * 30);
-    // Cobrado: solo la de contado, porque la de crédito sigue sin pagarse.
+    // Cobrado: solo la venta de contado; la NC no simula una salida de efectivo.
     expect(res.body.ingresosCobradosHoy).toBe(PRECIO_KG * 30);
     expect(res.body.gastosHoy).toBe(50000);                               // diesel real
     expect(res.body.utilidadNeta).toBe(2 * PRECIO_KG * 30 - 50000);
     expect(res.body.cartonesProducidos).toBe(120);                        // recolección real
     expect(res.body.stockBodegaCentral).toBe(38);                         // 98 - 90 + 30 retorno
     expect(res.body.totalAvesVivas).toBe(4500);                           // aves del galerón
-    expect(res.body.facturasEmitidas).toBe(3);                            // 2 FAC + 1 factura NCR
+    expect(res.body.facturasEmitidas).toBe(4);                            // 3 facturas de venta + NC de devolución
     expect(res.body.clientesActivos).toBe(2);
     expect(res.body.rutasActivas).toBe(1);
     expect(res.body.cuentasPorCobrar).toBe(PRECIO_KG * 30);            // factura a crédito pendiente
@@ -511,7 +509,10 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
 
   it('F3 — Cobro de la factura a crédito: el dashboard mueve ingresos y salda cuentas por cobrar', async () => {
     const facturas = (await requestAs(app, 'u-log').get('/api/facturas')).body;
-    const facCred = facturas.find((f: any) => f.consecutivo === 'FAC-000002');
+    const docs = (await requestAs(app, 'u-log').get('/api/facturacion/documentos')).body;
+    const facturaDevueltaId = docs.find((d: any) => d.tipoDocumento === 'NotaCredito')?.notasCreditoId;
+    const facCred = facturas.find((f: any) => f.clienteId === cCred.id && f.estado === 'Pendiente' && f.id !== facturaDevueltaId);
+    expect(facCred).toBeDefined();
 
     // Registrar un cobro exige sesión: la ruta ahora valida permisos, así que el
 // pago va firmado y no permitido "a cualquiera" como antes.
@@ -534,7 +535,8 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
 
   it('F4 — Nota de crédito directa sobre una factura: genera documento NC', async () => {
     const facturas = (await requestAs(app, 'u-log').get('/api/facturas')).body;
-    const facEfvo = facturas.find((f: any) => f.consecutivo === 'FAC-000001');
+    const facEfvo = facturas.find((f: any) => f.clienteId === cEfvo.id && f.estado === 'Pagada' && f.estado !== 'NotaCredito');
+    expect(facEfvo).toBeDefined();
 
     const res = await requestAs(app, 'u-log').post('/api/facturacion/nota-credito')
       .set('x-user-id', 'u-jef').send({
@@ -562,14 +564,14 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
 
     // Dashboard empresarial: snapshot inmutable tras el flujo completo
     const d = (await requestAs(app, 'u-log').get('/api/dashboard/enterprise')).body;
-    // R3: la NC directa NO suma ingreso (estado NotaCredito, excluida del libro).
-    expect(d.ingresosHoy).toBe(2 * PRECIO_KG * 30);                  // devengado del día
+    // Se netean tanto la devolución de ruta como la NC parcial de la factura contado.
+    expect(d.ingresosHoy).toBe(2 * PRECIO_KG * 30 - 64000);           // devengado del día
     expect(d.gastosHoy).toBe(50000);
-    expect(d.utilidadNeta).toBe(2 * PRECIO_KG * 30 - 50000);
+    expect(d.utilidadNeta).toBe(2 * PRECIO_KG * 30 - 64000 - 50000);
     expect(d.cartonesProducidos).toBe(120);
     expect(d.stockBodegaCentral).toBe(38);
     expect(d.totalAvesVivas).toBe(4500);
-    expect(d.facturasEmitidas).toBe(4);                            // 2 FAC + NCR devolución + NC directa
+    expect(d.facturasEmitidas).toBe(5);                            // 3 facturas de venta + NC devolución + NC directa
     expect(d.clientesActivos).toBe(2);
     expect(d.rutasActivas).toBe(1);
     expect(d.cuentasPorCobrar).toBe(0);

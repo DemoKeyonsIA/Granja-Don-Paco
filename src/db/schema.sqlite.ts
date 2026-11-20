@@ -23,6 +23,7 @@ export const clientes = sqliteTable('clientes', {
   nombre: text('nombre').notNull(),
   tipo_documento: text('tipo_documento').default('Fisica'),
   documento_id: text('documento_id'),
+  actividad_economica: text('actividad_economica'),
   telefono: text('telefono'),
   email: text('email'),
   direccion: text('direccion'),
@@ -180,6 +181,7 @@ export const retornos_camion = sqliteTable('retornos_camion', {
   ventaRutaId: text('venta_ruta_id'),
   fecha: text('fecha').notNull(),
   responsable: text('responsable').notNull(),
+  registradoPor: text('registrado_por'),
   producto: text('producto').notNull(),
   cartones: real('cartones').notNull(), // cantidad en unidad declarada en etiquetas_json
   unidad: text('unidad').notNull().default('cartones'),
@@ -391,6 +393,8 @@ export const movimientosInventario = sqliteTable('movimientos_inventario', {
   destino: text('destino').notNull(),
   fecha: text('fecha').notNull(),
   referencia_id: text('referencia_id'),
+  registradoPor: text('registrado_por'),
+  lote: text('lote'),
 });
 
 export const produccion_diaria = sqliteTable('produccion_diaria', {
@@ -399,6 +403,8 @@ export const produccion_diaria = sqliteTable('produccion_diaria', {
   granjaId: text('granja_id').references(() => granjas.id),
   galeronId: text('galeron_id').references(() => galerones.id),
   fecha: text('fecha').notNull(),
+  registradoPor: text('registrado_por'),
+  responsable: text('responsable'),
   tipo_producto: text('tipo_producto').notNull(),
   cantidad: integer('cantidad').notNull(),
   unidad: text('unidad').notNull(),
@@ -568,6 +574,30 @@ export const facturas_electronicas = sqliteTable('facturas_electronicas', {
   proveedor: text('proveedor'), // Facel, FacturaYA, FACBOX, HaciendaDirect, etc.
   idempotencyKey: text('idempotency_key'),
   idempotencyPayload: text('idempotency_payload'),
+  datosFiscalSnapshot: text('datos_fiscal_snapshot'),
+});
+
+export const configuracionFiscalEmisor = sqliteTable('configuracion_fiscal_emisor', {
+  id: text('id').primaryKey(),
+  razonSocial: text('razon_social').notNull().default(''),
+  identificacionTipo: text('identificacion_tipo').notNull().default(''),
+  identificacion: text('identificacion').notNull().default(''),
+  actividadEconomica: text('actividad_economica').notNull().default(''),
+  nombreComercial: text('nombre_comercial'),
+  correo: text('correo'),
+  telefono: text('telefono'),
+  provincia: text('provincia'),
+  canton: text('canton'),
+  distrito: text('distrito'),
+  barrio: text('barrio'),
+  otrasSenas: text('otras_senas'),
+  monedaPresentacion: text('moneda_presentacion').notNull().default('CRC'),
+  estadoRevision: text('estado_revision').notNull().default('Pendiente'),
+  referenciaEvidencia: text('referencia_evidencia'),
+  revisorNombre: text('revisor_nombre'),
+  revisorCredencial: text('revisor_credencial'),
+  actualizadoPor: text('actualizado_por'),
+  actualizadoEn: text('actualizado_en'),
 });
 
 export const pesos_por_punto = sqliteTable('pesos_por_punto', {
@@ -625,6 +655,10 @@ export const inventario_alimento = sqliteTable('inventario_alimento', {
   loteAvesAsociado: text('lote_aves_asociado'),
   fechaIngreso: text('fecha_ingreso').notNull(),
   responsable: text('responsable').notNull(),
+  referenciaDocumentoOrigen: text('referencia_documento_origen'),
+  fechaDocumentoOrigen: text('fecha_documento_origen'),
+  montoDocumentoOrigen: real('monto_documento_origen'),
+  monedaDocumentoOrigen: text('moneda_documento_origen'),
   merma: real('merma').default(0),
   estado: text('estado').default('Activo'), // Activo, Agotado, Vencido
 });
@@ -637,6 +671,7 @@ export const consumo_alimento = sqliteTable('consumo_alimento', {
   cantidadConsumida: real('cantidad_consumida').notNull(),
   unidad: text('unidad').notNull(),
   fecha: text('fecha').notNull(),
+  tipoMovimiento: text('tipo_movimiento').notNull().default('Consumo'),
   responsable: text('responsable').notNull(),
   observaciones: text('observaciones'),
 });
@@ -687,6 +722,7 @@ export const desperdicios = sqliteTable('desperdicios', {
   peso: real('peso'),
   motivo: text('motivo').notNull(), // Quebrado Granja, Quebrado Bodega, Quebrado Camión, Rechazo Cliente, Vencido, Sucio, Diferencia Peso, Ajuste Administrativo
   responsable: text('responsable').notNull(),
+  registradoPor: text('registrado_por'),
   evidencia: text('evidencia'),
   aprobacion: text('aprobacion'),
   impactoFinanciero: real('impacto_financiero').default(0),
@@ -764,6 +800,150 @@ export const auditoria = sqliteTable('auditoria', {
   fecha: text('fecha').notNull(),
 });
 
+// Base de contabilidad general. No se generan asientos automáticos hasta que
+// las políticas contables y el mapeo de cuentas sean aprobados por Contabilidad.
+export const cuentasContables = sqliteTable('cuentas_contables', {
+  id: text('id').primaryKey(),
+  codigo: text('codigo').notNull().unique(),
+  nombre: text('nombre').notNull(),
+  tipo: text('tipo').notNull(), // Activo | Pasivo | Patrimonio | Ingreso | Costo | Gasto
+  naturaleza: text('naturaleza').notNull(), // Deudora | Acreedora
+  cuentaPadreId: text('cuenta_padre_id'),
+  permiteMovimiento: integer('permite_movimiento').notNull().default(1),
+  estado: text('estado').notNull().default('Activa'),
+  revisionEstado: text('revision_estado').notNull().default('Pendiente CPA'),
+  revisionVigencia: text('revision_vigencia'),
+  revisionRevisorNombre: text('revision_revisor_nombre'),
+  revisionRevisorCredencial: text('revision_revisor_credencial'),
+  revisionEvidencia: text('revision_evidencia'),
+  revisionActualizadoEn: text('revision_actualizado_en'),
+  revisionActualizadoPor: text('revision_actualizado_por'),
+  esEfectivoEquivalente: integer('es_efectivo_equivalente').notNull().default(0),
+  clasificacionFlujo: text('clasificacion_flujo'),
+  creadoEn: text('creado_en').notNull(),
+});
+
+export const cuentasContablesHistorial = sqliteTable('cuentas_contables_historial', {
+  id: text('id').primaryKey(),
+  cuentaId: text('cuenta_id').notNull(),
+  snapshotJson: text('snapshot_json').notNull(),
+  cambiadoPor: text('cambiado_por'),
+  cambiadoEn: text('cambiado_en').notNull(),
+});
+
+export const periodosContables = sqliteTable('periodos_contables', {
+  id: text('id').primaryKey(),
+  fechaInicio: text('fecha_inicio').notNull(),
+  fechaFin: text('fecha_fin').notNull(),
+  estado: text('estado').notNull().default('Abierto'), // Abierto | Cerrado
+  creadoPor: text('creado_por').notNull(),
+  creadoEn: text('creado_en').notNull(),
+  cerradoPor: text('cerrado_por'),
+  cerradoEn: text('cerrado_en'),
+});
+
+export const secuenciasContables = sqliteTable('secuencias_contables', {
+  id: text('id').primaryKey(),
+  ultimo: integer('ultimo').notNull().default(0),
+});
+
+export const asientosContables = sqliteTable('asientos_contables', {
+  id: text('id').primaryKey(),
+  consecutivo: integer('consecutivo').notNull().unique(),
+  fecha: text('fecha').notNull(),
+  periodoId: text('periodo_id').notNull().references(() => periodosContables.id),
+  descripcion: text('descripcion').notNull(),
+  referenciaTipo: text('referencia_tipo'),
+  referenciaId: text('referencia_id'),
+  estado: text('estado').notNull().default('Borrador'), // Borrador | Contabilizado | Reversado
+  creadoPor: text('creado_por').notNull(),
+  creadoEn: text('creado_en').notNull(),
+  contabilizadoPor: text('contabilizado_por'),
+  contabilizadoEn: text('contabilizado_en'),
+  reversaDeId: text('reversa_de_id'),
+  idempotencyKey: text('idempotency_key'),
+  idempotencyPayload: text('idempotency_payload'),
+});
+
+export const lineasAsientoContable = sqliteTable('lineas_asiento_contable', {
+  id: text('id').primaryKey(),
+  asientoId: text('asiento_id').notNull().references(() => asientosContables.id),
+  cuentaId: text('cuenta_id').notNull().references(() => cuentasContables.id),
+  descripcion: text('descripcion').notNull().default(''),
+  debito: real('debito').notNull().default(0),
+  credito: real('credito').notNull().default(0),
+  terceroId: text('tercero_id'),
+  granjaId: text('granja_id'),
+  galeronId: text('galeron_id'),
+  loteId: text('lote_id'),
+  productoId: text('producto_id'),
+  rutaId: text('ruta_id'),
+  vendedorId: text('vendedor_id'),
+});
+
+export const politicasContables = sqliteTable('politicas_contables', {
+  id: text('id').primaryKey(),
+  clave: text('clave').notNull().unique(),
+  nombre: text('nombre').notNull(),
+  normaReferencia: text('norma_referencia').notNull(),
+  pregunta: text('pregunta').notNull(),
+  criterio: text('criterio'),
+  justificacion: text('justificacion'),
+  estado: text('estado').notNull().default('Pendiente'),
+  fechaVigencia: text('fecha_vigencia'),
+  revisorNombre: text('revisor_nombre'),
+  revisorCredencial: text('revisor_credencial'),
+  evidenciaAprobacion: text('evidencia_aprobacion'),
+  actualizadoPor: text('actualizado_por'),
+  actualizadoEn: text('actualizado_en'),
+});
+
+export const politicasContablesHistorial = sqliteTable('politicas_contables_historial', {
+  id: text('id').primaryKey(),
+  clave: text('clave').notNull(),
+  estado: text('estado').notNull(),
+  snapshotJson: text('snapshot_json').notNull(),
+  cambiadoPor: text('cambiado_por'),
+  cambiadoEn: text('cambiado_en').notNull(),
+});
+
+export const notasEstadosFinancieros = sqliteTable('notas_estados_financieros', {
+  id: text('id').primaryKey(),
+  periodoDesde: text('periodo_desde').notNull(),
+  periodoHasta: text('periodo_hasta').notNull(),
+  clave: text('clave').notNull(),
+  reemplazaNotaId: text('reemplaza_nota_id'),
+  titulo: text('titulo').notNull(),
+  contenido: text('contenido').notNull(),
+  estado: text('estado').notNull().default('Borrador'),
+  version: integer('version').notNull().default(1),
+  evidenciaReferencia: text('evidencia_referencia'),
+  revisorNombre: text('revisor_nombre'),
+  revisorCredencial: text('revisor_credencial'),
+  creadoPor: text('creado_por').notNull(),
+  creadoEn: text('creado_en').notNull(),
+  actualizadoPor: text('actualizado_por').notNull(),
+  actualizadoEn: text('actualizado_en').notNull(),
+});
+
+export const mapeosCuentasContables = sqliteTable('mapeos_cuentas_contables', {
+  id: text('id').primaryKey(),
+  clave: text('clave').notNull().unique(),
+  nombre: text('nombre').notNull(),
+  cuentaDebitoId: text('cuenta_debito_id'),
+  cuentaCreditoId: text('cuenta_credito_id'),
+  dimensionesJson: text('dimensiones_json').notNull().default('[]'),
+  tratamientoFiscal: text('tratamiento_fiscal'),
+  estado: text('estado').notNull().default('Pendiente'),
+  noAplicaJustificacion: text('no_aplica_justificacion'),
+  fechaVigencia: text('fecha_vigencia'),
+  revisorNombre: text('revisor_nombre'),
+  revisorCredencial: text('revisor_credencial'),
+  evidenciaAprobacion: text('evidencia_aprobacion'),
+  actualizadoPor: text('actualizado_por'),
+  actualizadoEn: text('actualizado_en'),
+});
+
 export const productosCatalogo = sqliteTable('productos_catalogo', {
   id: text('id').primaryKey(),
   nombre: text('nombre').notNull(),
@@ -776,6 +956,18 @@ export const productosCatalogo = sqliteTable('productos_catalogo', {
   fechaCreacion: text('fecha_creacion').notNull(),
   vidaUtilDias: integer('vida_util_dias').default(28),
   diasAvisoVencimiento: integer('dias_aviso_vencimiento').default(7),
+  cabysCodigo: text('cabys_codigo'),
+  cabysDescripcion: text('cabys_descripcion'),
+  tratamientoFiscal: text('tratamiento_fiscal'),
+  tarifaImpuesto: real('tarifa_impuesto'),
+  exoneracionReferencia: text('exoneracion_referencia'),
+  fiscalVigenteDesde: text('fiscal_vigente_desde'),
+  fiscalVigenteHasta: text('fiscal_vigente_hasta'),
+  fiscalEstado: text('fiscal_estado').notNull().default('Pendiente'),
+  fiscalAprobacionReferencia: text('fiscal_aprobacion_referencia'),
+  fiscalRevisorNombre: text('fiscal_revisor_nombre'),
+  fiscalRevisorCredencial: text('fiscal_revisor_credencial'),
+  fiscalAprobadoEn: text('fiscal_aprobado_en'),
 });
 
 export const precioExcepcionesCliente = sqliteTable('precio_excepciones_cliente', {

@@ -202,6 +202,8 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
   const [nuevaRemisionAbierta, setNuevaRemisionAbierta] = useState(false);
   const [manualProducto, setManualProducto] = useState('');
   const [manualCantidad, setManualCantidad] = useState('');
+  const [manualLote, setManualLote] = useState('');
+  const [manualVencimiento, setManualVencimiento] = useState('');
   const [manualProcedencia, setManualProcedencia] = useState('Granja (sin traslado)');
   const [manualObservacion, setManualObservacion] = useState('');
   const [enviandoManual, setEnviandoManual] = useState(false);
@@ -852,13 +854,13 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
     try {
       const res = await fetch('/api/bodega/ingreso-manual', {
         method: 'POST', headers: sessionHeaders(currentUser?.id || '', true),
-        body: JSON.stringify({ producto: manualProducto, cantidad: cant, unidad: 'kg', procedencia: manualProcedencia, observaciones: manualObservacion.trim(), usuarioId: currentUser?.id })
+        body: JSON.stringify({ producto: manualProducto, cantidad: cant, unidad: 'kg', lote: manualLote.trim(), fechaVencimiento: manualVencimiento || null, procedencia: manualProcedencia, observaciones: manualObservacion.trim(), usuarioId: currentUser?.id })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al registrar ingreso manual');
       toast.success(`Ingreso manual registrado · +${cant} ${manualProducto}`);
       setIngresoManualAbierto(false);
-      setManualProducto(''); setManualCantidad(''); setManualProcedencia('Granja (sin traslado)'); setManualObservacion('');
+      setManualProducto(''); setManualCantidad(''); setManualLote(''); setManualVencimiento(''); setManualProcedencia('Granja (sin traslado)'); setManualObservacion('');
       await cargarStock(); onRefresh();
     } catch (e: any) { toast.error(e.message); }
     finally { setEnviandoManual(false); }
@@ -1951,6 +1953,10 @@ export default function BodegaAdmin({ currentUser, inventario, movimientos, onRe
                 <label className="block text-xs font-semibold text-neutral-600 mb-1">Cantidad (kg)</label>
                 <input type="number" min="0.01" step="0.01" value={manualCantidad} onChange={e => setManualCantidad(e.target.value)} placeholder="Ej.: 12.5 kg"
                   className="w-full border border-neutral-200 rounded-lg px-3 py-2.5 text-sm font-bold text-neutral-800 focus:ring-1 focus:ring-green-500" />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-xs font-semibold text-neutral-600">Lote <span className="font-normal text-neutral-400">(si se conoce)</span><input value={manualLote} onChange={e => setManualLote(e.target.value)} placeholder="Código o nombre del lote" className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-sm font-normal" /></label>
+                <label className="block text-xs font-semibold text-neutral-600">Vencimiento <span className="font-normal text-neutral-400">(si consta en el documento)</span><input type="date" value={manualVencimiento} onChange={e => setManualVencimiento(e.target.value)} className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-sm font-normal" /></label>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-neutral-600 mb-1">Procedencia</label>

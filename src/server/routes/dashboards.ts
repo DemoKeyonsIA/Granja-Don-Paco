@@ -1,5 +1,5 @@
 import { ETIQUETA_TIPO_DIFERENCIA } from '../../lib/opcionesRecepcion';
-import { ingresosFacturadosDe, ingresosCobradosDe, cuentasPorCobrarDe, gastosDe } from '../../lib/finanzas';
+import { ingresosFacturadosDe, ingresosCobradosDe, cuentasPorCobrarDe, gastosDe, vincularNotasCredito } from '../../lib/finanzas';
 import { and, gte, lt, sum } from 'drizzle-orm';
 import * as schema from '../../db/schema';
 
@@ -12,7 +12,7 @@ export function registrarRutasDashboards(app: any, db: any, mapaPagadoPorFactura
       const hoy = new Date().toISOString().split('T')[0];
       const manana = new Date(Date.parse(`${hoy}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
       const hace7Dias = new Date(Date.parse(`${hoy}T00:00:00Z`) - 6 * 86400000).toISOString().slice(0, 10);
-      const [todasFacturas, gastosHoy, produccionHoy, inventarioTotal, todasVacunaciones, todasOrdenes, desperdicioHoy, todosClientes, todasRutas, todosGalerones, recepcionesRecientes, ventasRutaHoy, pagosHoy, pagosAgregados] = await Promise.all([
+      const [todasFacturas, gastosHoy, produccionHoy, inventarioTotal, todasVacunaciones, todasOrdenes, desperdicioHoy, todosClientes, todasRutas, todosGalerones, recepcionesRecientes, ventasRutaHoy, pagosHoy, pagosAgregados, documentosFiscales] = await Promise.all([
         // Facturas y pagos conservan el historial completo: se requiere para cartera y aging.
         db.query.facturas.findMany(), db.query.gastos.findMany({ where: and(gte(schema.gastos.fecha, hoy), lt(schema.gastos.fecha, manana)) }), db.query.produccion_diaria.findMany({ where: and(gte(schema.produccion_diaria.fecha, hoy), lt(schema.produccion_diaria.fecha, manana)) }),
         db.query.inventario.findMany(), db.query.vacunaciones.findMany(),
@@ -21,10 +21,13 @@ export function registrarRutasDashboards(app: any, db: any, mapaPagadoPorFactura
         db.query.recepciones.findMany({ where: gte(schema.recepciones.fechaRecepcion, hace7Dias) }),
         db.query.ventas_ruta.findMany({ where: and(gte(schema.ventas_ruta.fechaHora, hoy), lt(schema.ventas_ruta.fechaHora, manana)) }).catch(() => [] as any[]),
         db.query.pagos.findMany({ where: and(gte(schema.pagos.fecha, hoy), lt(schema.pagos.fecha, manana)) }).catch(() => [] as any[]),
-        db.select({ facturaId: schema.pagos.facturaId, monto: sum(schema.pagos.monto) }).from(schema.pagos).groupBy(schema.pagos.facturaId).catch(() => [] as any[])
+        db.select({ facturaId: schema.pagos.facturaId, monto: sum(schema.pagos.monto) }).from(schema.pagos).groupBy(schema.pagos.facturaId).catch(() => [] as any[]),
+        db.query.facturas_electronicas.findMany().catch(() => [] as any[])
       ]);
 
-      const facturasHoy = todasFacturas.filter(f => String(f.fecha).startsWith(hoy));
+      const facturasConNotas = vincularNotasCredito(todasFacturas as any[], documentosFiscales as any[]);
+
+      const facturasHoy = facturasConNotas.filter(f => String(f.fecha).startsWith(hoy));
 
       // Devengado y cobrado, por separado: una venta a crédito cuenta como ingreso
       // aunque no se haya cobrado. Antes `ingresosHoy` filtraba `estado ===
@@ -60,7 +63,7 @@ export function registrarRutasDashboards(app: any, db: any, mapaPagadoPorFactura
         desperdiciosHoy: desperdicioHoy.length, impactoDesperdicioHoy: impactoDesperdicio,
         // Saldo real, no `SUM(total)` de las pendientes: así coincide con el
         // aging de la misma pantalla y una factura pagada a medias no cuenta doble.
-        cuentasPorCobrar: cuentasPorCobrarDe(todasFacturas as any[], await mapaPagadoPorFactura(todasFacturas as any[], pagosAgregados as any[])),
+        cuentasPorCobrar: cuentasPorCobrarDe(facturasConNotas as any[], await mapaPagadoPorFactura(todasFacturas as any[], pagosAgregados as any[])),
         alertas: [
           ...vacunasVencidas.map(v => ({ tipo: 'Vacuna vencida', detalle: `${v.tipoVacuna} — ${v.granjaId}`, nivel: 'Crítica' })),
           ...mantenimientosVencidos.map(m => ({ tipo: 'Mantenimiento vencido', detalle: `${m.tipo} — ${m.activoId}`, nivel: 'Alta' })),

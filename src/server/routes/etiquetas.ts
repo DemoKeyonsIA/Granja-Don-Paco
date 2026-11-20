@@ -79,7 +79,7 @@ export function registrarRutasEtiquetas(app: any, db: any, deps: { recordEvent: 
             if (Number(stockBodega.cantidad) + diferenciaKg < -0.0001) throw Object.assign(new Error('El ajuste de peso dejaría el inventario de Bodega Central negativo.'), { status: 409 });
             if (Math.abs(diferenciaKg) > 0.0001) {
             await tx.update(inventario).set({ cantidad: Number(stockBodega.cantidad) + diferenciaKg, ultima_actualizacion: ahora }).where(eq(inventario.id, stockBodega.id));
-            await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: etiqueta.producto, cantidad: diferenciaKg, unidad: 'kg', tipo: 'Ajuste Peso Etiqueta', origen: 'Bodega Central', destino: 'Bodega Central', fecha: ahora, referencia_id: etiqueta.id });
+            await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: etiqueta.producto, cantidad: diferenciaKg, unidad: 'kg', tipo: 'Ajuste Peso Etiqueta', origen: 'Bodega Central', destino: 'Bodega Central', fecha: ahora, referencia_id: etiqueta.id, lote: etiqueta.lote || null });
             }
           }
         }

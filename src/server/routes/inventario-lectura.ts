@@ -259,7 +259,9 @@ export function registrarRutaStockBodega(app: any, db: any, helpers: HelpersStoc
       const porProducto = new Map<string, any>();
       for (const item of colaFEFO) {
         const productoKey = norm(item.producto) || String(item.producto).toLowerCase();
-        const key = `${productoKey}||${item.unidad || 'unidad no especificada'}`;
+        // La clave de grupo sigue identificando el producto como en el contrato
+        // previo; la unidad se conserva en el grupo y separa los saldos mixtos.
+        const key = productoKey;
         if (!porProducto.has(key)) {
           porProducto.set(key, {
             key,
@@ -279,6 +281,21 @@ export function registrarRutaStockBodega(app: any, db: any, helpers: HelpersStoc
           });
         }
         const g = porProducto.get(key)!;
+        if (g.unidad !== item.unidad) {
+          // Un mismo nombre puede aparecer en kg y cartones en datos heredados.
+          // Nunca sumarlos: mantener grupos separados con clave estable por unidad.
+          const unidadKey = `${productoKey}||${item.unidad || 'unidad no especificada'}`;
+          if (!porProducto.has(unidadKey)) {
+            porProducto.set(unidadKey, { ...g, key: unidadKey, productoKey: unidadKey, unidad: item.unidad, total: 0, etiquetados: 0, agregado: 0, items: 0, lotes: 0, fechaVencimientoProxima: null, diasProximo: null, estado: 'sin-fecha' });
+          }
+          const separado = porProducto.get(unidadKey)!;
+          separado.total += item.cantidad;
+          separado.items += 1;
+          if (item.tipo === 'etiqueta') { separado.etiquetados += item.cantidad; separado.lotes += 1; }
+          else separado.agregado += item.cantidad;
+          if (separado.fechaVencimientoProxima === null && item.dias !== null) { separado.fechaVencimientoProxima = item.fechaVencimiento; separado.diasProximo = item.dias; separado.estado = item.estado; }
+          continue;
+        }
         g.total += item.cantidad;
         g.items += 1;
         if (item.tipo === 'etiqueta') { g.etiquetados += item.cantidad; g.lotes += 1; }

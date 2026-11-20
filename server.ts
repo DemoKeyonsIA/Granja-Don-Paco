@@ -13,6 +13,7 @@ import { registrarRutaRecomendacionVenta } from "./src/server/routes/precios-rec
 import { registrarRutasAdministracionPrecios } from "./src/server/routes/precios-admin";
 import { registrarRutasReportesOperativos } from "./src/server/routes/reportes-operativos";
 import { registrarRutasFinanzas } from "./src/server/routes/finanzas";
+import { registrarRutasContabilidad } from "./src/server/routes/contabilidad";
 import { registrarRutasActivosGranja } from "./src/server/routes/activos-granja";
 import { registrarRutasFacturacion } from "./src/server/routes/facturacion";
 import { registrarRutasUsuarios } from "./src/server/routes/usuarios";
@@ -397,6 +398,7 @@ export async function createApp(testMode = false, testDb?: any, serveFrontend = 
   registrarRutasReportesOperativos(app, db, requirePermission);
 
   registrarRutasFinanzas(app, db, requirePermission, logAudit, mapaPagadoPorFactura);
+  registrarRutasContabilidad(app, db, requirePermission, logAudit);
 
   registrarRutasUsuarios(app, db, hashPassword, requirePermission, logAudit);
 

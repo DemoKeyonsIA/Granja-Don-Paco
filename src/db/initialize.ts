@@ -118,6 +118,39 @@ export async function initializeDatabase(client: any, dbInstance: any) {
   for (const sql of createTables) {
     await client.execute(sql);
   }
+  const notaEstadosCols = new Set((await client.execute('PRAGMA table_info(notas_estados_financieros)')).rows.map((r: any) => String(r.name)));
+  if (!notaEstadosCols.has('reemplaza_nota_id')) await client.execute('ALTER TABLE notas_estados_financieros ADD COLUMN reemplaza_nota_id TEXT');
+  await client.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_notas_estados_reemplaza_unico ON notas_estados_financieros(reemplaza_nota_id) WHERE reemplaza_nota_id IS NOT NULL');
+  const alimentoOrigenCols = new Set((await client.execute('PRAGMA table_info(inventario_alimento)')).rows.map((r: any) => String(r.name)));
+  for (const [column, type] of Object.entries({ referencia_documento_origen: 'TEXT', fecha_documento_origen: 'TEXT', monto_documento_origen: 'REAL', moneda_documento_origen: 'TEXT' })) if (!alimentoOrigenCols.has(column)) await client.execute(`ALTER TABLE inventario_alimento ADD COLUMN ${column} ${type}`);
+  const consumoAlimentoCols = new Set((await client.execute('PRAGMA table_info(consumo_alimento)')).rows.map((r: any) => String(r.name)));
+  if (!consumoAlimentoCols.has('tipo_movimiento')) await client.execute("ALTER TABLE consumo_alimento ADD COLUMN tipo_movimiento TEXT NOT NULL DEFAULT 'Consumo'");
+  const produccionCols = new Set((await client.execute('PRAGMA table_info(produccion_diaria)')).rows.map((r: any) => String(r.name)));
+  for (const [column, type] of Object.entries({ registrado_por: 'TEXT', responsable: 'TEXT' })) if (!produccionCols.has(column)) await client.execute(`ALTER TABLE produccion_diaria ADD COLUMN ${column} ${type}`);
+  const clientesFiscalCols = new Set((await client.execute('PRAGMA table_info(clientes)')).rows.map((r: any) => String(r.name)));
+  if (!clientesFiscalCols.has('actividad_economica')) await client.execute('ALTER TABLE clientes ADD COLUMN actividad_economica TEXT');
+
+  const cuentasRevisionCols = new Set((await client.execute('PRAGMA table_info(cuentas_contables)')).rows.map((r: any) => String(r.name)));
+  const migracionesRevisionCuentas: Record<string, string> = {
+    revision_estado: "TEXT NOT NULL DEFAULT 'Pendiente CPA'", revision_vigencia: 'TEXT', revision_revisor_nombre: 'TEXT',
+    revision_revisor_credencial: 'TEXT', revision_evidencia: 'TEXT', revision_actualizado_en: 'TEXT', revision_actualizado_por: 'TEXT',
+  };
+  for (const [column, type] of Object.entries(migracionesRevisionCuentas)) if (!cuentasRevisionCols.has(column)) await client.execute(`ALTER TABLE cuentas_contables ADD COLUMN ${column} ${type}`);
+  if (!cuentasRevisionCols.has('es_efectivo_equivalente')) await client.execute('ALTER TABLE cuentas_contables ADD COLUMN es_efectivo_equivalente INTEGER NOT NULL DEFAULT 0');
+  if (!cuentasRevisionCols.has('clasificacion_flujo')) await client.execute('ALTER TABLE cuentas_contables ADD COLUMN clasificacion_flujo TEXT');
+
+  const lineasLedgerCols = new Set((await client.execute('PRAGMA table_info(lineas_asiento_contable)')).rows.map((r: any) => String(r.name)));
+  for (const column of ['granja_id', 'galeron_id', 'lote_id', 'producto_id', 'ruta_id', 'vendedor_id']) {
+    if (!lineasLedgerCols.has(column)) await client.execute(`ALTER TABLE lineas_asiento_contable ADD COLUMN ${column} TEXT`);
+  }
+
+  const asientosLedgerCols = new Set((await client.execute('PRAGMA table_info(asientos_contables)')).rows.map((r: any) => String(r.name)));
+  if (!asientosLedgerCols.has('idempotency_key')) await client.execute('ALTER TABLE asientos_contables ADD COLUMN idempotency_key TEXT');
+  if (!asientosLedgerCols.has('idempotency_payload')) await client.execute('ALTER TABLE asientos_contables ADD COLUMN idempotency_payload TEXT');
+  await client.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_asientos_contables_idempotency_key ON asientos_contables(idempotency_key) WHERE idempotency_key IS NOT NULL');
+  await client.execute('CREATE TABLE IF NOT EXISTS secuencias_contables (id TEXT PRIMARY KEY, ultimo INTEGER NOT NULL DEFAULT 0)');
+  const consecutivoMaximo = Number((await client.execute('SELECT COALESCE(MAX(consecutivo), 0) AS ultimo FROM asientos_contables')).rows[0]?.ultimo || 0);
+  await client.execute({ sql: 'INSERT INTO secuencias_contables (id, ultimo) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET ultimo = MAX(ultimo, excluded.ultimo)', args: ['asiento', consecutivoMaximo] });
 
   // Bases demo antiguas pueden tener depositos_caja sin la columna nueva.
   // Los índices de idempotencia se crean después de migrar columnas, no en el
@@ -291,8 +324,18 @@ export async function initializeDatabase(client: any, dbInstance: any) {
   if (!productoColNames.includes('dias_aviso_vencimiento')) {
     await client.execute("ALTER TABLE productos_catalogo ADD COLUMN dias_aviso_vencimiento INTEGER DEFAULT 7");
   }
+  const columnasFiscalProducto: Record<string, string> = {
+    cabys_codigo: 'TEXT', cabys_descripcion: 'TEXT', tratamiento_fiscal: 'TEXT', tarifa_impuesto: 'REAL',
+    exoneracion_referencia: 'TEXT', fiscal_vigente_desde: 'TEXT', fiscal_vigente_hasta: 'TEXT',
+    fiscal_estado: "TEXT NOT NULL DEFAULT 'Pendiente'", fiscal_aprobacion_referencia: 'TEXT',
+    fiscal_revisor_nombre: 'TEXT', fiscal_revisor_credencial: 'TEXT', fiscal_aprobado_en: 'TEXT',
+  };
+  const columnasProductoActuales = new Set((await client.execute('PRAGMA table_info(productos_catalogo)')).rows.map((r: any) => String(r.name)));
+  for (const [column, type] of Object.entries(columnasFiscalProducto)) if (!columnasProductoActuales.has(column)) await client.execute(`ALTER TABLE productos_catalogo ADD COLUMN ${column} ${type}`);
   const movimientosCols = (await client.execute('PRAGMA table_info(movimientos_inventario)')).rows.map((r: any) => r.name);
   if (!movimientosCols.includes('unidad')) await client.execute('ALTER TABLE movimientos_inventario ADD COLUMN unidad TEXT');
+  if (!movimientosCols.includes('registrado_por')) await client.execute('ALTER TABLE movimientos_inventario ADD COLUMN registrado_por TEXT');
+  if (!movimientosCols.includes('lote')) await client.execute('ALTER TABLE movimientos_inventario ADD COLUMN lote TEXT');
   // Auto-migrate: desperdicios — vínculos a ruta/guía/camión/vendedor (patrones)
   const desperdicioCols = await client.execute("PRAGMA table_info(desperdicios)");
   const desperdicioColNames = desperdicioCols.rows.map((r: any) => r.name);
@@ -379,6 +422,7 @@ export async function initializeDatabase(client: any, dbInstance: any) {
   await client.execute("CREATE INDEX IF NOT EXISTS idx_pagos_factura ON pagos(factura_id)");
   await client.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_pagos_idempotency_key ON pagos(idempotency_key) WHERE idempotency_key IS NOT NULL");
   const columnasDocumentoFiscal = (await client.execute("PRAGMA table_info(facturas_electronicas)")).rows.map((r: any) => String(r.name));
+  if (!columnasDocumentoFiscal.includes('datos_fiscal_snapshot')) await client.execute("ALTER TABLE facturas_electronicas ADD COLUMN datos_fiscal_snapshot TEXT");
   if (columnasDocumentoFiscal.length > 0 && !columnasDocumentoFiscal.includes('idempotency_key')) {
     await client.execute("ALTER TABLE facturas_electronicas ADD COLUMN idempotency_key TEXT");
   }
@@ -438,7 +482,7 @@ export async function initializeDatabase(client: any, dbInstance: any) {
   const retornoCols = (await client.execute("PRAGMA table_info(retornos_camion)")).rows.map((r: any) => r.name);
   const retornoColumnasNuevas: Array<[string, string]> = [
     ['cantidad_aceptada', 'REAL'], ['unidad', "TEXT NOT NULL DEFAULT 'cartones'"], ['aceptado_por', 'TEXT'], ['aceptado_en', 'TEXT'],
-    ['condicion', 'TEXT'], ['tipo', "TEXT DEFAULT 'sobrante'"],
+    ['condicion', 'TEXT'], ['tipo', "TEXT DEFAULT 'sobrante'"], ['registrado_por', 'TEXT'],
   ];
   for (const [nombre, definicion] of retornoColumnasNuevas) {
     if (!retornoCols.includes(nombre)) await client.execute(`ALTER TABLE retornos_camion ADD COLUMN ${nombre} ${definicion}`);
@@ -449,6 +493,7 @@ export async function initializeDatabase(client: any, dbInstance: any) {
   const columnasExistentesDesperdicio = (await client.execute("PRAGMA table_info(desperdicios)")).rows.map((r: any) => r.name);
   const columnasMerma: Array<[string, string]> = [
     ['unidad', "TEXT NOT NULL DEFAULT 'cartones'"], ['factor_kg_por_carton', 'REAL'], ['cantidad_cartones', 'REAL'],
+    ['registrado_por', 'TEXT'],
   ];
   for (const [nombre, definicion] of columnasMerma) {
     if (!columnasExistentesDesperdicio.includes(nombre)) await client.execute(`ALTER TABLE desperdicios ADD COLUMN ${nombre} ${definicion}`);

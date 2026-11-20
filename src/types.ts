@@ -14,6 +14,7 @@ export interface Cliente {
   nombre: string;
   tipo_documento?: string;
   documento_id?: string;
+  actividad_economica?: string;
   telefono?: string;
   email?: string;
   direccion?: string;
@@ -75,7 +76,7 @@ export interface Factura {
   descuento: number;
   total: number;
   condicion_pago: 'Contado' | 'Credito';
-  metodo_pago?: 'Efectivo' | 'SINPE' | 'Transferencia';
+  metodo_pago?: 'Efectivo' | 'SINPE' | 'Transferencia' | 'Tarjeta' | 'Cheque' | 'Plataforma Digital' | 'Otro' | 'Mixto';
   estado: 'Pagada' | 'Pendiente' | 'Anulada';
   pagado?: number;
   saldoPendiente?: number;
@@ -275,6 +276,10 @@ export interface InventarioAlimento {
   loteAvesAsociado?: string;
   fechaIngreso: string;
   responsable: string;
+  referenciaDocumentoOrigen?: string;
+  fechaDocumentoOrigen?: string;
+  montoDocumentoOrigen?: number;
+  monedaDocumentoOrigen?: string;
   merma: number;
   estado: string;
 }
@@ -287,6 +292,7 @@ export interface ConsumoAlimento {
   cantidadConsumida: number;
   unidad: string;
   fecha: string;
+  tipoMovimiento?: string;
   responsable: string;
   observaciones?: string;
 }

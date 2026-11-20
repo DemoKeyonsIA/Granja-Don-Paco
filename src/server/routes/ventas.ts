@@ -16,12 +16,26 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
   app.post("/api/ventas", requirePermission(['ventas', 'facturacion'], 'create'), async (req, res) => {
     try {
       const { factura, detalles } = req.body;
+      const tieneDesglosePago = Array.isArray(req.body?.pagos);
+      const metodosPagoPermitidos = ['Efectivo', 'Transferencia', 'SINPE', 'Tarjeta', 'Cheque', 'Plataforma Digital', 'Otro'];
+      let pagosIniciales: Array<{ metodo: string; monto: number }> = [];
       const usuario = (req as any).usuario; // resuelto por requirePermission (Bearer o x-user-id → BD)
       const usuarioId = (usuario && usuario.id) || 'system';
       
       if (!factura || !Array.isArray(detalles)) {
         return res.status(400).json({ error: "Datos de factura y detalles inválidos" });
       }
+      if (tieneDesglosePago) {
+        if (req.body.pagos.length > 4) return res.status(400).json({ error: 'Se permiten hasta cuatro medios de pago por comprobante.' });
+        pagosIniciales = req.body.pagos.map((pago: any) => ({ metodo: String(pago?.metodo || ''), monto: round2(Number(pago?.monto)) }));
+        if (pagosIniciales.some(pago => !metodosPagoPermitidos.includes(pago.metodo) || !Number.isFinite(pago.monto) || pago.monto <= 0)) {
+          return res.status(400).json({ error: 'Cada medio de pago debe ser válido y tener un monto mayor a cero.' });
+        }
+        if (new Set(pagosIniciales.map(pago => pago.metodo)).size !== pagosIniciales.length) {
+          return res.status(400).json({ error: 'Use una sola línea por medio de pago y ajuste su monto.' });
+        }
+      }
+      const montoPagadoInicial = round2(pagosIniciales.reduce((suma, pago) => suma + pago.monto, 0));
 
       // Un body incompleto es un 400, no un 500. Antes `fecha`, `subtotal`,
       // `descuento`, `condicion_pago` y `estado` llegaban como `undefined` y
@@ -99,7 +113,8 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
       if (factura.condicion_pago === 'Credito') {
         const cliente = await db.query.clientes.findFirst({ where: eq(clientes.id, factura.clienteId) });
         if (cliente) {
-          const nuevoSaldo = Number(cliente.saldo_pendiente || 0) + Number(factura.total);
+          const saldoVenta = Math.max(0, Number(factura.total) - montoPagadoInicial);
+          const nuevoSaldo = Number(cliente.saldo_pendiente || 0) + saldoVenta;
           const limite = Number(cliente.limite_credito || 0);
           if (limite > 0 && nuevoSaldo > limite) {
             return res.status(400).json({ 
@@ -148,8 +163,18 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
       }
       factura.subtotal = subtotalResuelto;
       factura.total = subtotalResuelto - Number(factura.descuento || 0);
+      if (tieneDesglosePago) {
+        if (montoPagadoInicial > Number(factura.total) + 0.01) {
+          return res.status(400).json({ error: 'Los medios de pago superan el total autorizado de la venta.' });
+        }
+        const saldoVenta = round2(Math.max(0, Number(factura.total) - montoPagadoInicial));
+        factura.condicion_pago = saldoVenta > 0.01 ? 'Credito' : 'Contado';
+        factura.metodo_pago = pagosIniciales.length > 1 ? 'Mixto' : pagosIniciales[0]?.metodo || null;
+        factura.estado = saldoVenta > 0.01 ? 'Pendiente' : 'Pagada';
+      }
       if (factura.condicion_pago === 'Credito' && cliente) {
-        const nuevoSaldo = Number(cliente.saldo_pendiente || 0) + Number(factura.total);
+        const saldoVenta = tieneDesglosePago ? Math.max(0, Number(factura.total) - montoPagadoInicial) : Number(factura.total);
+        const nuevoSaldo = Number(cliente.saldo_pendiente || 0) + saldoVenta;
         const limite = Number(cliente.limite_credito || 0);
         if (limite > 0 && nuevoSaldo > limite) {
           return res.status(409).json({ error: `Cliente excede límite de crédito. Saldo actual: ${cliente.saldo_pendiente}, límite: ${limite}, total autorizado: ${factura.total}`, requiereAprobacion: true, tipoAprobacion: 'LimiteCredito' });
@@ -215,10 +240,20 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
           camionId: camionResueltoId
         });
 
+        for (const pago of pagosIniciales) await tx.insert(pagos).values({
+          id: crypto.randomUUID(),
+          facturaId: factura.id,
+          fecha: new Date().toISOString().slice(0, 10),
+          monto: pago.monto,
+          metodo: pago.metodo,
+          usuarioId: usuarioId ?? null,
+          nota: 'Pago recibido al registrar la venta',
+        });
+
         // 2. Update client saldo if credit sale
         if (factura.condicion_pago === 'Credito' && cliente) {
           await tx.update(clientes).set({
-            saldo_pendiente: Number(cliente.saldo_pendiente || 0) + Number(factura.total)
+            saldo_pendiente: Number(cliente.saldo_pendiente || 0) + (tieneDesglosePago ? Math.max(0, Number(factura.total) - montoPagadoInicial) : Number(factura.total))
           }).where(eq(clientes.id, factura.clienteId));
         }
 
@@ -429,7 +464,8 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
         // El saldo del cliente baja por lo efectivamente pagado, no por el total.
         if (factura.condicion_pago === 'Credito') {
           await tx.update(clientes).set({
-          saldo_pendiente: sql`GREATEST(0, COALESCE(saldo_pendiente, 0) - ${montoPago})`,
+            // CASE/COALESCE works in both SQLite (local/test) and PostgreSQL (Neon).
+            saldo_pendiente: sql`CASE WHEN COALESCE(saldo_pendiente, 0) > ${montoPago} THEN COALESCE(saldo_pendiente, 0) - ${montoPago} ELSE 0 END`,
           }).where(eq(clientes.id, factura.clienteId));
         }
       });

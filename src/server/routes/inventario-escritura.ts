@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import * as schema from '../../db/schema';
 
 /** Registra ingresos a bodega y capturas/consultas de peso de custodia. */
@@ -50,41 +50,48 @@ export function registrarRutasEscrituraBodega(app: any, db: any, requirePermissi
   app.post("/api/bodega/ingreso-manual", requirePermission('inventario_bodega', 'create'), async (req, res) => {
     try {
       const { producto, cantidad, unidad, procedencia, observaciones, usuarioId } = req.body;
+      const lote = String(req.body?.lote || '').trim() || null;
+      const fechaVencimiento = String(req.body?.fechaVencimiento || '').trim() || null;
+      const actorId = String((req as any).usuario?.id || req.headers['x-user-id'] || '');
       if (!producto || !String(producto).trim()) return res.status(400).json({ error: "El producto es requerido" });
       const cant = Number(cantidad);
       if (!Number.isFinite(cant) || cant <= 0) return res.status(400).json({ error: "La cantidad debe ser mayor a 0" });
       const unidadFinal = String(unidad || (String(producto).toLowerCase().includes('huevo') ? 'kg' : 'cartones'));
       if (!['kg', 'cartones'].includes(unidadFinal)) return res.status(400).json({ error: 'La unidad del ingreso debe ser kg.' });
       if (String(producto).toLowerCase().includes('huevo') && unidadFinal !== 'kg') return res.status(400).json({ error: 'El huevo se registra exclusivamente en kg.' });
+      const fechaVencimientoValida = Boolean(fechaVencimiento && /^\d{4}-\d{2}-\d{2}$/.test(fechaVencimiento) && Number.isFinite(Date.parse(`${fechaVencimiento}T00:00:00Z`)) && new Date(`${fechaVencimiento}T00:00:00Z`).toISOString().slice(0, 10) === fechaVencimiento);
+      if (fechaVencimiento && !fechaVencimientoValida) return res.status(400).json({ error: 'La fecha de vencimiento debe ser una fecha válida.' });
       if (!observaciones || !String(observaciones).trim()) {
         return res.status(400).json({ error: "La observación es obligatoria en un ingreso manual (auditoría)" });
       }
       const origenExcepcion = procedencia || 'Granja (sin traslado)';
       const destino = 'Bodega Central';
       const ahora = new Date().toISOString();
-      const referente = String(usuarioId) || (req.headers['x-user-id'] as string) || null;
+      const referente = actorId || (usuarioId ? String(usuarioId) : null);
       const responsable = referente || 'Bodeguero Actual';
       const id = crypto.randomUUID();
 
       await db.transaction(async (tx) => {
         // 1. Sumar al inventario de Bodega Central
         const item = await tx.query.inventario.findFirst({
-          where: and(eq(inventario.producto, producto), eq(inventario.ubicacion, destino), eq(inventario.unidad, unidadFinal)),
+          where: and(eq(inventario.producto, producto), eq(inventario.ubicacion, destino), eq(inventario.unidad, unidadFinal), lote ? eq(inventario.lote, lote) : isNull(inventario.lote)),
         });
         if (item) {
+          if (fechaVencimiento && item.fecha_caducidad && item.fecha_caducidad !== fechaVencimiento) throw Object.assign(new Error('Este lote ya tiene otra fecha de vencimiento registrada. Verifique el documento y corrija el lote antes de mezclar el ingreso.'), { status: 409 });
           await tx.update(inventario).set({
             cantidad: item.cantidad + cant,
+            ...(fechaVencimiento ? { fecha_caducidad: fechaVencimiento } : {}),
             ultima_actualizacion: ahora,
           }).where(eq(inventario.id, item.id));
         } else {
           await tx.insert(inventario).values({
-            id: crypto.randomUUID(), producto, cantidad: cant, unidad: unidadFinal, ubicacion: destino, ultima_actualizacion: ahora,
+            id: crypto.randomUUID(), producto, cantidad: cant, unidad: unidadFinal, ubicacion: destino, lote, fecha_caducidad: fechaVencimiento, ultima_actualizacion: ahora,
           });
         }
 
         // 2. Registrar movimiento tipo excepción
         await tx.insert(movimientosInventario).values({
-          id: crypto.randomUUID(), producto, cantidad: cant, unidad: unidadFinal, tipo: 'Ingreso Manual', origen: origenExcepcion, destino, fecha: ahora, referencia_id: id,
+          id: crypto.randomUUID(), producto, cantidad: cant, unidad: unidadFinal, tipo: 'Ingreso Manual', origen: origenExcepcion, destino, fecha: ahora, referencia_id: id, registradoPor: referente, lote,
         });
 
         // 3. Auditoría de la excepción
@@ -94,7 +101,7 @@ export function registrarRutasEscrituraBodega(app: any, db: any, requirePermissi
           accion: 'Ingreso manual de producto a bodega',
           modulo: 'Bodega',
           referenciaId: id,
-          valoresDespues: JSON.stringify({ producto, cantidad: cant, unidad: unidadFinal, procedencia: origenExcepcion }),
+          valoresDespues: JSON.stringify({ producto, cantidad: cant, unidad: unidadFinal, lote, fechaVencimiento, procedencia: origenExcepcion }),
           motivo: String(observaciones).trim(),
           fecha: ahora,
         });

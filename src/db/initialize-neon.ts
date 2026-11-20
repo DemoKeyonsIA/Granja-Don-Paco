@@ -4,15 +4,56 @@ import { hashPassword } from '../lib/password';
 
 /** Seeds the fresh demo database after Drizzle has applied the schema. */
 export async function initializeNeonDatabase(db: any) {
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS proformas (id TEXT PRIMARY KEY, consecutivo TEXT NOT NULL UNIQUE, fecha TEXT NOT NULL, vence_en TEXT, cliente_id TEXT REFERENCES clientes(id), vendedor_id TEXT NOT NULL REFERENCES users(id), guia_id TEXT, detalles_json TEXT NOT NULL, subtotal DOUBLE PRECISION NOT NULL, descuento DOUBLE PRECISION NOT NULL DEFAULT 0, total DOUBLE PRECISION NOT NULL, notas TEXT, estado TEXT NOT NULL DEFAULT 'Vigente', factura_id TEXT)`);
+  await db.execute(sql`ALTER TABLE proformas ADD COLUMN IF NOT EXISTS guia_id TEXT`);
   const now = new Date().toISOString();
   await db.execute(sql`CREATE TABLE IF NOT EXISTS inventario_insumos (id TEXT PRIMARY KEY, producto TEXT NOT NULL, categoria TEXT NOT NULL, cantidad_recibida DOUBLE PRECISION NOT NULL, cantidad_actual DOUBLE PRECISION NOT NULL, unidad TEXT NOT NULL, ubicacion TEXT NOT NULL, lote TEXT, proveedor TEXT, gasto_id TEXT, monto_compra DOUBLE PRECISION, producto_huevo TEXT, kg_por_unidad DOUBLE PRECISION, creado_por TEXT NOT NULL, creado_en TEXT NOT NULL)`);
   await db.execute(sql`CREATE TABLE IF NOT EXISTS movimientos_insumos (id TEXT PRIMARY KEY, insumo_id TEXT NOT NULL, tipo TEXT NOT NULL, cantidad DOUBLE PRECISION NOT NULL, unidad TEXT NOT NULL, referencia_id TEXT, kg_huevo DOUBLE PRECISION, registrado_por TEXT NOT NULL, fecha TEXT NOT NULL, observacion TEXT)`);
+  await db.execute(sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS actividad_economica TEXT`);
+  for (const [column, type] of Object.entries({ referencia_documento_origen: 'TEXT', fecha_documento_origen: 'TEXT', monto_documento_origen: 'DOUBLE PRECISION', moneda_documento_origen: 'TEXT' })) await db.execute(sql.raw(`ALTER TABLE inventario_alimento ADD COLUMN IF NOT EXISTS ${column} ${type}`));
+  await db.execute(sql`ALTER TABLE consumo_alimento ADD COLUMN IF NOT EXISTS tipo_movimiento TEXT NOT NULL DEFAULT 'Consumo'`);
+  await db.execute(sql`ALTER TABLE produccion_diaria ADD COLUMN IF NOT EXISTS registrado_por TEXT`);
+  await db.execute(sql`ALTER TABLE produccion_diaria ADD COLUMN IF NOT EXISTS responsable TEXT`);
+  await db.execute(sql`ALTER TABLE desperdicios ADD COLUMN IF NOT EXISTS registrado_por TEXT`);
+  await db.execute(sql`ALTER TABLE retornos_camion ADD COLUMN IF NOT EXISTS registrado_por TEXT`);
+  await db.execute(sql`ALTER TABLE movimientos_inventario ADD COLUMN IF NOT EXISTS registrado_por TEXT`);
+  await db.execute(sql`ALTER TABLE movimientos_inventario ADD COLUMN IF NOT EXISTS lote TEXT`);
+
+  // Foundation tables for the general ledger. Automatic posting remains off
+  // until the customer accountant approves the account mapping and policies.
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS cuentas_contables (id TEXT PRIMARY KEY, codigo TEXT NOT NULL UNIQUE, nombre TEXT NOT NULL, tipo TEXT NOT NULL, naturaleza TEXT NOT NULL, cuenta_padre_id TEXT, permite_movimiento BOOLEAN NOT NULL DEFAULT TRUE, estado TEXT NOT NULL DEFAULT 'Activa', revision_estado TEXT NOT NULL DEFAULT 'Pendiente CPA', revision_vigencia TEXT, revision_revisor_nombre TEXT, revision_revisor_credencial TEXT, revision_evidencia TEXT, revision_actualizado_en TEXT, revision_actualizado_por TEXT, es_efectivo_equivalente BOOLEAN NOT NULL DEFAULT FALSE, clasificacion_flujo TEXT, creado_en TEXT NOT NULL)`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS cuentas_contables_historial (id TEXT PRIMARY KEY, cuenta_id TEXT NOT NULL, snapshot_json TEXT NOT NULL, cambiado_por TEXT, cambiado_en TEXT NOT NULL)`);
+  await db.execute(sql`ALTER TABLE facturas_electronicas ADD COLUMN IF NOT EXISTS datos_fiscal_snapshot TEXT`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS configuracion_fiscal_emisor (id TEXT PRIMARY KEY, razon_social TEXT NOT NULL DEFAULT '', identificacion_tipo TEXT NOT NULL DEFAULT '', identificacion TEXT NOT NULL DEFAULT '', actividad_economica TEXT NOT NULL DEFAULT '', nombre_comercial TEXT, correo TEXT, telefono TEXT, provincia TEXT, canton TEXT, distrito TEXT, barrio TEXT, otras_senas TEXT, moneda_presentacion TEXT NOT NULL DEFAULT 'CRC', estado_revision TEXT NOT NULL DEFAULT 'Pendiente', referencia_evidencia TEXT, revisor_nombre TEXT, revisor_credencial TEXT, actualizado_por TEXT, actualizado_en TEXT)`);
+  for (const [column, type] of Object.entries({ revision_estado: "TEXT NOT NULL DEFAULT 'Pendiente CPA'", revision_vigencia: 'TEXT', revision_revisor_nombre: 'TEXT', revision_revisor_credencial: 'TEXT', revision_evidencia: 'TEXT', revision_actualizado_en: 'TEXT', revision_actualizado_por: 'TEXT' })) await db.execute(sql.raw(`ALTER TABLE cuentas_contables ADD COLUMN IF NOT EXISTS ${column} ${type}`));
+  await db.execute(sql`ALTER TABLE cuentas_contables ADD COLUMN IF NOT EXISTS es_efectivo_equivalente BOOLEAN NOT NULL DEFAULT FALSE`);
+  await db.execute(sql`ALTER TABLE cuentas_contables ADD COLUMN IF NOT EXISTS clasificacion_flujo TEXT`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS periodos_contables (id TEXT PRIMARY KEY, fecha_inicio TEXT NOT NULL, fecha_fin TEXT NOT NULL, estado TEXT NOT NULL DEFAULT 'Abierto', creado_por TEXT NOT NULL, creado_en TEXT NOT NULL, cerrado_por TEXT, cerrado_en TEXT)`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS secuencias_contables (id TEXT PRIMARY KEY, ultimo INTEGER NOT NULL DEFAULT 0)`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS asientos_contables (id TEXT PRIMARY KEY, consecutivo INTEGER NOT NULL UNIQUE, fecha TEXT NOT NULL, periodo_id TEXT NOT NULL REFERENCES periodos_contables(id), descripcion TEXT NOT NULL, referencia_tipo TEXT, referencia_id TEXT, estado TEXT NOT NULL DEFAULT 'Borrador', creado_por TEXT NOT NULL, creado_en TEXT NOT NULL, contabilizado_por TEXT, contabilizado_en TEXT, reversa_de_id TEXT, idempotency_key TEXT, idempotency_payload TEXT)`);
+  await db.execute(sql`INSERT INTO secuencias_contables (id, ultimo) VALUES ('asiento', 0) ON CONFLICT (id) DO NOTHING`);
+  await db.execute(sql`UPDATE secuencias_contables SET ultimo = GREATEST(ultimo, (SELECT COALESCE(MAX(consecutivo), 0) FROM asientos_contables)) WHERE id = 'asiento'`);
+  await db.execute(sql`ALTER TABLE asientos_contables ADD COLUMN IF NOT EXISTS idempotency_key TEXT`);
+  await db.execute(sql`ALTER TABLE asientos_contables ADD COLUMN IF NOT EXISTS idempotency_payload TEXT`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_asientos_contables_idempotency_key ON asientos_contables(idempotency_key) WHERE idempotency_key IS NOT NULL`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_asientos_contables_reversa ON asientos_contables(reversa_de_id) WHERE reversa_de_id IS NOT NULL`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS lineas_asiento_contable (id TEXT PRIMARY KEY, asiento_id TEXT NOT NULL REFERENCES asientos_contables(id), cuenta_id TEXT NOT NULL REFERENCES cuentas_contables(id), descripcion TEXT NOT NULL DEFAULT '', debito DOUBLE PRECISION NOT NULL DEFAULT 0, credito DOUBLE PRECISION NOT NULL DEFAULT 0, tercero_id TEXT, granja_id TEXT, galeron_id TEXT, lote_id TEXT, producto_id TEXT, ruta_id TEXT, vendedor_id TEXT)`);
+  for (const column of ['granja_id', 'galeron_id', 'lote_id', 'producto_id', 'ruta_id', 'vendedor_id']) await db.execute(sql.raw(`ALTER TABLE lineas_asiento_contable ADD COLUMN IF NOT EXISTS ${column} TEXT`));
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS politicas_contables (id TEXT PRIMARY KEY, clave TEXT NOT NULL UNIQUE, nombre TEXT NOT NULL, norma_referencia TEXT NOT NULL, pregunta TEXT NOT NULL, criterio TEXT, justificacion TEXT, estado TEXT NOT NULL DEFAULT 'Pendiente', fecha_vigencia TEXT, revisor_nombre TEXT, revisor_credencial TEXT, evidencia_aprobacion TEXT, actualizado_por TEXT, actualizado_en TEXT)`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS politicas_contables_historial (id TEXT PRIMARY KEY, clave TEXT NOT NULL, estado TEXT NOT NULL, snapshot_json TEXT NOT NULL, cambiado_por TEXT, cambiado_en TEXT NOT NULL)`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS notas_estados_financieros (id TEXT PRIMARY KEY, periodo_desde TEXT NOT NULL, periodo_hasta TEXT NOT NULL, clave TEXT NOT NULL, reemplaza_nota_id TEXT, titulo TEXT NOT NULL, contenido TEXT NOT NULL, estado TEXT NOT NULL DEFAULT 'Borrador', version INTEGER NOT NULL DEFAULT 1, evidencia_referencia TEXT, revisor_nombre TEXT, revisor_credencial TEXT, creado_por TEXT NOT NULL, creado_en TEXT NOT NULL, actualizado_por TEXT NOT NULL, actualizado_en TEXT NOT NULL)`);
+  await db.execute(sql`ALTER TABLE notas_estados_financieros ADD COLUMN IF NOT EXISTS reemplaza_nota_id TEXT`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_notas_estados_reemplaza_unico ON notas_estados_financieros(reemplaza_nota_id) WHERE reemplaza_nota_id IS NOT NULL`);
+  await db.execute(sql`CREATE TABLE IF NOT EXISTS mapeos_cuentas_contables (id TEXT PRIMARY KEY, clave TEXT NOT NULL UNIQUE, nombre TEXT NOT NULL, cuenta_debito_id TEXT, cuenta_credito_id TEXT, dimensiones_json TEXT NOT NULL DEFAULT '[]', tratamiento_fiscal TEXT, estado TEXT NOT NULL DEFAULT 'Pendiente', no_aplica_justificacion TEXT, fecha_vigencia TEXT, revisor_nombre TEXT, revisor_credencial TEXT, evidencia_aprobacion TEXT, actualizado_por TEXT, actualizado_en TEXT)`);
+  for (const [column, type] of Object.entries({ cabys_codigo: 'TEXT', cabys_descripcion: 'TEXT', tratamiento_fiscal: 'TEXT', tarifa_impuesto: 'DOUBLE PRECISION', exoneracion_referencia: 'TEXT', fiscal_vigente_desde: 'TEXT', fiscal_vigente_hasta: 'TEXT', fiscal_estado: "TEXT NOT NULL DEFAULT 'Pendiente'", fiscal_aprobacion_referencia: 'TEXT', fiscal_revisor_nombre: 'TEXT', fiscal_revisor_credencial: 'TEXT', fiscal_aprobado_en: 'TEXT' })) await db.execute(sql.raw(`ALTER TABLE productos_catalogo ADD COLUMN IF NOT EXISTS ${column} ${type}`));
 
   // Keep the per-ticket FEFO allocation for transparent returns and traceability.
   await db.execute(sql`ALTER TABLE ventas_ruta_kg ADD COLUMN IF NOT EXISTS etiquetas_asignadas_json TEXT`);
 
   {
-    // Login shortcuts use 1234; synchronize persistent demo credentials on startup.
+    // The login screen's demo shortcuts always use 1234. Reset only these
+    // explicitly seeded demo identities on initialization so persisted Neon
+    // rows cannot keep an outdated hash after a deployment.
     const passwordHash = hashPassword('1234');
     const demoUsers = [
       { id: '1', name: 'Administrador', email: 'admin@granja.com', role: 'Admin', roles: 'Admin' },
@@ -25,7 +66,11 @@ export async function initializeNeonDatabase(db: any) {
     ];
 
     for (const user of demoUsers) {
-      await db.insert(schema.users).values({ ...user, password_hash: passwordHash, activo: true }).onConflictDoNothing();
+      await db.insert(schema.users).values({
+        ...user,
+        password_hash: passwordHash,
+        activo: true,
+      }).onConflictDoNothing();
       await db.update(schema.users).set({
         name: user.name,
         role: user.role,

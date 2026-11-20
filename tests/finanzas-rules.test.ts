@@ -12,6 +12,7 @@ import {
   cuentasPorCobrarDe, gastosDe, gastosPorCategoriaDe,
   utilidadYMargenDe, variacionDe,
   dentroDePeriodo, periodoAnteriorDe, mesEnCursoDe, cicloDelDineroDe,
+  vincularNotasCredito,
 } from '../src/lib/finanzas';
 
 const TODAS = { desde: '2026-09-01', hasta: '2026-09-30' };
@@ -73,10 +74,8 @@ describe('ingresosFacturadosDe — devengado', () => {
   });
 
   it('una nota de crédito se excluye del devengado, no se suma ni se resta', () => {
-    // Convención R3 (`server.ts:4294`): la NC lleva su propio estado y no se
-    // cuenta. Antes se guardaba como `Pagada` con monto positivo y eso era doble
-    // ingreso; el filtro por `Pagada` la tapaba sin querer. Al pasar a contar
-    // todo lo no anulado, si no se excluye explícitamente, la NC suma.
+    // Una NC histórica referida a un tiquete anulado antes de generar factura
+    // no debe revertir una factura distinta.
     const facturas = [
       { fecha: '2026-09-10', total: 480000, estado: 'Pagada' },
       { fecha: '2026-09-10', total: 480000, estado: 'NotaCredito' },
@@ -85,6 +84,25 @@ describe('ingresosFacturadosDe — devengado', () => {
     expect(signoFacturaDe({ fecha: '2026-09-10', total: 1, estado: 'NotaCredito' })).toBe(0);
     expect(signoFacturaDe({ fecha: '2026-09-10', total: 1, estado: 'Anulada' })).toBe(0);
     expect(signoFacturaDe({ fecha: '2026-09-10', total: 1, estado: 'Pagada' })).toBe(1);
+  });
+
+  it('una NC enlazada a factura reduce ingreso devengado y saldo por cobrar', () => {
+    const facturas = [
+      { id: 'f-1', fecha: '2026-09-10', total: 480000, estado: 'Pendiente' },
+      { id: 'nc-1', fecha: '2026-09-12', total: 120000, estado: 'NotaCredito', referenciaFacturaId: 'f-1' },
+    ];
+    expect(ingresosFacturadosDe(facturas, [], TODAS)).toBe(360000);
+    expect(cuentasPorCobrarDe(facturas)).toBe(360000);
+    expect(signoFacturaDe(facturas[1])).toBe(-1);
+  });
+
+  it('resuelve el enlace NC → factura desde el documento fiscal demo', () => {
+    const relacionadas = vincularNotasCredito(
+      [{ id: 'f-1', fecha: '2026-09-10', total: 480000, estado: 'Pendiente' }, { id: 'nc-1', fecha: '2026-09-12', total: 120000, estado: 'NotaCredito' }],
+      [{ facturaId: 'nc-1', tipoDocumento: 'NotaCredito', notasCreditoId: 'f-1' }],
+    );
+    expect(relacionadas[1].referenciaFacturaId).toBe('f-1');
+    expect(ingresosFacturadosDe(relacionadas, [], TODAS)).toBe(360000);
   });
 
   it('una NC no entra en cartera ni se trata como cobro', () => {

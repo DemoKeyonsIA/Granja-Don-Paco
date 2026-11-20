@@ -113,6 +113,7 @@ export function registrarRutasCajaCustodia(
       const productoVenta: any = productoCatalogoPara(producto, catalogoVenta);
       if (!productoVenta || productoVenta.estado !== 'Activo') return res.status(409).json({ error: 'El producto no está activo en el catálogo.' });
       if (productoVenta.unidad !== 'kg') return res.status(409).json({ error: `El inventario de ${producto} todavía está registrado en ${productoVenta.unidad}. Registre el peso neto real en kg antes de vender.` });
+      const perfilFiscalEmisor = await db.query.configuracionFiscalEmisor.findFirst({ where: eq(schema.configuracionFiscalEmisor.id, 'emisor') });
       const cantidadOrigen = cantidadKg;
       const politicaPrecio = await getPrecioParaProducto(producto, clienteId, clientePrecio?.ruta || null);
       if (!politicaPrecio) return res.status(409).json({ error: `No hay precio autorizado para ${producto}. Consulte al administrador.` });
@@ -137,7 +138,27 @@ export function registrarRutasCajaCustodia(
       }
       const total = subtotal - descuentoNum;
       if (total < 0) return res.status(400).json({ error: "El descuento no puede superar el subtotal" });
-      const cobroFinal = ['Credito', 'Transferencia'].includes(String(cobro)) ? String(cobro) : 'Efectivo';
+      const metodosPermitidos = ['Efectivo', 'Transferencia', 'SINPE', 'Tarjeta', 'Cheque', 'Plataforma Digital', 'Otro'];
+      const pagosEntrada = Array.isArray(req.body?.pagos)
+        ? req.body.pagos
+        : String(cobro) === 'Credito' ? [] : [{ metodo: String(cobro || 'Efectivo'), monto: total }];
+      if (pagosEntrada.length > 4) return res.status(400).json({ error: 'Hacienda permite declarar hasta cuatro medios de pago por comprobante.' });
+      const mediosPago = pagosEntrada.map((pago: any) => ({ metodo: String(pago?.metodo || ''), monto: round2(Number(pago?.monto)) }));
+      if (mediosPago.some((pago: any) => !metodosPermitidos.includes(pago.metodo) || !Number.isFinite(pago.monto) || pago.monto <= 0)) {
+        return res.status(400).json({ error: 'Seleccione un medio de pago válido e indique un monto mayor a cero.' });
+      }
+      if (new Set(mediosPago.map((pago: any) => pago.metodo)).size !== mediosPago.length) return res.status(400).json({ error: 'Use una sola línea por medio de pago y ajuste su monto.' });
+      const totalRecibido = round2(mediosPago.reduce((suma: number, pago: any) => suma + pago.monto, 0));
+      if (totalRecibido > total + 0.01) return res.status(400).json({ error: 'Los medios recibidos superan el total de la factura.' });
+      const saldoCredito = round2(Math.max(0, total - totalRecibido));
+      const creditoAutorizado = String(clientePrecio?.condicion_pago || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('credito');
+      const limiteCredito = Number(clientePrecio?.limite_credito || 0);
+      const saldoPendienteCliente = Number(clientePrecio?.saldo_pendiente || 0);
+      if (saldoCredito > 0 && (!creditoAutorizado || limiteCredito <= 0)) return res.status(409).json({ error: 'El cliente no tiene una línea de crédito autorizada. Registre el total con medios de pago o solicite aprobación al administrador.' });
+      if (saldoCredito > 0 && saldoPendienteCliente + saldoCredito > limiteCredito + 0.01) return res.status(409).json({ error: `El saldo de esta venta supera el crédito disponible (${Math.max(0, limiteCredito - saldoPendienteCliente).toLocaleString('es-CR')}).` });
+      const cobroFinal = saldoCredito > 0 ? (totalRecibido > 0 ? 'Mixto' : 'Credito') : (mediosPago.length > 1 ? 'Mixto' : mediosPago[0]?.metodo || 'Efectivo');
+      const condicionPagoFinal = saldoCredito > 0 ? 'Credito' : 'Contado';
+      const etiquetaMediosPago = mediosPago.map((pago: any) => pago.metodo).join(', ') || 'Sin abono';
       const resolucionPrecio = {
         version: 1, resueltoEn: new Date().toISOString(), producto, unidad: 'kg',
         precioObjetivo: politicaPrecio.precio, precioAplicado: precio,
@@ -244,12 +265,12 @@ export function registrarRutasCajaCustodia(
         const facturaSeq = await siguienteConsecutivo(tx, 'FACTURA', 'GLOBAL', 'FAC', 4);
         facturaConsecutivo = facturaSeq.s;
         const fechaFactura = new Date().toISOString();
-        const esCredito = cobroFinal === 'Credito';
+        const esCredito = saldoCredito > 0;
         await tx.insert(facturas).values({
           id: facturaId, consecutivo: facturaConsecutivo, fecha: fechaFactura,
           clienteId: String(clienteId), vendedorId: vendedorEfectivo,
           subtotal, descuento: descuentoNum, total,
-          condicion_pago: esCredito ? 'Credito' : 'Contado', metodo_pago: cobroFinal,
+          condicion_pago: condicionPagoFinal, metodo_pago: etiquetaMediosPago,
           estado: esCredito ? 'Pendiente' : 'Pagada', guiaId: guia.id, camionId: camion.id,
         });
         await tx.insert(detallesFactura).values({
@@ -257,24 +278,35 @@ export function registrarRutasCajaCustodia(
           precio_unitario: precio, subtotal,
           resolucionPrecioJson: JSON.stringify(resolucionPrecio),
         });
-        if (!esCredito) {
-          await tx.insert(pagos).values({
-            id: crypto.randomUUID(), facturaId, fecha: fechaFactura, monto: total,
-            metodo: cobroFinal, usuarioId: vendedorEfectivo, nota: `Cobro registrado en ruta ${guia.consecutivo || guia.id}`,
-          });
-        }
-        const emisorCedula = '3-101-XXXXXX';
+        for (const medio of mediosPago) await tx.insert(pagos).values({
+          id: crypto.randomUUID(), facturaId, fecha: fechaFactura, monto: medio.monto,
+          metodo: medio.metodo, usuarioId: vendedorEfectivo, nota: `Pago aplicado al emitir la venta de ruta ${guia.consecutivo || guia.id}`,
+        });
+        const emisorNombre = perfilFiscalEmisor?.razonSocial || 'DEMO · Granja Don Paco';
+        const emisorCedula = perfilFiscalEmisor?.identificacion || 'DEMO-SIN-IDENTIFICACION';
+        const emisorCorreo = perfilFiscalEmisor?.correo || null;
         const fiscalSeq = await siguienteConsecutivo(tx, 'DOCUMENTO_FISCAL', 'Factura', 'FE', 10);
         fiscalConsecutivo = fiscalSeq.s;
         fiscalClave = `${emisorCedula.replace(/-/g, '')}${fechaFactura.slice(0, 10).replace(/-/g, '')}${fiscalConsecutivo.replace(/-/g, '')}`;
-        const payloadFiscal = JSON.stringify({ facturaId, tipoDocumento: 'Factura', emisorNombre: 'Granja Don Paco', emisorCedula, emisorCorreo: null, receptorNombre: clientePrecio?.nombre || null, receptorCedula: clientePrecio?.documento_id || null, receptorCorreo: clientePrecio?.email || null, condicionPago: esCredito ? 'Credito' : 'Contado', medioPago: cobroFinal, ambiente: 'Pruebas', proveedor: 'Simulado' });
+        const fiscalVigenteEnFecha = Boolean(productoVenta.fiscalVigenteDesde && productoVenta.fiscalVigenteDesde <= fechaFactura.slice(0, 10) && (!productoVenta.fiscalVigenteHasta || productoVenta.fiscalVigenteHasta >= fechaFactura.slice(0, 10)));
+        const snapshotFiscal = {
+          versionSnapshot: 1, creadoEn: fechaFactura, modo: 'SIMULACION_NO_FISCAL', moneda: perfilFiscalEmisor?.monedaPresentacion || 'CRC',
+          aviso: 'Instantánea de demostración; no valida datos contra Hacienda, no representa comprobante fiscal y no aplica un cálculo oficial de impuestos.',
+          emisor: { nombre: emisorNombre, tipoIdentificacion: perfilFiscalEmisor?.identificacionTipo || null, identificacion: emisorCedula, actividadEconomica: perfilFiscalEmisor?.actividadEconomica || null, nombreComercial: perfilFiscalEmisor?.nombreComercial || null, correo: emisorCorreo, telefono: perfilFiscalEmisor?.telefono || null, provincia: perfilFiscalEmisor?.provincia || null, canton: perfilFiscalEmisor?.canton || null, distrito: perfilFiscalEmisor?.distrito || null, barrio: perfilFiscalEmisor?.barrio || null, otrasSenas: perfilFiscalEmisor?.otrasSenas || null, estadoRevisionDeclarada: perfilFiscalEmisor?.estadoRevision || 'Sin perfil', referenciaRevision: perfilFiscalEmisor?.referenciaEvidencia || null },
+          receptor: { nombre: clientePrecio?.nombre || null, tipoIdentificacion: clientePrecio?.tipo_documento || null, identificacion: clientePrecio?.documento_id || null, actividadEconomica: clientePrecio?.actividad_economica || null, correo: clientePrecio?.email || null, telefono: clientePrecio?.telefono || null, provincia: clientePrecio?.provincia || null, canton: clientePrecio?.canton || null, distrito: clientePrecio?.distrito || null, direccion: clientePrecio?.direccion || null, clienteId: clientePrecio?.id || null },
+          condicionPago: condicionPagoFinal, mediosPago, saldoCredito,
+          importesFuenteFactura: { subtotal, descuento: descuentoNum, impuestos: 0, total },
+          lineas: [{ descripcionFactura: productoVenta.nombre, cantidad: cantidadKg, unidad: productoVenta.unidad, precioUnitario: precio, subtotal, productoCatalogoId: productoVenta.id, cabysCodigo: productoVenta.cabysCodigo || null, cabysDescripcion: productoVenta.cabysDescripcion || null, tratamientoFiscal: productoVenta.tratamientoFiscal || null, tarifaImpuesto: productoVenta.tarifaImpuesto ?? null, exoneracionReferencia: productoVenta.exoneracionReferencia || null, fiscalVigenteDesde: productoVenta.fiscalVigenteDesde || null, fiscalVigenteHasta: productoVenta.fiscalVigenteHasta || null, estadoRevisionFiscal: productoVenta.fiscalEstado || 'Pendiente', referenciaAprobacion: productoVenta.fiscalAprobacionReferencia || null, revisorDeclarado: productoVenta.fiscalRevisorNombre || null, credencialDeclarada: productoVenta.fiscalRevisorCredencial || null, vigenteEnFechaDocumento: fiscalVigenteEnFecha }],
+          alertas: [!perfilFiscalEmisor?.razonSocial || !perfilFiscalEmisor?.identificacion ? 'Perfil del emisor incompleto; se usaron valores de demostración.' : null, perfilFiscalEmisor && perfilFiscalEmisor.estadoRevision !== 'Revisado declarado' ? 'Perfil del emisor pendiente de revisión documental declarada.' : null, !clientePrecio?.documento_id ? 'Cliente sin identificación tributaria registrada.' : null, !clientePrecio?.actividad_economica ? 'Cliente sin actividad económica registrada.' : null, productoVenta.fiscalEstado !== 'Aprobado' ? 'Clasificación fiscal del producto sin aprobación declarada.' : null, !productoVenta.cabysCodigo ? 'Producto sin código CABYS.' : null, !fiscalVigenteEnFecha ? 'Clasificación fiscal sin vigencia para la fecha de venta.' : null].filter(Boolean),
+        };
+        const payloadFiscal = JSON.stringify({ facturaId, tipoDocumento: 'Factura', emisorNombre, emisorCedula, emisorCorreo, receptorNombre: clientePrecio?.nombre || null, receptorCedula: clientePrecio?.documento_id || null, receptorCorreo: clientePrecio?.email || null, condicionPago: condicionPagoFinal, mediosPago, saldoCredito, ambiente: 'Pruebas', proveedor: 'Simulado', snapshotFiscal });
         await tx.insert(facturas_electronicas).values({
           id: crypto.randomUUID(), facturaId, tipoDocumento: 'Factura', consecutivo: fiscalConsecutivo,
-          clave: fiscalClave, fechaEmision: fechaFactura, emisorNombre: 'Granja Don Paco', emisorCedula,
+          clave: fiscalClave, fechaEmision: fechaFactura, emisorNombre, emisorCedula, emisorCorreo,
           receptorNombre: clientePrecio?.nombre || null, receptorCedula: clientePrecio?.documento_id || null,
           receptorCorreo: clientePrecio?.email || null, subtotal, descuento: descuentoNum, impuestos: 0, total,
-          condicionPago: esCredito ? 'Credito' : 'Contado', medioPago: cobroFinal, estado: 'Borrador',
-          ambiente: 'Pruebas', proveedor: 'Simulado', idempotencyKey: `documento:${facturaId}:Factura`, idempotencyPayload: payloadFiscal,
+          condicionPago: condicionPagoFinal, medioPago: etiquetaMediosPago, estado: 'Borrador',
+          ambiente: 'Pruebas', proveedor: 'Simulado', idempotencyKey: `documento:${facturaId}:Factura`, idempotencyPayload: payloadFiscal, datosFiscalSnapshot: JSON.stringify(snapshotFiscal),
         });
 
         // 3. Registrar venta en ruta
@@ -339,26 +371,30 @@ export function registrarRutasCajaCustodia(
         }
 
         // 5. Movimiento de inventario
-        await tx.insert(movimientosInventario).values({
-          id: crypto.randomUUID(),
-          producto,
-          cantidad: cantidadOrigen,
-          unidad: productoVenta.unidad,
-          tipo: 'Venta',
-          origen: camion.nombre,
-          destino: clienteId ? 'Cliente' : 'Venta',
-          fecha: new Date().toISOString(),
-          referencia_id: ventaId
+        // Preserve the lot breakdown in the inventory ledger. A single aggregate
+        // movement with lote=null loses traceability whenever FEFO draws from
+        // more than one label/lot.
+        const ventaPorLote = new Map<string, number>();
+        for (const asignacion of etiquetasConsumidas) {
+          const lote = String(asignacion.lote || '').trim();
+          const key = lote || '__SIN_LOTE__';
+          ventaPorLote.set(key, (ventaPorLote.get(key) || 0) + Number(asignacion.kg || 0));
+        }
+        for (const [lote, cantidadLote] of ventaPorLote) await tx.insert(movimientosInventario).values({
+          id: crypto.randomUUID(), producto, cantidad: cantidadLote, unidad: productoVenta.unidad, tipo: 'Venta',
+          origen: camion.nombre, destino: clienteId ? 'Cliente' : 'Venta', fecha: new Date().toISOString(),
+          referencia_id: ventaId, registradoPor: vendedorEfectivo ? String(vendedorEfectivo) : null,
+          lote: lote === '__SIN_LOTE__' ? null : lote
         });
 
         // 7. Crédito: sumar saldo y validar límite
-        if (cobroFinal === 'Credito' && clienteId) {
+        if (saldoCredito > 0 && clienteId) {
           const cliente = await tx.query.clientes.findFirst({ where: eq(clientes.id, clienteId) });
           if (cliente) {
-            const nuevoSaldo = Number(cliente.saldo_pendiente || 0) + total;
+            const nuevoSaldo = Number(cliente.saldo_pendiente || 0) + saldoCredito;
             const limite = Number(cliente.limite_credito || 0);
-            if (limite > 0 && nuevoSaldo > limite) {
-              throw new ApiError(400, `Cliente excede límite de crédito. Saldo actual: ${cliente.saldo_pendiente}, Límite: ${limite}, Total tiquete: ${total}`);
+            if (limite <= 0 || nuevoSaldo > limite + 0.01) {
+              throw new ApiError(400, `Cliente excede el crédito disponible. Saldo actual: ${cliente.saldo_pendiente}, Límite: ${limite}, Saldo de esta venta: ${saldoCredito}`);
             }
             await tx.update(clientes).set({ saldo_pendiente: nuevoSaldo }).where(eq(clientes.id, clienteId));
           }
@@ -399,6 +435,9 @@ export function registrarRutasCajaCustodia(
         subtotal,
         descuento: descuentoNum,
         cobro: cobroFinal,
+        mediosPago,
+        saldoCredito,
+        condicionPago: condicionPagoFinal,
         descuentoMaximoPct: Number(politicaPrecio.descuentoMaximo || 0),
         listaPrecio: politicaPrecio.listaUsada,
         resolucionPrecio,
@@ -521,15 +560,10 @@ export function registrarRutasCajaCustodia(
           return { ...a, kg };
         }).filter((a: any) => a.kg > 0);
         if (porDevolver > 0.001) return res.status(409).json({ error: 'La devolución supera el saldo de los lotes originales del tiquete.' });
+        const totalDevuelto = cantidadYaDevuelta + cartonesRetorno;
         const retornoId = crypto.randomUUID();
         await db.transaction(async (tx) => {
-          const totalDevuelto = cantidadYaDevuelta + cartonesRetorno;
           if (totalDevuelto >= Number(venta.cartones)) await tx.update(ventas_ruta_kg).set({ estado: 'Anulada', anuladoEn: new Date().toISOString(), anuladoPor: usuarioId }).where(eq(ventas_ruta_kg.id, venta.id));
-          const montoDevuelto = Number(venta.total || 0) * cartonesRetorno / Math.max(1, Number(venta.cartones));
-          if (venta.cobro === 'Credito' && venta.clienteId) {
-            const cliente = await tx.query.clientes.findFirst({ where: eq(clientes.id, venta.clienteId) });
-            if (cliente) await tx.update(clientes).set({ saldo_pendiente: Math.max(0, Number(cliente.saldo_pendiente || 0) - montoDevuelto) }).where(eq(clientes.id, venta.clienteId));
-          }
           for (const asignacion of distribucion) {
             const origen = await tx.query.etiquetas.findFirst({ where: eq(etiquetas.id, asignacion.etiquetaId) });
             if (!origen) throw new ApiError(409, `No se encontró el lote ${asignacion.codigoUnico}.`);
@@ -538,47 +572,43 @@ export function registrarRutasCajaCustodia(
             const nuevoSaldo = round2(saldoActual + asignacion.kg);
             await tx.update(etiquetas).set({ saldoKg: nuevoSaldo, estado: 'Cargada', ubicacionActual: camion?.nombre || 'Bodega Central' }).where(eq(etiquetas.id, origen.id));
           }
+          const retornoPorLote = new Map<string, number>();
+          for (const asignacion of distribucion) {
+            const lote = String(venta.asignacionesEtiquetas.find((v: any) => v.etiquetaId === asignacion.etiquetaId)?.lote || '').trim();
+            const key = lote || '__SIN_LOTE__';
+            retornoPorLote.set(key, (retornoPorLote.get(key) || 0) + Number(asignacion.kg || 0));
+          }
+          for (const [lote, cantidadLote] of retornoPorLote) await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: venta.producto, cantidad: cantidadLote, unidad: 'kg', tipo: 'Retorno Camión', origen: 'Cliente', destino: camion?.nombre || 'Bodega Central', fecha: new Date().toISOString(), referencia_id: guia.id, registradoPor: usuarioId || null, lote: lote === '__SIN_LOTE__' ? null : lote });
           const camionStock = camion ? await tx.query.inventario.findFirst({ where: and(eq(inventario.producto, venta.producto), eq(inventario.ubicacion, camion.nombre), eq(inventario.unidad, 'kg')) }) : null;
           if (!camionStock) throw new ApiError(409, 'No se encontró el saldo en kg del camión para registrar el retorno.');
           await tx.update(inventario).set({ cantidad: Number(camionStock.cantidad) + cartonesRetorno, ultima_actualizacion: new Date().toISOString() }).where(eq(inventario.id, camionStock.id));
           await tx.insert(retornos_camion).values({
             id: retornoId, guiaId: guia.id, etiquetaId: distribucion[0]?.etiquetaId || null, ventaRutaId: venta.id,
-            fecha: new Date().toISOString(), responsable: responsable || usuarioId, producto: venta.producto,
+            fecha: new Date().toISOString(), responsable: responsable || usuarioId, registradoPor: usuarioId || null, producto: venta.producto,
             cartones: cartonesRetorno, unidad: 'kg', etiquetasJson: JSON.stringify(distribucion.map((a: any) => ({ etiquetaId: a.etiquetaId, codigoUnico: a.codigoUnico, producto: venta.producto, cartones: a.kg }))),
             peso: peso != null ? Number(peso) : null, estado: 'PendienteBodega', cantidadAceptada: 0,
             tipo: totalDevuelto >= Number(venta.cartones) ? 'completo' : 'parcial',
           });
-          await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: venta.producto, cantidad: cartonesRetorno, unidad: 'kg', tipo: 'Retorno Camión', origen: 'Cliente', destino: camion?.nombre || 'Bodega Central', fecha: new Date().toISOString(), referencia_id: guia.id });
         });
         for (const asignacion of distribucion) await recordEvent(asignacion.etiquetaId, 'Retornada', camion?.nombre || 'Bodega Central', guia.id, usuarioId, `Regresan ${asignacion.kg.toFixed(2)} kg del tiquete ${venta.tiqueteConsecutivo}; pendiente de aceptación de Bodega`);
         await logAudit(usuarioId, 'Crear', 'RetornoCamion', guia.id, null, { ventaRutaId: venta.id, etiquetas: distribucion, cantidadKg: cartonesRetorno, tiqueteAnulado: cantidadYaDevuelta + cartonesRetorno >= Number(venta.cartones) ? venta.tiqueteConsecutivo : null });
-        return res.status(201).json({ success: true, message: 'Devolución registrada; pendiente de aceptación física en Bodega', retornoId, tiqueteAnulado: cantidadYaDevuelta + cartonesRetorno >= Number(venta.cartones) ? venta.tiqueteConsecutivo : null, etiquetas: distribucion, cartones: cartonesRetorno, cantidadKg: cartonesRetorno, unidad: 'kg', estado: 'PendienteBodega' });
+        return res.status(201).json({ success: true, message: 'Devolución registrada; pendiente de aceptación física en Bodega', retornoId, tiqueteAnulado: totalDevuelto >= Number(venta.cartones) ? venta.tiqueteConsecutivo : null, etiquetas: distribucion, cartones: cartonesRetorno, cantidadKg: cartonesRetorno, unidad: 'kg', estado: 'PendienteBodega' });
       }
 
-      let ventaResumen: { tiquete?: string; cobro?: string; total?: number } = {};
+      let ventaResumen: { tiquete?: string } = {};
       const retornoId = crypto.randomUUID();
       await db.transaction(async (tx) => {
-        // Anular solo cuando el total de la venta ya se devolvió. Una devolución
-        // parcial conserva la venta por la cantidad que el cliente retuvo.
+        // Anular solo cuando el total de la venta ya se devolvió.
         if (venta) {
           const totalDevuelto = cantidadYaDevuelta + cartonesRetorno;
           if (totalDevuelto >= Number(venta.cartones)) {
             if (venta.tablaKg) await tx.update(ventas_ruta_kg).set({ estado: 'Anulada', anuladoEn: new Date().toISOString(), anuladoPor: usuarioId }).where(eq(ventas_ruta_kg.id, venta.id));
             else await tx.update(ventas_ruta).set({ estado: 'Anulada', anuladoEn: new Date().toISOString(), anuladoPor: usuarioId }).where(eq(ventas_ruta.id, venta.id));
           }
-          const montoDevuelto = Number(venta.total || 0) * cartonesRetorno / Math.max(1, Number(venta.cartones));
-          ventaResumen = { tiquete: venta.tiqueteConsecutivo, cobro: venta.cobro, total: montoDevuelto };
-          // Revertir saldo si la venta original fue a crédito
-          if (venta.cobro === 'Credito' && venta.clienteId) {
-            const cliente = await tx.query.clientes.findFirst({ where: eq(clientes.id, venta.clienteId) });
-            if (cliente) {
-              const nuevoSaldo = Math.max(0, Number(cliente.saldo_pendiente || 0) - montoDevuelto);
-              await tx.update(clientes).set({ saldo_pendiente: nuevoSaldo }).where(eq(clientes.id, venta.clienteId));
-            }
-          }
+          ventaResumen = { tiquete: totalDevuelto >= Number(venta.cartones) ? venta.tiqueteConsecutivo : undefined };
         }
 
-        // La devolución permanece bajo custodia del camión hasta que Bodega la acepte.
+        // Liberar el saldo devuelto en el camión hasta su recepción por Bodega.
         const saldoRestauradoKg = guiaEnKg
           ? Number(etiqueta.saldoKg ?? 0) + (venta ? cartonesRetorno : 0)
           : null;
@@ -586,26 +616,12 @@ export function registrarRutasCajaCustodia(
           .set({ estado: etiqueta.estado === 'Entregada' ? 'Retornada' : 'Cargada', ...(guiaEnKg ? { saldoKg: saldoRestauradoKg } : { cantidad: cantidadRestaurada }), ubicacionActual: camion?.nombre || 'Bodega Central' })
           .where(eq(etiquetas.id, etiqueta.id));
 
-        // 3. Liberar inventario en el camión (solo si el cartón salió del camión con la venta)
         if (!esSinTiqueteSinVenta) {
-          const camionStock = camion ? await tx.query.inventario.findFirst({
-            where: and(eq(inventario.producto, etiqueta.producto), eq(inventario.ubicacion, camion.nombre), eq(inventario.unidad, unidadRetorno))
-          }) : null;
+          const camionStock = camion ? await tx.query.inventario.findFirst({ where: and(eq(inventario.producto, etiqueta.producto), eq(inventario.ubicacion, camion.nombre), eq(inventario.unidad, unidadRetorno)) }) : null;
           if (camionStock) {
-            await tx.update(inventario)
-              .set({ cantidad: Number(camionStock.cantidad) + cartonesRetorno, ultima_actualizacion: new Date().toISOString() })
-              .where(eq(inventario.id, camionStock.id));
+            await tx.update(inventario).set({ cantidad: Number(camionStock.cantidad) + cartonesRetorno, ultima_actualizacion: new Date().toISOString() }).where(eq(inventario.id, camionStock.id));
             if (guiaEnKg && camionStock.unidad !== 'kg') throw new ApiError(409, 'El inventario del camión no está expresado en kg; retorno no registrado.');
-          } else if (camion) {
-            await tx.insert(inventario).values({
-              id: crypto.randomUUID(),
-              producto: etiqueta.producto,
-              cantidad: cartonesRetorno,
-              unidad: unidadRetorno,
-              ubicacion: camion.nombre,
-              ultima_actualizacion: new Date().toISOString()
-            });
-          }
+          } else if (camion) await tx.insert(inventario).values({ id: crypto.randomUUID(), producto: etiqueta.producto, cantidad: cartonesRetorno, unidad: unidadRetorno, ubicacion: camion.nombre, ultima_actualizacion: new Date().toISOString() });
         }
 
         // 4. Registrar retorno en retornos_camion
@@ -616,6 +632,7 @@ export function registrarRutasCajaCustodia(
           ventaRutaId: venta?.id || null,
           fecha: new Date().toISOString(),
           responsable: responsable || usuarioId,
+          registradoPor: usuarioId || null,
           producto: etiqueta.producto,
           cartones: cartonesRetorno,
           unidad: unidadRetorno,
@@ -625,20 +642,11 @@ export function registrarRutasCajaCustodia(
           tipo: venta ? (cantidadYaDevuelta + cartonesRetorno >= Number(venta.cartones) ? 'completo' : 'parcial') : 'sobrante'
         });
 
-        // 5. Movimiento de inventario (solo si hay flujo físico real)
-        if (!esSinTiqueteSinVenta) {
-          await tx.insert(movimientosInventario).values({
-            id: crypto.randomUUID(),
-            producto: etiqueta.producto,
-            cantidad: cartonesRetorno,
-            unidad: unidadRetorno,
-            tipo: 'Retorno Camión',
-            origen: 'Cliente',
-            destino: camion?.nombre || 'Bodega Central',
-            fecha: new Date().toISOString(),
-            referencia_id: guia.id
-          });
-        }
+        if (!esSinTiqueteSinVenta) await tx.insert(movimientosInventario).values({
+          id: crypto.randomUUID(), producto: etiqueta.producto, cantidad: cartonesRetorno, unidad: unidadRetorno,
+          tipo: 'Retorno Camión', origen: 'Cliente', destino: camion?.nombre || 'Bodega Central', fecha: new Date().toISOString(),
+          referencia_id: guia.id, registradoPor: usuarioId || null, lote: etiqueta.lote || null
+        });
       });
 
       await recordEvent(etiqueta.id, 'Retornada', camion?.nombre || 'Bodega Central', guia.id, usuarioId, `Regresan ${cartonesRetorno} ${unidadRetorno}; pendiente de aceptación de Bodega`);
@@ -722,10 +730,11 @@ export function registrarRutasCajaCustodia(
             if (stockBodega.unidad !== unidadFisica) throw new ApiError(409, `La unidad del retorno (${unidadFisica}) no coincide con el inventario de Bodega (${stockBodega.unidad}).`);
             await tx.update(inventario).set({ cantidad: Number(stockBodega.cantidad) + delta, ultima_actualizacion: ahora }).where(eq(inventario.id, stockBodega.id));
           } else await tx.insert(inventario).values({ id: crypto.randomUUID(), producto: retorno.producto, cantidad: delta, unidad: unidadFisica, ubicacion: 'Bodega Central', ultima_actualizacion: ahora });
+          const etiquetaRetorno = retorno.etiquetaId ? await tx.query.etiquetas.findFirst({ where: eq(etiquetas.id, retorno.etiquetaId) }) : null;
           await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: retorno.producto, cantidad: delta,
-            unidad: unidadFisica, tipo: 'Aceptación Bodega', origen: camion.nombre, destino: 'Bodega Central', fecha: ahora, referencia_id: retorno.guiaId });
+            unidad: unidadFisica, tipo: 'Aceptación Bodega', origen: camion.nombre, destino: 'Bodega Central', fecha: ahora, referencia_id: retorno.guiaId, registradoPor: usuarioId || null, lote: etiquetaRetorno?.lote || null });
           if (retorno.etiquetaId) {
-            const etiqueta = await tx.query.etiquetas.findFirst({ where: eq(etiquetas.id, retorno.etiquetaId) });
+            const etiqueta = etiquetaRetorno;
             if (etiqueta) {
               const restante = unidadFisica === 'kg'
                 ? Math.max(0, Number(etiqueta.saldoKg || 0) - delta)
@@ -746,6 +755,60 @@ export function registrarRutasCajaCustodia(
         }
         const estado = rechazado === true ? 'RechazadoBodega' : (objetivo >= total ? 'AceptadoBodega' : 'PendienteBodega');
         const ahora = new Date().toISOString();
+        // Aceptar físicamente una devolución también debe revertir la venta:
+        // emitir una NC de demostración por el delta aceptado y liberar crédito
+        // solo por la cantidad que Bodega incorporó realmente al inventario.
+        if (delta > 0 && retorno.ventaRutaId) {
+          const ventaKg = await tx.query.ventas_ruta_kg.findFirst({ where: eq(ventas_ruta_kg.id, retorno.ventaRutaId) });
+          const ventaLegacy = ventaKg ? null : await tx.query.ventas_ruta.findFirst({ where: eq(ventas_ruta.id, retorno.ventaRutaId) });
+          const venta = ventaKg || ventaLegacy;
+          const cantidadVenta = Number(ventaKg?.cantidadKg ?? ventaLegacy?.cantidadKg ?? ventaLegacy?.cartones ?? 0);
+          const devolucionesVenta = await tx.query.retornos_camion.findMany({ where: eq(retornos_camion.ventaRutaId, retorno.ventaRutaId) });
+          const kgAceptadosVenta = devolucionesVenta
+            .filter((fila: any) => fila.id !== retorno.id)
+            .reduce((sum: number, fila: any) => sum + Number(fila.cantidadAceptada || 0), objetivo);
+          if (venta && cantidadVenta > 0 && kgAceptadosVenta >= cantidadVenta - 0.001) {
+            const cambios = { estado: 'Anulada', anuladoEn: new Date().toISOString(), anuladoPor: usuarioId };
+            if (ventaKg) await tx.update(ventas_ruta_kg).set(cambios).where(eq(ventas_ruta_kg.id, ventaKg.id));
+            else if (ventaLegacy) await tx.update(ventas_ruta).set(cambios).where(eq(ventas_ruta.id, ventaLegacy.id));
+          }
+          const facturaOriginal = venta?.facturaId ? await tx.query.facturas.findFirst({ where: eq(facturas.id, venta.facturaId) }) : null;
+          if (facturaOriginal) {
+            const cantidadOriginal = cantidadVenta;
+            const montoCredito = round2(Number(venta.total || 0) * delta / Math.max(0.0001, cantidadOriginal));
+            if (montoCredito > 0) {
+              const cliente = await tx.query.clientes.findFirst({ where: eq(clientes.id, facturaOriginal.clienteId) });
+              const consecutivoInterno = (await siguienteConsecutivo(tx, 'NOTA_CREDITO', 'GLOBAL', 'NCR', 6)).s;
+              const consecutivoFiscal = (await siguienteConsecutivo(tx, 'DOCUMENTO_FISCAL', 'NotaCredito', 'NC', 10)).s;
+              const facturaNcId = crypto.randomUUID();
+              const fechaNc = new Date().toISOString();
+              await tx.insert(facturas).values({ id: facturaNcId, consecutivo: consecutivoInterno, fecha: fechaNc,
+                clienteId: facturaOriginal.clienteId, vendedorId: facturaOriginal.vendedorId,
+                subtotal: montoCredito, descuento: 0, total: montoCredito, condicion_pago: 'Contado',
+                metodo_pago: 'NotaCredito', estado: 'NotaCredito', guiaId: facturaOriginal.guiaId || null, camionId: facturaOriginal.camionId || null });
+              const lineas = await tx.query.detallesFactura.findMany({ where: eq(detallesFactura.facturaId, facturaOriginal.id) });
+              const factor = montoCredito / Math.max(0.0001, Number(facturaOriginal.total || 0));
+              for (const linea of lineas) {
+                const cantidad = round2(Number(linea.cantidad || 0) * factor);
+                const subtotalLinea = round2(Number(linea.subtotal || 0) * factor);
+                await tx.insert(detallesFactura).values({ id: crypto.randomUUID(), facturaId: facturaNcId, producto: linea.producto,
+                  cantidad, precio_unitario: Number(linea.precio_unitario || 0), subtotal: subtotalLinea,
+                  resolucionPrecioJson: JSON.stringify({ tipo: 'NotaCreditoDemo', facturaOriginalId: facturaOriginal.id, retornoId: retorno.id }) });
+              }
+              await tx.insert(facturas_electronicas).values({ id: crypto.randomUUID(), facturaId: facturaNcId,
+                tipoDocumento: 'NotaCredito', consecutivo: consecutivoFiscal, fechaEmision: fechaNc,
+                emisorNombre: 'DEMO · Granja Don Paco', emisorCedula: 'DEMO-SIN-IDENTIFICACION',
+                receptorNombre: cliente?.nombre || null, receptorCedula: cliente?.documento_id || null,
+                subtotal: montoCredito, impuestos: 0, total: montoCredito, condicionPago: 'Contado', medioPago: 'NotaCredito',
+                estado: 'Borrador', notasCreditoId: facturaOriginal.id, ambiente: 'Pruebas', proveedor: 'Simulado',
+                idempotencyKey: `retorno:${retorno.id}:aceptado:${objetivo}`, idempotencyPayload: JSON.stringify({ retornoId: retorno.id, cantidadAceptada: objetivo, montoCredito }),
+                datosFiscalSnapshot: JSON.stringify({ versionSnapshot: 1, modo: 'SIMULACION_NO_FISCAL', tipoDocumento: 'NotaCredito', aviso: 'Documento de demostración; no es comprobante válido ante Hacienda.', referencia: { facturaOriginalId: facturaOriginal.id, consecutivoOriginal: facturaOriginal.consecutivo, retornoId: retorno.id, motivo: 'Devolución aceptada físicamente por Bodega' }, importes: { montoAcreditado: montoCredito, impuestos: 0 } }) });
+              if (venta.cobro === 'Credito' && cliente) await tx.update(clientes)
+                .set({ saldo_pendiente: Math.max(0, Number(cliente.saldo_pendiente || 0) - montoCredito) })
+                .where(eq(clientes.id, cliente.id));
+            }
+          }
+        }
         await tx.update(retornos_camion).set({ estado, cantidadAceptada: objetivo, aceptadoPor: usuarioId,
           aceptadoEn: delta > 0 || rechazado === true ? ahora : retorno.aceptadoEn, condicion: condicion || retorno.condicion || null,
           ...(peso == null ? {} : { peso: Number(peso) }) })
@@ -832,10 +895,10 @@ export function registrarRutasCajaCustodia(
           }
           else if (cantidad > 0) await tx.insert(inventario).values({ id: crypto.randomUUID(), producto: item.producto, cantidad, unidad: item.unidad || 'cartones', ubicacion: 'Bodega Central', ultima_actualizacion: ahora });
           await tx.update(inventario).set({ cantidad: 0, ultima_actualizacion: ahora }).where(eq(inventario.id, item.id));
-          await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: item.producto, cantidad, unidad: item.unidad || 'cartones', tipo: 'Retorno Sobrante Camión', origen: camion.nombre, destino: 'Bodega Central', fecha: ahora, referencia_id: guiaId });
+          await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: item.producto, cantidad, unidad: item.unidad || 'cartones', tipo: 'Retorno Sobrante Camión', origen: camion.nombre, destino: 'Bodega Central', fecha: ahora, referencia_id: guiaId, registradoPor: usuarioId || null, lote: item.lote || null });
           await tx.insert(retornos_camion).values({
             id: crypto.randomUUID(), guiaId, etiquetaId: null, ventaRutaId: null, fecha: ahora,
-            responsable: String(responsable), producto: item.producto, cartones: cantidad, unidad: item.unidad || 'cartones',
+            responsable: String(responsable), registradoPor: usuarioId || null, producto: item.producto, cartones: cantidad, unidad: item.unidad || 'cartones',
             cantidadAceptada: cantidad, etiquetasJson: JSON.stringify([{ producto: item.producto, cantidad, cantidadSistema, unidad: item.unidad || 'cartones' }]),
             estado: 'AceptadoBodega', aceptadoPor: usuarioId, aceptadoEn: ahora, condicion: 'bueno', tipo: 'sobrante',
           });
@@ -1035,7 +1098,14 @@ export function registrarRutasCajaCustodia(
         if (central) await tx.update(inventario).set({ cantidad: Number(central.cantidad) + restante, ultima_actualizacion: ahora }).where(eq(inventario.id, central.id));
         else await tx.insert(inventario).values({ id: crypto.randomUUID(), producto: caso.producto, cantidad: restante, unidad: caso.unidad, ubicacion: 'Bodega Central', ultima_actualizacion: ahora });
         await tx.update(inventario).set({ cantidad: Number(ubicacionCuarentena.cantidad) - restante, ultima_actualizacion: ahora }).where(eq(inventario.id, ubicacionCuarentena.id));
-        await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: caso.producto, cantidad: restante, tipo: 'Liberación Cuarentena', origen: 'Cuarentena Bodega', destino: 'Bodega Central', fecha: ahora, referencia_id: caso.aprobacionId });
+        const liberacionPorLote = new Map<string, number>();
+        for (const etiqueta of etiquetasParaLiberar) {
+          const lote = String(etiqueta.lote || '').trim();
+          const key = lote || '__SIN_LOTE__';
+          const cantidadEtiqueta = Number(esKg ? (etiqueta.saldoKg ?? etiqueta.pesoNeto ?? 0) : etiqueta.cantidad || 0);
+          liberacionPorLote.set(key, (liberacionPorLote.get(key) || 0) + cantidadEtiqueta);
+        }
+        for (const [lote, cantidadLote] of liberacionPorLote) await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto: caso.producto, cantidad: cantidadLote, tipo: 'Liberación Cuarentena', origen: 'Cuarentena Bodega', destino: 'Bodega Central', fecha: ahora, referencia_id: caso.aprobacionId, registradoPor: usuarioId || null, lote: lote === '__SIN_LOTE__' ? null : lote });
         for (const etiqueta of etiquetasParaLiberar) {
           await tx.update(etiquetas).set({ estado: 'EnBodega', ubicacionActual: 'Bodega Central', ...(esKg ? { saldoKg: Number(etiqueta.pesoNeto) } : {}) }).where(eq(etiquetas.id, etiqueta.id));
           await recordEventTx(tx, etiqueta.id, 'LiberacionCuarentena', 'Bodega Central', caso.aprobacionId, usuarioId, motivo);
@@ -1102,13 +1172,13 @@ export function registrarRutasCajaCustodia(
         await tx.insert(desperdicios).values({
           id: mermaId, origen: 'Ruta', producto: etiqueta.producto, etiquetaId: etiqueta.id, lote: etiqueta.lote || null,
           cantidad: cantidadOriginal, unidad, factorKgPorCarton, cantidadCartones: guiaEnKg ? null : cantidadCartones, peso: unidad === 'kg' ? cantidadOriginal : null,
-          motivo: String(motivo), responsable: String(responsable), impactoFinanciero: 0,
+          motivo: String(motivo), responsable: String(responsable), registradoPor: usuarioId || null, impactoFinanciero: 0,
           fecha: ahora, observaciones: observaciones || null, rutaId: guia.rutaId || null, guiaId,
           camionId: camion.id, vendedorId: guia.vendedorId || null,
         });
         await tx.insert(movimientosInventario).values({
           id: crypto.randomUUID(), producto: etiqueta.producto, cantidad: cantidadCartones, unidad: guiaEnKg ? 'kg' : 'cartones', tipo: 'Merma Ruta',
-          origen: camion.nombre, destino: 'Merma', fecha: ahora, referencia_id: guiaId,
+          origen: camion.nombre, destino: 'Merma', fecha: ahora, referencia_id: guiaId, lote: etiqueta.lote || null,
         });
         resultado.id = mermaId; resultado.guiaId = guiaId; resultado.etiquetaId = etiqueta.id;
         resultado.cantidad = cantidadOriginal; resultado.unidad = unidad; resultado.cantidadCartones = cantidadCartones;
@@ -1364,7 +1434,13 @@ export function registrarRutasCajaCustodia(
     const detallesTodas = facturaIds.length
       ? await tx.query.detallesFactura.findMany({ where: inArray(schema.detallesFactura.facturaId, facturaIds) })
       : [];
-    const ventasRuta = [...ventasRutaLegacy, ...ventasRutaKg.map((v: any) => ({ ...v, cartones: Number(v.cantidadKg), cantidadKg: Number(v.cantidadKg), precioUnitario: Number(v.precioKg), cantidadInventario: v.cantidadInventario, unidad: 'kg', kgAutoritativo: true }))];
+    const pagosTodas = facturaIds.length
+      ? await tx.query.pagos.findMany({ where: inArray(schema.pagos.facturaId, facturaIds) }).catch(() => [] as any[])
+      : [];
+    const pagosPorFactura = new Map<string, any[]>();
+    for (const pago of pagosTodas) pagosPorFactura.set(pago.facturaId, [...(pagosPorFactura.get(pago.facturaId) || []), { metodo: pago.metodo, monto: Number(pago.monto) }]);
+    const ventasRuta = [...ventasRutaLegacy, ...ventasRutaKg.map((v: any) => ({ ...v, cartones: Number(v.cantidadKg), cantidadKg: Number(v.cantidadKg), precioUnitario: Number(v.precioKg), cantidadInventario: v.cantidadInventario, unidad: 'kg', kgAutoritativo: true }))]
+      .map((venta: any) => ({ ...venta, pagos: pagosPorFactura.get(venta.facturaId) || [] }));
     // Los retornos ya viven una sola vez en retornos_camion. En guías kg se
     // respetan los que tienen unidad explícita; filas antiguas ligadas a un
     // tiquete kg heredan kg para evitar convertirlas o sumarlas dos veces.
@@ -1376,7 +1452,9 @@ export function registrarRutasCajaCustodia(
     const desperdiciosGuia = desperdiciosTodas.filter((d: any) => ['Ruta', 'Camion', 'Camión', 'Cuadre Central'].includes(d.origen));
     const facturasYaRepresentadas = new Set(ventasRuta.map((v: any) => v.facturaId).filter(Boolean));
     const ventasDeFactura = facturasGuia
-      .filter((f: any) => f.estado !== 'Anulada' && !facturasYaRepresentadas.has(f.id))
+      // Una nota de crédito es un documento de reverso, nunca una venta que
+      // deba sumarse de nuevo al cuadre físico de la ruta.
+      .filter((f: any) => !['Anulada', 'NotaCredito'].includes(f.estado) && !facturasYaRepresentadas.has(f.id))
       .flatMap((f: any) => {
         const lineas = detallesTodas.filter((d: any) => d.facturaId === f.id);
         const subtotalLineas = lineas.reduce((s: number, d: any) => s + Number(d.subtotal || 0), 0);
@@ -1388,7 +1466,7 @@ export function registrarRutasCajaCustodia(
             tiqueteConsecutivo: f.consecutivo, fechaHora: f.fecha, clienteId: f.clienteId,
             producto: d.producto, cartones: Number(d.cantidad) || 0, precioUnitario: Number(d.precio_unitario) || 0,
             subtotal: Number(d.subtotal) || 0, descuento: Number(d.subtotal || 0) - totalNeto,
-            total: totalNeto, cobro: f.condicion_pago === 'Credito' ? 'Credito' : 'Efectivo', estado: 'Emitida',
+            total: totalNeto, cobro: f.condicion_pago === 'Credito' ? 'Credito' : 'Efectivo', pagos: pagosPorFactura.get(f.id) || [], estado: 'Emitida',
           };
         });
       });
@@ -1488,7 +1566,7 @@ export function registrarRutasCajaCustodia(
               await tx.insert(movimientosInventario).values({
                 id: crypto.randomUUID(), producto: item.producto, cantidad: qty, tipo: 'Retorno Camión',
                 unidad: item.unidad || 'cartones',
-                origen: camion.nombre, destino: 'Bodega Central', fecha: new Date().toISOString(), referencia_id: guia.id
+                origen: camion.nombre, destino: 'Bodega Central', fecha: new Date().toISOString(), referencia_id: guia.id, lote: item.lote || null
               });
             }
             await tx.update(inventario)

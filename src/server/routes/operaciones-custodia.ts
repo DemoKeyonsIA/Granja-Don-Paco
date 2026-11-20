@@ -61,6 +61,7 @@ export function registrarRutasOperaciones(
   app.post("/api/operaciones/traslado", requirePermission(['traslados', 'carga_camion'], 'create'), async (req, res) => {
     try {
       const { granjaId, producto, cantidad, cantidadKg, responsable, cargaId, vehiculo, camionId, creadoPorId } = req.body;
+      const actorId = String(req.usuario?.id || req.headers['x-user-id'] || '');
       const cantidadMovimiento = Number(cantidadKg ?? cantidad);
       const unidadMovimiento = cantidadKg != null ? 'kg' : String(req.body.unidad || 'cartones');
 
@@ -137,7 +138,9 @@ export function registrarRutasOperaciones(
           origen: 'Granja',
           destino: 'Bodega Central',
           fecha: new Date().toISOString(),
-          referencia_id: trasladoId
+          referencia_id: trasladoId,
+          registradoPor: actorId || null,
+          lote: stockGranja.lote || null
         });
         return { duplicado: false as const, conflicto: false as const, trasladoId };
       });
@@ -197,7 +200,7 @@ export function registrarRutasOperaciones(
         await tx.insert(movimientosInventario).values({
           id: correccionId, producto: original.producto, cantidad: pesoKg, unidad: 'kg',
           tipo: 'Corrección Unidad Traslado', origen: original.origen, destino: original.destino,
-          fecha: ahora, referencia_id: trasladoId
+          fecha: ahora, referencia_id: trasladoId, registradoPor: actor.id ? String(actor.id) : null, lote: original.lote || null
         });
         return {
           trasladoId, correccionId, producto: original.producto,
@@ -252,7 +255,7 @@ export function registrarRutasOperaciones(
         const correccionId = crypto.randomUUID();
         await tx.insert(movimientosInventario).values({
           id: correccionId, producto: guia.producto, cantidad: pesoKg, unidad: 'kg',
-          tipo: 'Corrección Unidad Remisión', origen: 'EnTransito', destino: 'EnTransito', fecha: ahora, referencia_id: guiaId,
+          tipo: 'Corrección Unidad Remisión', origen: 'EnTransito', destino: 'EnTransito', fecha: ahora, referencia_id: guiaId, lote: guia.lote || null,
         });
         return { guiaId, correccionId, producto: guia.producto, original: { cantidad: cantidadEmpaques, unidad: 'empaques' }, corregido: { cantidad: pesoKg, unidad: 'kg' }, motivo, fecha: ahora };
       });
@@ -289,7 +292,7 @@ export function registrarRutasOperaciones(
         await tx.insert(movimientosInventario).values({
           id: movimientoId, producto: saldo.producto, cantidad: cantidadKg, unidad: 'kg',
           tipo: 'Ajuste Conteo Físico', origen: 'Conteo físico consolidado', destino: 'Granja',
-          fecha, referencia_id: inventarioId
+          fecha, referencia_id: inventarioId, registradoPor: actor.id ? String(actor.id) : null, lote: saldo.lote || null
         });
         return { inventarioId, movimientoId, producto: saldo.producto, antes, despues: { ...antes, cantidad: cantidadKg, unidad: 'kg' }, motivo, fecha };
       });
@@ -633,6 +636,9 @@ export function registrarRutasOperaciones(
           }
         }
 
+        const movimientoTrasladoOriginal = await tx.query.movimientosInventario.findFirst({ where: and(eq(movimientosInventario.referencia_id, String(trasladoId)), eq(movimientosInventario.tipo, 'Traslado')) });
+        const loteTraslado = movimientoTrasladoOriginal?.lote || null;
+
         // 4. Register Final Movement
         if (recibidaFisica > 0) {
           await tx.insert(movimientosInventario).values({
@@ -644,7 +650,9 @@ export function registrarRutasOperaciones(
             origen: 'Granja',
             destino: 'Bodega Central',
             fecha: new Date().toISOString(),
-            referencia_id: recepcionId
+            referencia_id: recepcionId,
+            registradoPor: usuarioId ? String(usuarioId) : (req.usuario?.id ? String(req.usuario.id) : null),
+            lote: loteTraslado
           });
         }
 
@@ -662,6 +670,7 @@ export function registrarRutasOperaciones(
             unidad: unidadFisica,
             motivo: motivoFinal || 'Diferencia en recepción',
             responsable: recepcionResponsable,
+            registradoPor: usuarioId ? String(usuarioId) : null,
             fecha: new Date().toISOString(),
             impactoFinanciero: impacto
           });
@@ -678,7 +687,9 @@ export function registrarRutasOperaciones(
             origen: 'Granja',
             destino: 'Desperdicio',
             fecha: new Date().toISOString(),
-            referencia_id: recepcionId
+            referencia_id: recepcionId,
+            registradoPor: usuarioId ? String(usuarioId) : (req.usuario?.id ? String(req.usuario.id) : null),
+            lote: loteTraslado
           });
         }
 
@@ -817,7 +828,8 @@ export function registrarRutasOperaciones(
           origen: 'Granja',
           destino: 'Bodega Central',
           fecha: new Date().toISOString(),
-          referencia_id: guiaId
+          referencia_id: guiaId,
+          lote: lote || null
         });
       });
 
@@ -943,6 +955,7 @@ export function registrarRutasOperaciones(
             unidad: unidadFisica,
             motivo: motivoFinal || 'Diferencia en recepción',
             responsable: responsable || 'Bodeguero Actual',
+            registradoPor: req.usuario?.id ? String(req.usuario.id) : (req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null),
             fecha: new Date().toISOString(),
             impactoFinanciero: impacto
           });
@@ -958,7 +971,9 @@ export function registrarRutasOperaciones(
           origen: 'EnTransito',
           destino: 'Bodega Central',
           fecha: new Date().toISOString(),
-          referencia_id: recepcionId
+          referencia_id: recepcionId,
+          registradoPor: req.usuario?.id ? String(req.usuario.id) : null,
+          lote: guia.lote || null
         });
 
         // 6. La diferencia sale del tránsito como pérdida controlada (kárdex equilibrado)
@@ -972,7 +987,9 @@ export function registrarRutasOperaciones(
             origen: 'EnTransito',
             destino: 'Desperdicio',
             fecha: new Date().toISOString(),
-            referencia_id: recepcionId
+            referencia_id: recepcionId,
+            registradoPor: req.usuario?.id ? String(req.usuario.id) : null,
+            lote: guia.lote || null
           });
         }
 

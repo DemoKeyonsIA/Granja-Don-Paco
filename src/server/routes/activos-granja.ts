@@ -71,17 +71,30 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
 
   app.post("/api/alimento", requirePermission ? requirePermission('produccion', 'create') : undefined, async (req, res) => {
     try {
-      const { tipoAlimento, proveedor, loteAlimento, siloUbicacion, cantidadRecibida, unidad, galeronAsociado, loteAvesAsociado, responsable } = req.body;
-      if (!tipoAlimento || !cantidadRecibida || !responsable) {
+      const { tipoAlimento, proveedor, loteAlimento, siloUbicacion, cantidadRecibida, unidad, galeronAsociado, loteAvesAsociado, responsable, referenciaDocumentoOrigen, fechaDocumentoOrigen, montoDocumentoOrigen, monedaDocumentoOrigen } = req.body;
+      const cantidad = Number(cantidadRecibida);
+      if (!tipoAlimento || !Number.isFinite(cantidad) || cantidad <= 0 || !responsable) {
         return res.status(400).json({ error: "Faltan datos requeridos de alimento" });
+      }
+      if (!['kg', 'sacos'].includes(String(unidad || 'kg'))) return res.status(400).json({ error: 'La unidad del alimento debe ser kg o sacos.' });
+      const hayDatosDocumento = Boolean(referenciaDocumentoOrigen || fechaDocumentoOrigen || (montoDocumentoOrigen !== '' && montoDocumentoOrigen != null) || monedaDocumentoOrigen);
+      const montoDocumento = montoDocumentoOrigen === '' || montoDocumentoOrigen == null ? null : Number(montoDocumentoOrigen);
+      if (hayDatosDocumento && (!String(referenciaDocumentoOrigen || '').trim() || !/^\d{4}-\d{2}-\d{2}$/.test(String(fechaDocumentoOrigen || '')) || !Number.isFinite(montoDocumento) || Number(montoDocumento) < 0 || !/^[A-Z]{3}$/.test(String(monedaDocumentoOrigen || '')))) return res.status(400).json({ error: 'Para guardar el soporte de compra indique referencia, fecha, monto y moneda en el mismo registro.' });
+      if (loteAvesAsociado) {
+        const lote = await db.query.lotes_aves.findFirst({ where: eq(schema.lotes_aves.id, String(loteAvesAsociado)) });
+        if (!lote || (galeronAsociado && lote.galeronId !== galeronAsociado)) return res.status(400).json({ error: 'El lote de aves no corresponde al galerón indicado.' });
       }
       const id = crypto.randomUUID();
       await db.insert(inventario_alimento).values({
         id, tipoAlimento, proveedor: proveedor || null, loteAlimento: loteAlimento || null,
-        siloUbicacion: siloUbicacion || null, cantidadRecibida: Number(cantidadRecibida),
-        cantidadActual: Number(cantidadRecibida), unidad: unidad || 'kg',
+        siloUbicacion: siloUbicacion || null, cantidadRecibida: cantidad,
+        cantidadActual: cantidad, unidad: unidad || 'kg',
         galeronAsociado: galeronAsociado || null, loteAvesAsociado: loteAvesAsociado || null,
-        fechaIngreso: new Date().toISOString(), responsable, merma: 0, estado: 'Activo'
+        fechaIngreso: new Date().toISOString(), responsable,
+        referenciaDocumentoOrigen: String(referenciaDocumentoOrigen || '').trim() || null,
+        fechaDocumentoOrigen: fechaDocumentoOrigen || null, montoDocumentoOrigen: montoDocumento,
+        monedaDocumentoOrigen: String(monedaDocumentoOrigen || '').trim() || null,
+        merma: 0, estado: 'Activo'
       });
       res.status(201).json({ success: true, id });
     } catch (error: any) { res.status(500).json({ error: error.message }); }
@@ -89,27 +102,34 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
 
   app.post("/api/alimento/consumo", requirePermission ? requirePermission('produccion', 'create') : undefined, async (req, res) => {
     try {
-      const { inventarioAlimentoId, galeronId, loteAvesId, cantidadConsumida, unidad, responsable, observaciones } = req.body;
-      if (!cantidadConsumida || !responsable) {
-        return res.status(400).json({ error: "Faltan datos de consumo" });
-      }
-      await db.transaction(async (tx) => {
+      const { inventarioAlimentoId, galeronId, loteAvesId, cantidadConsumida, unidad, responsable, observaciones, tipoMovimiento } = req.body;
+      const cantidad = Number(cantidadConsumida);
+      if (!inventarioAlimentoId || !Number.isFinite(cantidad) || cantidad <= 0 || !responsable) return res.status(400).json({ error: "Seleccione un lote de alimento, indique una cantidad positiva y el responsable." });
+      if (!['Consumo', 'Merma'].includes(String(tipoMovimiento || 'Consumo'))) return res.status(400).json({ error: 'Tipo de movimiento de alimento inválido.' });
+      if (tipoMovimiento === 'Merma' && !String(observaciones || '').trim()) return res.status(400).json({ error: 'Describa la causa de la merma para conservar evidencia.' });
+      const resultado = await db.transaction(async (tx) => {
+        const inv = await tx.query.inventario_alimento.findFirst({ where: eq(inventario_alimento.id, String(inventarioAlimentoId)) });
+        if (!inv || inv.estado !== 'Activo') throw Object.assign(new Error('El lote de alimento ya no está activo. Actualice la lista.'), { status: 409 });
+        const unidadConsumo = String(unidad || inv.unidad);
+        if (unidadConsumo !== inv.unidad) throw Object.assign(new Error(`La unidad de consumo (${unidadConsumo}) no coincide con el inventario (${inv.unidad}).`), { status: 400 });
+        if (Number(inv.cantidadActual) + 0.0001 < cantidad) throw Object.assign(new Error(`Stock insuficiente. Disponible: ${Number(inv.cantidadActual).toFixed(3)} ${inv.unidad}.`), { status: 409 });
+        if (loteAvesId) {
+          const lote = await tx.query.lotes_aves.findFirst({ where: eq(schema.lotes_aves.id, String(loteAvesId)) });
+          if (!lote || (galeronId && lote.galeronId !== galeronId)) throw Object.assign(new Error('El lote de aves no corresponde al galerón seleccionado.'), { status: 400 });
+        }
         const id = crypto.randomUUID();
         await tx.insert(consumo_alimento).values({
-          id, inventarioAlimentoId: inventarioAlimentoId || null,
+          id, inventarioAlimentoId,
           galeronId: galeronId || null, loteAvesId: loteAvesId || null,
-          cantidadConsumida: Number(cantidadConsumida), unidad: unidad || 'kg',
-          fecha: new Date().toISOString(), responsable, observaciones: observaciones || null
+          cantidadConsumida: cantidad, unidad: unidadConsumo,
+          fecha: new Date().toISOString(), tipoMovimiento: tipoMovimiento || 'Consumo', responsable, observaciones: observaciones || null
         });
-        if (inventarioAlimentoId) {
-          const inv = await tx.query.inventario_alimento.findFirst({ where: eq(inventario_alimento.id, inventarioAlimentoId) });
-          if (inv) {
-            await tx.update(inventario_alimento).set({ cantidadActual: inv.cantidadActual - Number(cantidadConsumida) }).where(eq(inventario_alimento.id, inventarioAlimentoId));
-          }
-        }
+        const saldoNuevo = Math.max(0, Number(inv.cantidadActual) - cantidad);
+        await tx.update(inventario_alimento).set({ cantidadActual: saldoNuevo, estado: saldoNuevo <= 0.0001 ? 'Agotado' : 'Activo' }).where(eq(inventario_alimento.id, inventarioAlimentoId));
+        return { id, saldoNuevo, unidad: inv.unidad };
       });
-      res.status(201).json({ success: true });
-    } catch (error: any) { res.status(500).json({ error: error.message }); }
+      res.status(201).json({ success: true, ...resultado });
+    } catch (error: any) { res.status(error?.status || 500).json({ error: error.message }); }
   });
 
   app.get("/api/alimento/consumo", requirePermission ? requirePermission(['produccion', 'dashboard'], 'view') : undefined, async (req, res) => {
@@ -125,6 +145,76 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
       const bajoInventario = data.filter(i => i.cantidadActual < i.cantidadRecibida * 0.2 && i.estado === 'Activo');
       res.json({ bajoInventario, totalSilos: data.length });
     } catch (error: any) { res.status(500).json({ error: error.message }); }
+  });
+
+  app.get('/api/alimento/f3-integridad', requirePermission ? requirePermission(['produccion', 'granjas_admin'], 'view') : undefined, async (_req, res) => {
+    try {
+      const [inventarios, consumos, lotes, galerones] = await Promise.all([db.query.inventario_alimento.findMany(), db.query.consumo_alimento.findMany(), db.query.lotes_aves.findMany(), db.query.galerones.findMany()]);
+      const consumoPorInventario = new Map<string, number>();
+      for (const c of consumos as any[]) if (c.inventarioAlimentoId) consumoPorInventario.set(c.inventarioAlimentoId, (consumoPorInventario.get(c.inventarioAlimentoId) || 0) + Number(c.cantidadConsumida || 0));
+      const lotesMap = new Map((lotes as any[]).map(l => [l.id, l])); const galeronesMap = new Map((galerones as any[]).map(g => [g.id, g]));
+      const mermaPorInventario = new Map<string, number>();
+      for (const c of consumos as any[]) if (c.inventarioAlimentoId && c.tipoMovimiento === 'Merma') mermaPorInventario.set(c.inventarioAlimentoId, (mermaPorInventario.get(c.inventarioAlimentoId) || 0) + Number(c.cantidadConsumida || 0));
+      const diferenciasStock = (inventarios as any[]).map(i => { const consumido = consumoPorInventario.get(i.id) || 0; const merma = mermaPorInventario.get(i.id) || 0; const esperado = Number(i.cantidadRecibida) - consumido; const actual = Number(i.cantidadActual); return { id: i.id, tipoAlimento: i.tipoAlimento, loteAlimento: i.loteAlimento || null, ubicacion: i.siloUbicacion || null, unidad: i.unidad, recibido: Number(i.cantidadRecibida), consumoRegistrado: consumido - merma, mermaRegistrada: merma, saldoEsperado: Math.round(esperado * 1000) / 1000, saldoActual: actual, diferencia: Math.round((actual - esperado) * 1000) / 1000, referenciaDocumentoOrigen: i.referenciaDocumentoOrigen || null, fechaDocumentoOrigen: i.fechaDocumentoOrigen || null, montoDocumentoOrigen: i.montoDocumentoOrigen == null ? null : Number(i.montoDocumentoOrigen), monedaDocumentoOrigen: i.monedaDocumentoOrigen || null, estado: Math.abs(actual - esperado) < 0.001 ? 'Conciliado' : 'Revisar' }; });
+      const pendientes = (inventarios as any[]).flatMap(i => [{ falta: !i.proveedor ? 'Proveedor no registrado' : null }, { falta: !i.loteAlimento ? 'Lote del proveedor no registrado' : null }, { falta: !i.siloUbicacion ? 'Ubicación/silo no registrado' : null }, { falta: !i.loteAvesAsociado && !i.galeronAsociado ? 'Ingreso no asignado a galerón/lote (puede ser stock común)' : null }, { falta: !i.referenciaDocumentoOrigen || i.montoDocumentoOrigen == null || !i.monedaDocumentoOrigen ? 'Falta capturar el soporte/monto del documento de compra' : null }].filter(x => x.falta).map(x => ({ tipo: i.tipoAlimento, inventarioId: i.id, loteAlimento: i.loteAlimento || null, detalle: x.falta })));
+      const consumosSinDimension = (consumos as any[]).filter(c => !c.galeronId || !c.loteAvesId || (c.loteAvesId && !lotesMap.has(c.loteAvesId)) || (c.galeronId && !galeronesMap.has(c.galeronId))).map(c => ({ id: c.id, fecha: c.fecha, cantidad: Number(c.cantidadConsumida), unidad: c.unidad, responsable: c.responsable, galeronId: c.galeronId || null, loteAvesId: c.loteAvesId || null, estado: 'Completar o revisar asignación de granja/lote' }));
+      res.json({ generadoEn: new Date().toISOString(), resumen: { lotesAlimento: diferenciasStock.length, saldosConciliados: diferenciasStock.filter(i => i.estado === 'Conciliado').length, saldosConDiferencia: diferenciasStock.filter(i => i.estado !== 'Conciliado').length, ingresosConDatosTrazabilidadPendientes: pendientes.length, consumosSinAsignacionCompleta: consumosSinDimension.length, sinDocumentoCompra: (inventarios as any[]).filter(i => i.montoDocumentoOrigen == null || !i.referenciaDocumentoOrigen || !i.monedaDocumentoOrigen).length }, saldos: diferenciasStock, pendientes, consumosSinDimension, lotesAves: (lotes as any[]).map(l => ({ id: l.id, galeron: galeronesMap.get(l.galeronId)?.nombre || null, lineaGenetica: l.linea_genetica, cantidadInicial: Number(l.cantidad_inicial), fechaIngreso: l.fecha_ingreso, estado: l.estado, nota: 'Saldo operativo; no equivale a conteo vivo ni valoración contable.' })), limitaciones: ['La conciliación reconcilia recibido − consumos − mermas registrados; no contempla transferencias entre silos ni conteos físicos de alimento.', 'El importe de factura se conserva como dato fuente; no se asigna automáticamente como costo de inventario ni de producción.', 'Los lotes y galerones son dimensiones operativas; no representan valoración de activo biológico.'] });
+    } catch (error: any) { res.status(500).json({ error: error.message || 'No se pudo revisar la integridad de alimento y producción.' }); }
+  });
+
+  // Read-only physical counts are retained in the audit log; they never
+  // silently overwrite a book/operational quantity.
+  app.get('/api/alimento/conteos', requirePermission ? requirePermission(['produccion', 'granjas_admin'], 'view') : undefined, async (_req, res) => {
+    try {
+      const rows = await db.query.auditoria.findMany({ where: eq(schema.auditoria.modulo, 'ConteoAlimento') });
+      res.json((rows as any[]).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).map(r => ({ id: r.id, usuarioId: r.usuarioId, fecha: r.fecha, motivo: r.motivo, antes: r.valoresAntes ? JSON.parse(r.valoresAntes) : null, conteo: r.valoresDespues ? JSON.parse(r.valoresDespues) : null })));
+    } catch (error: any) { res.status(500).json({ error: error.message || 'No se pudieron cargar los conteos físicos.' }); }
+  });
+
+  app.post('/api/alimento/conteos', requirePermission ? requirePermission('produccion', 'create') : undefined, async (req: any, res: any) => {
+    try {
+      const { inventarioAlimentoId, cantidadFisica, responsable, observaciones } = req.body || {};
+      const cantidad = Number(cantidadFisica);
+      if (!inventarioAlimentoId || !Number.isFinite(cantidad) || cantidad < 0 || !String(responsable || '').trim() || !String(observaciones || '').trim()) return res.status(400).json({ error: 'Seleccione un lote, indique una cantidad física válida, responsable y motivo/observación.' });
+      const inventory = await db.query.inventario_alimento.findFirst({ where: eq(inventario_alimento.id, String(inventarioAlimentoId)) });
+      if (!inventory) return res.status(404).json({ error: 'El lote de alimento ya no existe.' });
+      const difference = Math.round((cantidad - Number(inventory.cantidadActual)) * 1000) / 1000;
+      const actorId = req.usuario?.id || 'demo';
+      const valuesBefore = { inventarioAlimentoId, cantidadSistema: Number(inventory.cantidadActual), unidad: inventory.unidad, loteAlimento: inventory.loteAlimento, ubicacion: inventory.siloUbicacion };
+      const valuesAfter = { inventarioAlimentoId, cantidadFisica: cantidad, diferencia: difference, unidad: inventory.unidad, responsable: String(responsable).trim(), usuarioId: actorId, observaciones: String(observaciones).trim(), requiereInvestigacion: Math.abs(difference) > 0.001, nota: 'Conteo observado; no ajusta inventario ni produce asiento contable.' };
+      if (logAudit) await logAudit(actorId, 'RegistrarConteoFisico', 'ConteoAlimento', inventory.id, valuesBefore, valuesAfter, valuesAfter.observaciones);
+      else await db.insert(schema.auditoria).values({ id: crypto.randomUUID(), usuarioId: actorId, accion: 'RegistrarConteoFisico', modulo: 'ConteoAlimento', referenciaId: inventory.id, valoresAntes: JSON.stringify(valuesBefore), valoresDespues: JSON.stringify(valuesAfter), motivo: valuesAfter.observaciones, fecha: new Date().toISOString() });
+      res.status(201).json({ success: true, ...valuesAfter });
+    } catch (error: any) { res.status(500).json({ error: error.message || 'No se pudo registrar el conteo físico.' }); }
+  });
+
+  app.get('/api/alimento/transferencias', requirePermission ? requirePermission(['produccion', 'granjas_admin'], 'view') : undefined, async (_req: any, res: any) => {
+    try {
+      const rows = await db.query.auditoria.findMany({ where: eq(schema.auditoria.modulo, 'TransferenciaAlimento') });
+      res.json((rows as any[]).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).map(r => ({ id: r.id, usuarioId: r.usuarioId, fecha: r.fecha, motivo: r.motivo, traslado: r.valoresDespues ? JSON.parse(r.valoresDespues) : null })));
+    } catch (error: any) { res.status(500).json({ error: error.message || 'No se pudo cargar el historial de traslados.' }); }
+  });
+
+  // A stock lot currently represents one location; this first release moves
+  // its full remaining balance and records the before/after snapshot.
+  app.post('/api/alimento/transferencias', requirePermission ? requirePermission('produccion', 'create') : undefined, async (req: any, res: any) => {
+    try {
+      const { inventarioAlimentoId, ubicacionDestino, responsable, observaciones } = req.body || {};
+      if (!inventarioAlimentoId || !String(ubicacionDestino || '').trim() || !String(responsable || '').trim()) return res.status(400).json({ error: 'Seleccione el lote y destino, e indique responsable.' });
+      const result = await db.transaction(async (tx: any) => {
+        const item = await tx.query.inventario_alimento.findFirst({ where: eq(inventario_alimento.id, String(inventarioAlimentoId)) });
+        if (!item || item.estado !== 'Activo' || Number(item.cantidadActual) <= 0) throw Object.assign(new Error('El lote no tiene saldo activo para trasladar.'), { status: 409 });
+        if (!item.siloUbicacion || String(item.siloUbicacion) === String(ubicacionDestino)) throw Object.assign(new Error('El destino debe ser distinto de la ubicación actual.'), { status: 400 });
+        const actorId = req.usuario?.id || 'demo'; const fecha = new Date().toISOString();
+        const before = { inventarioAlimentoId: item.id, alimento: item.tipoAlimento, loteAlimento: item.loteAlimento, origen: item.siloUbicacion, saldoTrasladado: Number(item.cantidadActual), unidad: item.unidad };
+        const traslado = { ...before, destino: String(ubicacionDestino).trim(), responsable: String(responsable).trim(), usuarioId: actorId, observaciones: String(observaciones || '').trim() || null, fecha, nota: 'Traslado del saldo completo del registro de lote; no cambia la cantidad total ni el valor contable.' };
+        const changed = await tx.update(inventario_alimento).set({ siloUbicacion: traslado.destino }).where(and(eq(inventario_alimento.id, item.id), eq(inventario_alimento.siloUbicacion, item.siloUbicacion))).returning({ id: inventario_alimento.id });
+        if (!changed.length) throw Object.assign(new Error('La ubicación cambió desde que abrió el formulario. Actualice e intente de nuevo.'), { status: 409 });
+        await tx.insert(schema.auditoria).values({ id: crypto.randomUUID(), usuarioId: actorId, accion: 'TrasladarLote', modulo: 'TransferenciaAlimento', referenciaId: item.id, valoresAntes: JSON.stringify(before), valoresDespues: JSON.stringify(traslado), motivo: traslado.observaciones || `Traslado ${before.origen} → ${traslado.destino}`, fecha });
+        return traslado;
+      });
+      res.status(201).json({ success: true, traslado: result });
+    } catch (error: any) { res.status(error?.status || 500).json({ error: error.message || 'No se pudo registrar el traslado.' }); }
   });
 
   // ==================== MANTENIMIENTO MEJORADO ====================
@@ -290,11 +380,12 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
       await db.insert(desperdicios).values({
         id, origen, producto, etiquetaId: etiquetaId || null, lote: lote || null,
         cantidad: cantidadOriginal, unidad, factorKgPorCarton, cantidadCartones, peso: peso ? Number(peso) : null,
-        motivo, responsable, evidencia: evidencia || null, aprobacion: aprobacion || null,
+        motivo, responsable, registradoPor: req.usuario?.id ? String(req.usuario.id) : (req.headers['x-user-id'] ? String(req.headers['x-user-id']) : null), evidencia: evidencia || null, aprobacion: aprobacion || null,
         impactoFinanciero: Number(impactoFinanciero) || 0,
         fecha: new Date().toISOString(), observaciones: observaciones || null,
         rutaId: rutaId || null, guiaId: guiaId || null, camionId: camionId || null, vendedorId: vendedorId || null
       });
+      await logAudit?.(req.usuario?.id || req.headers['x-user-id'] || 'demo', 'Registrar', 'Desperdicio', id, null, { origen, producto, lote: lote || null, cantidad: cantidadOriginal, unidad, motivo, responsable, evidencia: evidencia || null, aprobacion: aprobacion || null, rutaId: rutaId || null, guiaId: guiaId || null }, observaciones || motivo);
       res.status(201).json({ success: true, id });
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });

@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useState, useEffect } from 'react';
-import { Settings, Package, Warehouse, Users as UsersIcon, Link2, ClipboardCheck, DollarSign } from 'lucide-react';
+import { Settings, Package, Warehouse, Users as UsersIcon, Link2, ClipboardCheck, DollarSign, FileText } from 'lucide-react';
 import { User } from '../types';
 import { cn } from '../lib/utils';
 import { SUBTABS_ADMIN, subTabsDe } from '../nav/modulos';
@@ -8,13 +8,14 @@ import Granjas from './Granjas';
 import AdminUsuarios from './AdminUsuarios';
 import OfficeVinculos from './OfficeVinculos';
 import AprobacionesAdmin from './AprobacionesAdmin';
+import ConfiguracionFiscal from './ConfiguracionFiscal';
 import './gcrm.css';
 
 const Precios = lazy(() => import('./Precios'));
 
 interface Props { currentUser: User; initialTab?: AdminTab; }
 
-type AdminTab = 'productos' | 'infraestructura' | 'precios-negociacion' | 'usuarios' | 'aprobaciones' | 'vinculaciones';
+type AdminTab = 'productos' | 'infraestructura' | 'precios-negociacion' | 'datos-fiscales' | 'usuarios' | 'aprobaciones' | 'vinculaciones';
 
 /**
  * Colores e iconos de la fila. Los ids y las etiquetas salen de
@@ -28,6 +29,7 @@ const ESTILO_TAB: Record<AdminTab, { icon: React.ComponentType<{ className?: str
   productos: { icon: Package, tono: 'cielo' },
   infraestructura: { icon: Warehouse, tono: 'salmon' },
   'precios-negociacion': { icon: DollarSign, tono: 'cielo' },
+  'datos-fiscales': { icon: FileText, tono: 'salmon' },
   usuarios: { icon: UsersIcon, tono: 'cielo' },
   aprobaciones: { icon: ClipboardCheck, tono: 'salmon' },
   vinculaciones: { icon: Link2, tono: 'cielo' },
@@ -85,6 +87,7 @@ export default function Admin({ currentUser, initialTab = 'productos' }: Props) 
         {tab === 'productos' && <ProductosCatalogo currentUser={currentUser} />}
         {tab === 'infraestructura' && <Infraestructura currentUser={currentUser} />}
         {tab === 'precios-negociacion' && <Suspense fallback={<div role="status" className="py-12 text-center text-sm text-neutral-500">Cargando precios…</div>}><Precios currentUser={currentUser} /></Suspense>}
+        {tab === 'datos-fiscales' && <ConfiguracionFiscal currentUser={currentUser} />}
         {tab === 'usuarios' && <AdminUsuarios currentUser={currentUser} />}
         {tab === 'aprobaciones' && roles.includes('Admin') && <AprobacionesAdmin currentUser={currentUser} />}
         {tab === 'vinculaciones' && <OfficeVinculos currentUser={currentUser} />}

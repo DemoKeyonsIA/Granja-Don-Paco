@@ -99,7 +99,7 @@ describe('E2E — Cadena de Custodia', () => {
 
     const rutaRes = await authRequest()
       .post('/api/rutas')
-      .send({ nombre: 'Ruta E2E', vendedor_asignado: 'Vendedor E2E' });
+      .send({ nombre: 'Ruta E2E', vendedor_asignado: 'vendedor-e2e' });
     expect(rutaRes.status).toBe(201);
   });
 
@@ -214,9 +214,12 @@ describe('E2E — Cadena de Custodia', () => {
     const hc = inv.find((i: any) => i.producto === 'Huevos - Grande' && i.ubicacion === 'Camión Ruta 1');
     expect(hc).toBeDefined();
     expect(hc).toMatchObject({ cantidad: 50, unidad: 'kg' });
+    expect(creada.estado).toBe('Cargada');
   });
 
   it('3.2 — Emitir tiquete de venta desde el camión en kg', async () => {
+    const salida = await requestAs(app, 'vendedor-e2e').post(`/api/logistica/guias/${guiaId}/marcar-en-ruta`);
+    expect(salida.status).toBe(200);
     const res = await authRequest()
       .post('/api/logistica/caja/venta')
       .set('x-user-id', 'vendedor-e2e')

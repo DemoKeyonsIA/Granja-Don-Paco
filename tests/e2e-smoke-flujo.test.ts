@@ -160,6 +160,11 @@ describe('E2E SMOKE — ciclo completo con login real (F0→F4)', () => {
     expect(det.body.rutaOrden).toHaveLength(2);
     expect(det.body.detalle).toHaveLength(2);
 
+    // Las ventas y facturas se emiten durante la ruta: el chofer debe confirmar
+    // la salida antes de que se habilite la caja del vendedor.
+    const salida = await requestAs(app, '1').post(`/api/logistica/guias/${state.guia.id}/marcar-en-ruta`);
+    expect(salida.status).toBe(200);
+
     const activas = await requestAs(app, '1').get('/api/logistica/guias-activas');
     expect(activas.body.some((g: any) => g.id === state.guia.id)).toBe(true);
   });
@@ -255,50 +260,32 @@ describe('E2E SMOKE — ciclo completo con login real (F0→F4)', () => {
     expect(inv.body.find((i: any) => i.ubicacion === 'Bodega Central' && i.producto === 'Huevos - Grande').cantidad).toBe(90);
   });
 
-  it('4.3 Consolidar ruta: factura electrónica (c1) + nota de crédito (c2 anulada), tiquetes enlazados', async () => {
+  it('4.3 La consolidación heredada no duplica ventas ya facturadas en ruta', async () => {
     const res = await requestAs(app, '1').post('/api/facturacion/consolidar-ruta')
       .set('x-user-id', '1')
       .send({ guiaId: state.guia.id, emisorNombre: 'Granja Don Paco', emisorCedula: '3-101-000000' });
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.emitidas).toBe(1);
-    expect(res.body.anuladas).toBe(1);
-    expect(res.body.facturas).toHaveLength(1);
-    expect(res.body.documentos).toHaveLength(2);
-
-    const f = res.body.facturas[0];
-    expect(f).toMatchObject({ cliente: 'Cliente A', total: costo(30), condicion: 'Contado' });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('ya fue consolidada');
 
     const docs = await requestAs(app, '1').get('/api/facturacion/documentos');
-    const fe = docs.body.find((d: any) => d.tipoDocumento === 'Factura' && d.receptorNombre === 'Cliente A');
-    const nc = docs.body.find((d: any) => d.tipoDocumento === 'NotaCredito');
-    expect(fe).toMatchObject({ estado: 'Borrador', condicionPago: 'Contado', total: costo(30) });
-    expect(nc).toMatchObject({ estado: 'Borrador', total: costo(30) });
-    expect(nc.notasCreditoId).toBe(state.v2.ventaId);
+    const facturasAntes = docs.body.filter((d: any) => d.tipoDocumento === 'Factura');
+    const notasCredito = docs.body.filter((d: any) => d.tipoDocumento === 'NotaCredito');
+    expect(facturasAntes).toHaveLength(2);
+    expect(notasCredito).toHaveLength(1);
+    expect(notasCredito[0].notasCreditoId).toBe(state.v2.facturaId);
 
     const facturas = await requestAs(app, '1').get('/api/facturas');
-    const fC1 = facturas.body.find((x: any) => x.clienteId === 'c1' && x.estado !== 'NotaCredito');
-    const fNC = facturas.body.find((x: any) => x.estado === 'NotaCredito');
-    expect(fC1).toMatchObject({ estado: 'Pagada', condicion_pago: 'Contado', metodo_pago: 'Efectivo', total: costo(30) });
-    expect(fNC.total).toBe(costo(30));
-    expect(facturas.body.some((x: any) => x.clienteId === 'c2' && x.estado !== 'NotaCredito')).toBe(false);
-    expect(facturas.body.find((x: any) => x.clienteId === 'c2')?.estado).toBe('NotaCredito');
-
-    const ventas = await client.execute({ sql: `
-      SELECT tiquete_consecutivo, factura_id FROM ventas_ruta WHERE guia_id = ?
-      UNION ALL
-      SELECT tiquete_consecutivo, factura_id FROM ventas_ruta_kg WHERE guia_id = ?
-    `, args: [state.guia.id, state.guia.id] });
-    const link = (t: string) => ventas.rows.find((v: any) => v.tiquete_consecutivo === t)?.factura_id;
-    expect(link('TQ-0001')).toBe(fC1.id);
-    expect(link('TQ-0002')).toBeNull();
+    expect(facturas.body).toHaveLength(3); // dos facturas de venta + NC por devolución aceptada
+    expect(facturas.body.find((x: any) => x.id === state.v1.facturaId)).toMatchObject({ estado: 'Pagada', total: costo(30) });
+    expect(facturas.body.find((x: any) => x.id === state.v2.facturaId)).toMatchObject({ estado: 'Pendiente', total: costo(30) });
+    expect(facturas.body.find((x: any) => x.estado === 'NotaCredito')?.total).toBe(costo(30));
   });
 
   it('4.4 Rutas del día consolidada y doble consolidación bloqueada', async () => {
     const rd = await requestAs(app, '1').get('/api/facturacion/rutas-dia');
     expect(rd.status).toBe(200);
     const ruta = rd.body.rutas.find((r: any) => r.guiaId === state.guia.id);
-    expect(ruta).toMatchObject({ estado: 'Cerrada', consolidada: true, nFacturas: 1, tiquetesEmitidos: 1, retornos: 1, vendidos: 30, totalGenerado: costo(30) });
+    expect(ruta).toMatchObject({ estado: 'Cerrada', consolidada: true, nFacturas: 2, tiquetesEmitidos: 1, retornos: 1, vendidos: 30, totalGenerado: costo(30) });
 
     const res2 = await requestAs(app, '1').post('/api/facturacion/consolidar-ruta').set('x-user-id', '1').send({ guiaId: state.guia.id });
     expect(res2.status).toBe(409);
@@ -316,6 +303,6 @@ describe('E2E SMOKE — ciclo completo con login real (F0→F4)', () => {
     const aud = await requestAs(app, '1').get('/api/auditoria');
     expect(Array.isArray(aud.body)).toBe(true);
     expect(aud.body.length).toBeGreaterThan(0);
-    expect(aud.body.some((a: any) => a.modulo === 'ConsolidacionRuta' || a.modulo === 'Logistica')).toBe(true);
+    expect(aud.body.some((a: any) => ['VentaRuta', 'RetornoCamion'].includes(a.modulo))).toBe(true);
   });
 });

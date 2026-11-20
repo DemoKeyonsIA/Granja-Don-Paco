@@ -81,7 +81,7 @@ describe('Los mismos números en todas las pantallas', () => {
   it('cuentas por cobrar: resumen = reporte = dashboard = aging', async () => {
     const [resumen, reporte, dashboard, analisis] = await Promise.all([
       get(`/api/finanzas/resumen?${QMES}`),
-      get('/api/reportes/financiero'),
+      get(`/api/reportes/financiero?${QMES}`),
       get('/api/dashboard/enterprise'),
       get('/api/clientes/analisis'),
     ]);
@@ -116,7 +116,7 @@ describe('Los mismos números en todas las pantallas', () => {
   it('utilidad y margen: resumen y reporte coinciden con las cifras del periodo', async () => {
     const [resumen, reporte] = await Promise.all([
       get(`/api/finanzas/resumen?${QMES}`),
-      get('/api/reportes/financiero'),
+      get(`/api/reportes/financiero?${QMES}`),
     ]);
 
     // Devengado de septiembre: 120000 + 90000 + 60000 + 40000 = 310000.
@@ -143,7 +143,7 @@ describe('Los mismos números en todas las pantallas', () => {
   it('ingresos cobrados: resumen y reporte dicen lo mismo', async () => {
     const [resumen, reporte] = await Promise.all([
       get(`/api/finanzas/resumen?${QMES}`),
-      get('/api/reportes/financiero'),
+      get(`/api/reportes/financiero?${QMES}`),
     ]);
     expect(reporte.ingresosCobrados).toBe(resumen.ingresosCobrados);
   });
