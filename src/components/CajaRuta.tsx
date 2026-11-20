@@ -541,7 +541,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
       {/* Tiquete emitido */}
       {tiquete && (
         <>
-        <div role="status" aria-live="polite" className="rounded-2xl p-4 flex items-start justify-between gap-4 no-print" style={{ background: 'var(--bg-card)', border: '1px solid var(--status-success)' }}>
+        {pasoVenta === 1 && <div role="status" aria-live="polite" className="rounded-2xl p-4 flex items-start justify-between gap-4 no-print" style={{ background: 'var(--bg-card)', border: '1px solid var(--status-success)' }}>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{tiquete.demo ? 'Muestra · no registra una venta' : 'Venta registrada · documento en Documentos'}</p>
             <p className="text-2xl font-extrabold" style={{ color: 'var(--brand-primary)' }}>{tiquete.demo ? 'VISTA PREVIA' : tiquete.tiqueteConsecutivo}</p>
@@ -560,7 +560,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
               <X className="w-4 h-4" />
             </button>
           </div>
-        </div>
+        </div>}
         <section className={`route-ticket-print-overlay${previewTiqueteAbierto ? ' route-ticket-preview-screen' : ''}`} aria-label="Tiquete de ruta para impresión">
           {previewTiqueteAbierto && <button type="button" className="route-ticket-preview-close no-print" onClick={() => setPreviewTiqueteAbierto(false)} aria-label="Cerrar vista previa"><X className="h-5 w-5" /></button>}
           <article className="route-ticket-paper">
@@ -708,31 +708,17 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                 <span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>3</span>
                 <PackageOpen className="w-4 h-4" /> Cantidad y precio
               </p>
-              <div className="mb-4 rounded-xl px-3 py-3" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}>
-                <p className="text-sm">Cliente: <strong>{clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || '—'}</strong></p>
-                <p className="mt-1 text-sm">Producto: <strong>{producto || '—'}</strong> · Disponible: <strong>{stockProducto.toFixed(2)} kg</strong></p>
-              </div>
-              {clienteId && producto && (
-                <div className="mb-4 rounded-xl border px-3 py-2.5 text-sm" style={{ background: politicaPrecio?.error ? 'var(--status-danger-soft)' : 'var(--status-success-soft)', borderColor: politicaPrecio?.error ? 'var(--status-danger)' : 'var(--status-success)', color: politicaPrecio?.error ? 'var(--status-danger)' : 'var(--status-success)' }}>
-                  {cargandoPrecio ? 'Consultando precio autorizado…' : politicaPrecio?.error ? politicaPrecio.error : politicaPrecio?.precio ? (
-                    <><strong>Rango autorizado: {fmtCRC(precioMinimo)} a {fmtCRC(precioMaximo)} por kg</strong><span className="block text-xs">{politicaPrecio.listaUsada} · precio sugerido {fmtCRC(politicaPrecio.precio)} por kg</span></>
-                  ) : 'Administración aún no configuró el precio para este producto y cliente.'}
-                </div>
-              )}
+              <p className="mb-3 text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                {clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || 'Cliente'} · {producto || 'Producto'} · {stockProducto.toFixed(2)} kg disponibles
+              </p>
 
               <div className="route-pos-sale-fields">
-                {producto && clienteId && sugerenciaProducto && <div className="rounded-xl p-3" style={{ background: 'var(--brand-primary-soft)', border: '1px solid var(--border-default)' }}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{sugerenciaProducto.pedidosAnalizados === 0 ? 'Precio recomendado por Administración' : sugerenciaProducto.metodo === 'ia_con_historial' ? 'Sugerencia de IA basada en pedidos anteriores' : 'Sugerencia basada en el historial'}</p>
-                      <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>{sugerenciaProducto.pedidosAnalizados > 0 ? `${sugerenciaProducto.pedidosAnalizados} pedidos · ` : 'Sin pedidos históricos · '}{sugerenciaProducto.kilos > 0 ? `${sugerenciaProducto.kilos.toFixed(2)} kg` : 'cantidad a definir'} · {fmtCRC(sugerenciaProducto.precio)}/kg</p>
-                      <p className="mt-1 text-[11px]" style={{ color: 'var(--text-secondary)' }}>Precio permitido por Administración: {fmtCRC(sugerenciaProducto.precioMinimo)}–{fmtCRC(sugerenciaProducto.precioMaximo)}/kg</p>
-                    </div>
-                    {sugerenciaProducto.kilos > 0 && <button type="button" onClick={() => { setCantidadTexto(String(Math.min(stockProducto, sugerenciaProducto.kilos))); setPrecioNegociado(Math.min(sugerenciaProducto.precioMaximo, Math.max(sugerenciaProducto.precioMinimo, sugerenciaProducto.precio))); }} disabled={!precioAutorizado || stockProducto <= 0} className="min-h-10 rounded-lg px-3 text-xs font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Aplicar sugerencia</button>}
-                  </div>
+                {producto && clienteId && sugerenciaProducto && <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  <span><strong style={{ color: 'var(--text-primary)' }}>Sugerido:</strong> {sugerenciaProducto.kilos > 0 ? `${Math.min(stockProducto, sugerenciaProducto.kilos).toFixed(2)} kg · ` : ''}{fmtCRC(Math.min(sugerenciaProducto.precioMaximo, Math.max(sugerenciaProducto.precioMinimo, sugerenciaProducto.precio)))}/kg{sugerenciaProducto.pedidosAnalizados > 0 ? ` · ${sugerenciaProducto.pedidosAnalizados} pedidos` : ' · Administración'}</span>
+                  {sugerenciaProducto.kilos > 0 && <button type="button" onClick={() => { setCantidadTexto(String(Math.min(stockProducto, sugerenciaProducto.kilos))); setPrecioNegociado(Math.min(sugerenciaProducto.precioMaximo, Math.max(sugerenciaProducto.precioMinimo, sugerenciaProducto.precio))); }} disabled={!precioAutorizado || stockProducto <= 0} className="min-h-9 rounded-lg px-3 text-xs font-bold disabled:opacity-50" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}>Usar sugerencia</button>}
                 </div>}
-                {clienteId && cargandoSugerencia && <p role="status" className="rounded-lg px-3 py-2 text-xs" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Analizando pedidos anteriores y precios aprobados…</p>}
-                {clienteId && producto && !cargandoSugerencia && !sugerenciaProducto && <p className="rounded-lg px-3 py-2 text-xs" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>No hay una sugerencia para este producto. El precio se mantiene sujeto al rango aprobado por Administración.</p>}
+                {clienteId && cargandoSugerencia && <p role="status" className="text-xs" style={{ color: 'var(--text-muted)' }}>Preparando sugerencia…</p>}
+                {clienteId && producto && !cargandoSugerencia && !sugerenciaProducto && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Sin historial de compra para sugerir.</p>}
                 {clienteId && producto && (cargandoPrecio || !precioAutorizado) && (
                   <div role="status" className="route-pos-price-warning rounded-xl px-3 py-2.5 text-sm" style={{ background: 'var(--status-warning-soft)', color: 'var(--status-warning)', border: '1px solid var(--status-warning)' }}>
                     <strong className="block">{cargandoPrecio ? 'Consultando precio autorizado…' : 'Precio autorizado pendiente'}</strong>
