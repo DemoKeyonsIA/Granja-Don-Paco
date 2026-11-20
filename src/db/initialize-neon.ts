@@ -224,4 +224,36 @@ export async function initializeNeonDatabase(db: any) {
 
   // Keep the initial administrator active for the demo after an interrupted seed.
   await db.update(schema.users).set({ activo: true }).where(eq(schema.users.email, 'admin@granja.com'));
+
+  // Synthetic closed-route history makes the seller's quantity/price assistant
+  // demonstrable without changing the stock on the active route.
+  const guiaHistorialDemoId = 'DEMO-GUIA-HISTORIAL-SUGERENCIAS';
+  await db.insert(schema.guias_despacho).values({
+    id: guiaHistorialDemoId, consecutivo: 'GD-DEMO-HISTORIAL-SUGERENCIAS',
+    camionId: 'DEMO-TRUCK-001', rutaId: 'DEMO-ROUTE-001', fecha: now,
+    vendedorId: '3', responsableTransporte: 'Historial sintético de demostración',
+    clientesIds: JSON.stringify(['DEMO-CLI-001']), totalCartones: 0, totalKg: 0,
+    estado: 'Cerrada', finDiaFecha: now,
+  }).onConflictDoNothing();
+  await db.update(schema.guias_despacho).set({ estado: 'Cerrada' }).where(eq(schema.guias_despacho.id, guiaHistorialDemoId));
+
+  const pedidosDemo = [
+    { id: 'DEMO-HIST-VENTA-001', consecutivo: 'TQ-DEMO-HIST-0001', dias: 18, producto: 'Huevos Grandes', kg: 10, precio: 1180 },
+    { id: 'DEMO-HIST-VENTA-002', consecutivo: 'TQ-DEMO-HIST-0002', dias: 12, producto: 'Huevos Grandes', kg: 12, precio: 1200 },
+    { id: 'DEMO-HIST-VENTA-003', consecutivo: 'TQ-DEMO-HIST-0003', dias: 5, producto: 'Huevos Grandes', kg: 14, precio: 1250 },
+    { id: 'DEMO-HIST-VENTA-004', consecutivo: 'TQ-DEMO-HIST-0004', dias: 15, producto: 'Huevos Medianos', kg: 6, precio: 1020 },
+    { id: 'DEMO-HIST-VENTA-005', consecutivo: 'TQ-DEMO-HIST-0005', dias: 4, producto: 'Huevos Medianos', kg: 8, precio: 1080 },
+  ];
+  for (const pedido of pedidosDemo) {
+    const subtotal = pedido.kg * pedido.precio;
+    await db.insert(schema.ventas_ruta_kg).values({
+      id: pedido.id, tiqueteConsecutivo: pedido.consecutivo, camionId: 'DEMO-TRUCK-001',
+      guiaId: guiaHistorialDemoId, vendedorId: '3',
+      fechaHora: new Date(Date.now() - pedido.dias * 86400000).toISOString(),
+      clienteId: 'DEMO-CLI-001', producto: pedido.producto, cantidadKg: pedido.kg,
+      cantidadInventario: pedido.kg, unidadInventario: 'kg', precioKg: pedido.precio,
+      subtotal, descuento: 0, total: subtotal, cobro: 'Efectivo', estado: 'Emitida',
+      resolucionPrecioJson: JSON.stringify({ demo: true, nota: 'Pedido histórico sintético para demostrar sugerencias; no es una venta real.' }),
+    }).onConflictDoNothing();
+  }
 }
