@@ -400,6 +400,9 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const inventarioKgCamion = productosDisponibles
     .filter((i: any) => i.unidad === 'kg')
     .reduce((s: number, i: any) => s + Number(i.cantidad || 0), 0);
+  const ventaEnPreparacion = Boolean(clienteId && producto && pasoVenta >= 3);
+  const kilosApartadosTemporalmente = ventaEnPreparacion ? Math.min(Math.max(0, cantidad), stockProducto) : 0;
+  const disponibleCamionVisual = Math.max(0, inventarioKgCamion - kilosApartadosTemporalmente);
   const clientesRuta = (guia?.rutaOrden || []).length > 0 ? guia.rutaOrden : (guia?.clientesRuta || []);
   const clientesCompletadosIds = new Set(ventas.filter((venta: any) => venta.estado === 'Emitida' && venta.clienteId).map((venta: any) => String(venta.clienteId)));
   const clientesPorEntregar = clientesRuta.filter((cliente: any) => !clientesCompletadosIds.has(String(cliente.clienteId)));
@@ -520,8 +523,8 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                 <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{vendidoKg.toFixed(2)} kg</p>
               </div>
               <div className="route-pos-metric rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
-                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Disponible</p>
-                <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{inventarioKgCamion.toFixed(2)} kg</p>
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{ventaEnPreparacion ? 'Disponible al confirmar' : 'Disponible'}</p>
+                <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{disponibleCamionVisual.toFixed(2)} kg</p>
               </div>
             </div>
           )}
@@ -699,7 +702,6 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
               )}
 
               {!producto && <p role="status" className="rounded-xl px-3 py-2 text-sm" style={{ background: 'var(--bg-muted)', color: 'var(--text-muted)' }}>Seleccione un producto para continuar a la cantidad y el precio.</p>}
-              {producto && <p className="rounded-xl px-3 py-2 text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}><strong>{producto}</strong> seleccionado · {stockProducto.toFixed(2)} kg disponibles en el camión.</p>}
             </div>}
 
             {/* Cantidad y precio */}
