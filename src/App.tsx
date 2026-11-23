@@ -781,7 +781,7 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
               {renderFilaTabs(subTabsInternosDe('finanzas', subTab), 'secundario')}
               <Suspense fallback={<ModuleLoading />}><div className="animate-in fade-in">
                 {subTab === 'resumen' && <FinanzasResumen currentUser={currentUser} onNavigate={setSubTab} />}
-                {subTab === 'documentos' && <Facturacion currentUser={currentUser} />}
+                {subTab === 'documentos' && <Facturacion currentUser={currentUser} onNavigateToBodega={() => { setActiveTab('operaciones'); setSubTab('control'); }} />}
                 {subTab === 'gastos-ruta' && <GastosRutaAdmin currentUser={currentUser} />}
                 {subTab === 'cobranza' && <Cobranza currentUser={currentUser} />}
                 {tipoReporteDe(subTab) && (
