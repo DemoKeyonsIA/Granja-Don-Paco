@@ -153,7 +153,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
 
   // Load draft on mount
   const draft = loadDraft();
-  const [wizardStep, setWizardStep] = useState(Math.min(draft?.wizardStep || 1, 2));
+  const [wizardStep, setWizardStep] = useState(Math.min(draft?.wizardStep || 1, 5));
   const [tipoDocumento, setTipoDocumento] = useState<'Factura' | 'Tiquete' | 'Proforma'>(draft?.tipoDocumento || 'Factura');
   const [proformaOrigenId, setProformaOrigenId] = useState<string | null>(null);
   const [selectedCliente, setSelectedCliente] = useState(draft?.selectedCliente || '');
@@ -289,21 +289,30 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
 
   // Wizard navigation
   const canAdvance = () => {
-    if (wizardStep === 1) return tipoDocumento === 'Tiquete' || tipoDocumento === 'Proforma' || !!selectedCliente;
-    if (wizardStep === 2) {
-      const cobroValido = tipoDocumento === 'Proforma' || (totalRecibido <= total + 0.01 && (condicionPago !== 'Contado' || saldoACredito <= 0.01) && (saldoACredito <= 0.01 || !!selectedCliente));
-      return itemsEnCarrito.length > 0 && itemsEnCarrito.every(d => tipoDocumento === 'Proforma' || d.cantidad <= stockPara(d.producto)) && preciosFueraDeRango.length === 0 && descuento <= descuentoMaximoAutorizado + 0.01 && cobroValido;
+    if (wizardStep === 1) return true;
+    if (wizardStep === 2) return tipoDocumento !== 'Factura' || !!selectedCliente;
+    if (wizardStep === 3) {
+      return itemsEnCarrito.length > 0 && itemsEnCarrito.every(d => d.cantidad > 0 && (tipoDocumento === 'Proforma' || d.cantidad <= stockPara(d.producto)));
+    }
+    if (wizardStep === 4) {
+      return itemsEnCarrito.length > 0 && preciosFueraDeRango.length === 0 && descuento <= descuentoMaximoAutorizado + 0.01;
+    }
+    if (wizardStep === 5) {
+      if (tipoDocumento === 'Proforma') return true;
+      const cobroValido = totalRecibido <= total + 0.01 && (condicionPago !== 'Contado' || saldoACredito <= 0.01) && (saldoACredito <= 0.01 || !!selectedCliente);
+      return cobroValido;
     }
     return true;
   };
 
   const handleNext = async () => {
     if (!canAdvance()) {
-      if (wizardStep === 1) toast.error('Selecciona el cliente para continuar.');
-      if (wizardStep === 2) toast.error('Agrega un producto y revisa precio, descuento y cobro.');
+      if (wizardStep === 2) toast.error('Selecciona el cliente para continuar.');
+      if (wizardStep === 3) toast.error('Agrega al menos un producto y revisa la cantidad disponible.');
+      if (wizardStep === 4) toast.error('Revisa el rango de precios y el descuento autorizado.');
       return;
     }
-    if (wizardStep === 1) {
+    if (wizardStep === 3) {
       try {
         const politicas = await Promise.all(detalles.map(async d => d.producto && d.cantidad > 0
           ? resolverPoliticaPrecio(d.producto, selectedCliente || undefined)
@@ -324,7 +333,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
         return;
       }
     }
-    setWizardStep(Math.min(wizardStep + 1, 2));
+    setWizardStep(Math.min(wizardStep + 1, 5));
   };
 
   const handlePrev = () => setWizardStep(Math.max(wizardStep - 1, 1));
@@ -390,7 +399,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
       detalles: detallesAutorizados,
       subtotal: subtotalAutorizado, descuento, total: subtotalAutorizado - descuento,
       condicion_pago: saldoACredito > 0.01 ? 'Credito' : 'Contado',
-      metodo_pago: pagosNormalizados.length > 1 ? 'Mixto' : pagosNormalizados[0]?.metodo,
+      metodo_pago: (pagosNormalizados.length > 1 ? 'Mixto' : pagosNormalizados[0]?.metodo) as Factura['metodo_pago'],
       estado: saldoACredito > 0.01 ? 'Pendiente' : 'Pagada'
     };
 
@@ -641,37 +650,45 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
 
       {isCreating ? (
         <div className="min-w-0 overflow-x-hidden rounded-3xl p-3 pb-36 animate-in slide-in-from-top-4 md:p-6 md:pb-6" style={{ background: 'var(--bg-muted)' }}>
-          <WizardProgress steps={[{ number: 1, label: 'Cliente' }, { number: 2, label: 'Venta' }]} currentStep={wizardStep} />
+          <WizardProgress steps={[{ number: 1, label: 'Documento' }, { number: 2, label: 'Cliente' }, { number: 3, label: 'Productos' }, { number: 4, label: 'Precio y descuento' }, { number: 5, label: 'Pago' }]} currentStep={wizardStep} />
 
-          {/* Paso 1: documento y cliente */}
+          {/* Paso 1: tipo de documento */}
           {wizardStep === 1 && (
             <div className="mx-auto max-w-2xl space-y-4 animate-in fade-in">
               <section className="rounded-2xl border p-4 sm:p-5" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
                 <h3 className="mb-3 font-bold" style={{ color: 'var(--text-primary)' }}>Tipo de documento</h3>
                 <div className="grid grid-cols-3 gap-2">
-                  {([['Factura', 'Factura', FileText], ['Tiquete', 'Tiquete', Ticket], ['Proforma', 'Proforma', FileText]] as const).map(([tipo, etiqueta, Icono]) => <button key={tipo} type="button" onClick={() => { setTipoDocumento(tipo); if (tipo === 'Tiquete') setSelectedCliente(''); }} className="flex min-h-12 items-center justify-center gap-1 rounded-xl px-2 text-xs font-bold sm:text-sm" style={tipoDocumento === tipo ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)' } : { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}><Icono className="h-4 w-4 shrink-0" />{etiqueta}</button>)}
+                  {([['Factura', 'Factura', FileText], ['Tiquete', 'Tiquete', Ticket], ['Proforma', 'Proforma', FileText]] as const).map(([tipo, etiqueta, Icono]) => <button key={tipo} type="button" onClick={() => setTipoDocumento(tipo)} className="flex min-h-12 items-center justify-center gap-1 rounded-xl px-2 text-xs font-bold sm:text-sm" style={tipoDocumento === tipo ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)' } : { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}><Icono className="h-4 w-4 shrink-0" />{etiqueta}</button>)}
                 </div>
-                {tipoDocumento !== 'Tiquete' ? <label className="mt-4 block text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Cliente
+              </section>
+            </div>
+          )}
+
+          {/* Paso 2: cliente */}
+          {wizardStep === 2 && (
+            <div className="mx-auto max-w-2xl space-y-4 animate-in fade-in">
+              <section className="rounded-2xl border p-4 sm:p-5" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+                <h3 className="mb-3 font-bold" style={{ color: 'var(--text-primary)' }}>¿A quién se emite?</h3>
+                <label className="block text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Cliente
                   <select value={selectedCliente} onChange={handleClienteChange} className="mt-1 min-h-12 w-full rounded-xl border px-3 text-base" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>
-                    <option value="">{tipoDocumento === 'Proforma' ? 'Sin cliente (opcional)' : 'Seleccione un cliente'}</option>
+                    <option value="">{tipoDocumento === 'Factura' ? 'Seleccione un cliente' : tipoDocumento === 'Tiquete' ? 'Consumidor final' : 'Sin cliente (opcional)'}</option>
                     {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
-                </label> : <p className="mt-4 rounded-xl px-3 py-2 text-sm" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Tiquete · consumidor final</p>}
+                </label>
+                {tipoDocumento === 'Factura' && !selectedCliente && <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>La factura requiere un cliente.</p>}
                 {selectedCliente && facturas.some(f => f.clienteId === selectedCliente && f.estado === 'Pendiente') && <p className="mt-3 rounded-xl p-3 text-sm" style={{ background: 'var(--status-warning-soft)', color: 'var(--text-primary)' }}>Este cliente tiene facturas pendientes de pago.</p>}
                 {selectedCliente && <button type="button" onClick={handleRepetirPedido} className="mt-3 text-sm font-bold" style={{ color: 'var(--brand-primary)' }}><RefreshCw className="mr-1 inline h-4 w-4" />Repetir último pedido</button>}
               </section>
             </div>
           )}
 
-          {/* Paso 2: líneas, precios, descuento y cobro */}
-          {wizardStep === 2 && (
+          {/* Paso 3: selección de productos y cantidades */}
+          {wizardStep === 3 && (
             <div className="mx-auto max-w-2xl space-y-3 animate-in fade-in">
-              <h3 className="px-1 text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>Productos, precio y cobro</h3>
+              <h3 className="px-1 text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>¿Qué productos y cantidades?</h3>
               {detalles.map((detalle, index) => {
-                const politica = politicasPrecio[detalle.producto];
-                const fueraDeRango = Boolean(detalle.producto) && (!politica || detalle.precio_unitario < politica.precioMinimo - 0.01 || detalle.precio_unitario > politica.precioMaximo + 0.01);
                 const stockDisponible = detalle.producto ? stockPara(detalle.producto) : 0;
-                return <section key={`linea-${index}`} className="rounded-2xl border p-3 sm:p-4" style={{ background: 'var(--bg-card)', borderColor: fueraDeRango ? 'var(--status-danger)' : 'var(--border-default)' }}>
+                return <section key={`linea-${index}`} className="rounded-2xl border p-3 sm:p-4" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
                   <div className="mb-3 flex items-center justify-between gap-2"><span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Producto {index + 1}</span>{detalles.length > 1 && <button type="button" onClick={() => removeDetalle(index)} className="flex min-h-10 items-center gap-1 rounded-lg px-2 text-xs font-bold" style={{ color: 'var(--status-danger)', background: 'var(--status-danger-soft)' }}><Trash2 className="h-4 w-4" />Quitar</button>}</div>
                   <label className="block text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Producto
                     <select value={detalle.producto} onChange={e => void handleProductoChange(index, e.target.value)} className="mt-1 min-h-12 w-full rounded-xl border px-3 text-base" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>
@@ -680,26 +697,51 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                     </select>
                   </label>
                   {detalle.producto && <>
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      <label className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Cantidad (kg)
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-xl px-3 py-2" style={{ background: 'var(--bg-muted)' }}><span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Existencias actuales</span><strong className="text-sm" style={{ color: 'var(--text-primary)' }}>{stockDisponible.toFixed(2)} kg</strong></div>
+                    <label className="mt-3 block text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Cantidad (kg)
                         <input aria-label={`Cantidad de ${detalle.producto}`} type="number" min="0.01" max={tipoDocumento === 'Proforma' ? undefined : stockDisponible} step="0.25" inputMode="decimal" value={detalle.cantidad || ''} onChange={e => updateDetalle(index, 'cantidad', e.target.value === '' ? 0 : Number(e.target.value))} className="mt-1 min-h-12 w-full rounded-xl border px-3 text-lg font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} />
                       </label>
-                      <label className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Precio por kg (₡)
-                        <input aria-label={`Precio por kg de ${detalle.producto}`} type="number" min={politica?.precioMinimo ?? 0} max={politica?.precioMaximo ?? 0} step="1" inputMode="numeric" disabled={!politica} value={detalle.precio_unitario || ''} onChange={e => updateDetalle(index, 'precio_unitario', e.target.value === '' ? 0 : Number(e.target.value))} className="mt-1 min-h-12 w-full rounded-xl border px-3 text-lg font-bold disabled:opacity-50" style={{ background: 'var(--bg-muted)', borderColor: fueraDeRango ? 'var(--status-danger)' : 'var(--border-default)', color: 'var(--text-primary)' }} placeholder="Cargando…" />
-                      </label>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-                      <span>{politica ? `Autorizado ${formatoCRC(politica.precioMinimo)}–${formatoCRC(politica.precioMaximo)} · sugerido ${formatoCRC(politica.precio)}` : 'Seleccione un producto para cargar el precio autorizado.'}</span>
-                      <strong style={{ color: 'var(--text-primary)' }}>Importe {formatoCRC(detalle.subtotal)}</strong>
-                    </div>
-                    {fueraDeRango && <p role="alert" className="mt-2 text-xs font-bold" style={{ color: 'var(--status-danger)' }}>Ajuste el precio al rango autorizado para continuar.</p>}
-                    {tipoDocumento !== 'Proforma' && <p className="mt-1 text-xs" role={stockDisponible < detalle.cantidad ? 'alert' : undefined} style={{ color: stockDisponible < detalle.cantidad ? 'var(--status-danger)' : 'var(--text-muted)' }}>{stockDisponible < detalle.cantidad ? `Solo hay ${stockDisponible.toFixed(2)} kg disponibles.` : `Disponible: ${stockDisponible.toFixed(2)} kg`}</p>}
+                    {tipoDocumento !== 'Proforma' && stockDisponible < detalle.cantidad && <p className="mt-1 text-xs font-semibold" role="alert" style={{ color: 'var(--status-danger)' }}>Solo hay {stockDisponible.toFixed(2)} kg disponibles.</p>}
                   </>}
                 </section>;
               })}
               <button type="button" onClick={addDetalle} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed text-sm font-bold" style={{ borderColor: 'var(--brand-primary)', color: 'var(--brand-primary)' }}><Plus className="h-5 w-5" />Agregar otro producto</button>
+            </div>
+          )}
 
-              {tipoDocumento !== 'Proforma' && <section className="rounded-2xl border p-3 sm:p-4" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+          {/* Paso 4: precio y descuento */}
+          {wizardStep === 4 && (
+            <div className="mx-auto max-w-2xl space-y-3 animate-in fade-in">
+              <h3 className="px-1 text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>Precios autorizados y descuento</h3>
+              {itemsEnCarrito.map((detalle) => {
+                const index = detalles.indexOf(detalle);
+                const politica = politicasPrecio[detalle.producto];
+                const fueraDeRango = !politica || detalle.precio_unitario < politica.precioMinimo - 0.01 || detalle.precio_unitario > politica.precioMaximo + 0.01;
+                return <section key={`precio-${detalle.producto}`} className="rounded-2xl border p-3 sm:p-4" style={{ background: 'var(--bg-card)', borderColor: fueraDeRango ? 'var(--status-danger)' : 'var(--border-default)' }}>
+                  <div className="flex items-start justify-between gap-2"><div><p className="font-bold" style={{ color: 'var(--text-primary)' }}>{detalle.producto}</p><p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{detalle.cantidad.toFixed(2)} kg</p></div><strong className="text-sm" style={{ color: 'var(--text-primary)' }}>{formatoCRC(detalle.cantidad * detalle.precio_unitario)}</strong></div>
+                  <label className="mt-3 block text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Precio por kg (₡)
+                    <input aria-label={`Precio por kg de ${detalle.producto}`} type="number" min={politica?.precioMinimo ?? 0} max={politica?.precioMaximo ?? 0} step="1" inputMode="numeric" disabled={!politica} value={detalle.precio_unitario || ''} onChange={e => updateDetalle(index, 'precio_unitario', e.target.value === '' ? 0 : Number(e.target.value))} className="mt-1 min-h-12 w-full rounded-xl border px-3 text-lg font-bold disabled:opacity-50" style={{ background: 'var(--bg-muted)', borderColor: fueraDeRango ? 'var(--status-danger)' : 'var(--border-default)', color: 'var(--text-primary)' }} placeholder="Cargando…" />
+                  </label>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-1 text-xs" style={{ color: 'var(--text-muted)' }}><span>{politica ? `Rango autorizado: ${formatoCRC(politica.precioMinimo)}–${formatoCRC(politica.precioMaximo)} · sugerido ${formatoCRC(politica.precio)}` : 'No hay un precio autorizado disponible.'}</span><strong style={{ color: 'var(--text-primary)' }}>Importe {formatoCRC(detalle.cantidad * detalle.precio_unitario)}</strong></div>
+                  {fueraDeRango && <p role="alert" className="mt-2 text-xs font-bold" style={{ color: 'var(--status-danger)' }}>Ajusta el precio al rango autorizado para continuar.</p>}
+                </section>;
+              })}
+              <section className="rounded-2xl p-4" style={{ background: 'var(--brand-primary-soft)' }}>
+                <div className="flex items-center justify-between gap-3 text-sm"><span style={{ color: 'var(--text-secondary)' }}>Subtotal</span><strong style={{ color: 'var(--text-primary)' }}>{formatoCRC(subtotal)}</strong></div>
+                <div className="mt-2 flex items-center justify-between gap-3"><label htmlFor="invoice-discount" className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Descuento (₡)</label><input id="invoice-discount" aria-label="Descuento total en colones" type="number" min="0" max={Math.floor(descuentoMaximoAutorizado)} step="1" inputMode="numeric" disabled={descuentoMaximoAutorizado <= 0} value={descuento === 0 ? '' : descuento} onChange={e => setDescuento(e.target.value === '' ? 0 : Number(e.target.value))} className="min-h-11 w-36 rounded-xl border px-3 text-right text-base font-bold disabled:opacity-60" style={{ background: 'var(--bg-card)', borderColor: descuento > descuentoMaximoAutorizado + 0.01 ? 'var(--status-danger)' : 'var(--border-default)', color: 'var(--text-primary)' }} placeholder="₡0" /></div>
+                <p className="mt-1 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>{descuentoMaximoAutorizado > 0 ? `Máximo autorizado: ${formatoCRC(descuentoMaximoAutorizado)}` : 'Sin descuento autorizado por Administración.'}</p>
+                {descuento > descuentoMaximoAutorizado + 0.01 && <p role="alert" className="text-right text-xs font-bold" style={{ color: 'var(--status-danger)' }}>Reduce el descuento al máximo autorizado.</p>}
+                <div className="mt-3 flex items-end justify-between gap-3 border-t pt-3" style={{ borderColor: 'color-mix(in srgb, var(--brand-primary) 25%, transparent)' }}><div><p className="text-xs" style={{ color: 'var(--text-secondary)' }}>TOTAL</p><strong className="text-2xl tabular-nums" style={{ color: 'var(--text-primary)' }}>{formatoCRC(total)}</strong></div></div>
+              </section>
+            </div>
+          )}
+
+          {/* Paso 5: formas de pago */}
+          {wizardStep === 5 && (
+            <div className="mx-auto max-w-2xl space-y-3 animate-in fade-in">
+              <h3 className="px-1 text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>{tipoDocumento === 'Proforma' ? 'Revisa y guarda la proforma' : 'Formas de pago'}</h3>
+              {tipoDocumento !== 'Proforma' ? <>
+              <section className="rounded-2xl border p-3 sm:p-4" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Condición de pago
                     <select value={condicionPago} onChange={e => { const value = e.target.value as 'Contado' | 'Credito'; setCondicionPago(value); if (value === 'Contado' && pagos.length === 0) setPagos([{ metodo: 'Efectivo', monto: 'total' }]); }} className="mt-1 min-h-11 w-full rounded-xl border px-2 text-sm" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><option value="Contado">Contado</option><option value="Credito">Crédito</option></select>
@@ -711,16 +753,9 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                   <label className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Monto (₡)<input type="number" min="0" max={total} step="1" inputMode="numeric" value={pago.monto === 'total' ? (total || '') : pago.monto} onChange={e => setPagos(actual => actual.map((p, i) => i === index ? { ...p, monto: e.target.value } : p))} className="mt-1 min-h-10 w-full rounded-lg border px-2 text-sm font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} placeholder="0" /></label>
                   <button type="button" onClick={() => setPagos(actual => actual.filter((_, i) => i !== index))} disabled={pagos.length <= 1} className="mb-0.5 flex h-10 w-10 items-center justify-center rounded-lg disabled:opacity-40" style={{ color: 'var(--text-secondary)' }} aria-label="Quitar medio"><X className="h-4 w-4" /></button>
                 </div>)}{condicionPago === 'Credito' && selectedCliente && <button type="button" onClick={() => setPagos([])} className="min-h-9 text-xs font-bold" style={{ color: 'var(--brand-primary)' }}>Dejar el saldo completo a crédito</button>}</div>
-              </section>}
-
-              <section className="rounded-2xl p-4" style={{ background: 'var(--brand-primary-soft)' }}>
-                <div className="flex items-center justify-between gap-3 text-sm"><span style={{ color: 'var(--text-secondary)' }}>Subtotal</span><strong style={{ color: 'var(--text-primary)' }}>{formatoCRC(subtotal)}</strong></div>
-                <div className="mt-2 flex items-center justify-between gap-3"><label htmlFor="invoice-discount" className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Descuento (₡)</label><input id="invoice-discount" aria-label="Descuento total en colones" type="number" min="0" max={Math.floor(descuentoMaximoAutorizado)} step="1" inputMode="numeric" disabled={descuentoMaximoAutorizado <= 0} value={descuento === 0 ? '' : descuento} onChange={e => setDescuento(e.target.value === '' ? 0 : Number(e.target.value))} className="min-h-11 w-36 rounded-xl border px-3 text-right text-base font-bold disabled:opacity-60" style={{ background: 'var(--bg-card)', borderColor: descuento > descuentoMaximoAutorizado + 0.01 ? 'var(--status-danger)' : 'var(--border-default)', color: 'var(--text-primary)' }} placeholder="₡0" /></div>
-                <p className="mt-1 text-right text-xs" style={{ color: 'var(--text-secondary)' }}>{descuentoMaximoAutorizado > 0 ? `Máximo autorizado: ${formatoCRC(descuentoMaximoAutorizado)}` : 'Para aplicar descuento, Administración debe habilitarlo en la lista de precios.'}</p>
-                {descuento > descuentoMaximoAutorizado + 0.01 && <p role="alert" className="text-right text-xs font-bold" style={{ color: 'var(--status-danger)' }}>Reduzca el descuento al máximo autorizado.</p>}
-                <div className="mt-3 flex items-end justify-between gap-3 border-t pt-3" style={{ borderColor: 'color-mix(in srgb, var(--brand-primary) 25%, transparent)' }}><div><p className="text-xs" style={{ color: 'var(--text-secondary)' }}>TOTAL</p><strong className="text-2xl tabular-nums" style={{ color: 'var(--text-primary)' }}>{formatoCRC(total)}</strong></div>{tipoDocumento !== 'Proforma' && <div className="text-right text-xs" style={{ color: 'var(--text-secondary)' }}>Recibido {formatoCRC(totalRecibido)}{saldoACredito > 0.01 && <span className="block">A crédito {formatoCRC(saldoACredito)}</span>}</div>}</div>
               </section>
-              {tipoDocumento === 'Proforma' && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>La proforma se guarda como cotización; no registra venta ni cobro.</p>}
+              <section className="rounded-2xl p-4" style={{ background: 'var(--brand-primary-soft)' }}><div className="flex items-center justify-between gap-3"><span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>Total</span><strong className="text-2xl tabular-nums" style={{ color: 'var(--text-primary)' }}>{formatoCRC(total)}</strong></div><div className="mt-2 flex items-center justify-between gap-3 text-sm"><span style={{ color: 'var(--text-secondary)' }}>Recibido</span><strong style={{ color: 'var(--text-primary)' }}>{formatoCRC(totalRecibido)}</strong></div>{saldoACredito > 0.01 && <div className="mt-1 flex items-center justify-between gap-3 text-sm"><span style={{ color: 'var(--text-secondary)' }}>Saldo a crédito</span><strong style={{ color: 'var(--text-primary)' }}>{formatoCRC(saldoACredito)}</strong></div>}</section>
+              </> : <section className="rounded-2xl p-4" style={{ background: 'var(--brand-primary-soft)' }}><p className="text-sm" style={{ color: 'var(--text-secondary)' }}>La proforma se guarda como cotización; no registra venta, cobro ni salida de inventario.</p><div className="mt-3 flex items-center justify-between gap-3 border-t pt-3" style={{ borderColor: 'color-mix(in srgb, var(--brand-primary) 25%, transparent)' }}><span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>Total cotizado</span><strong className="text-2xl tabular-nums" style={{ color: 'var(--text-primary)' }}>{formatoCRC(total)}</strong></div></section>}
             </div>
           )}
           {/* Navigation buttons */}
@@ -731,10 +766,11 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 wizardStep === 1 ? "opacity-30 cursor-not-allowed text-neutral-400" : "text-neutral-700 hover:bg-neutral-200")}>
               <ArrowLeft className="w-4 h-4" /> Anterior
             </button>
-            {wizardStep < 2 ? (
+            {wizardStep < 5 ? (
               <button type="button" onClick={handleNext}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-colors shadow-md" style={{ background: 'var(--brand-primary)' }}>
-                Siguiente <ArrowRight className="w-4 h-4" />
+                disabled={!canAdvance()}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm transition-colors shadow-md disabled:opacity-50" style={{ background: 'var(--brand-primary)' }}>
+                {wizardStep === 1 ? 'Continuar a cliente' : wizardStep === 2 ? 'Continuar a productos' : wizardStep === 3 ? 'Continuar a precios' : 'Continuar a pago'} <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
               <button type="button" onClick={handleCreate} disabled={creandoFactura || !canAdvance()}
@@ -750,9 +786,9 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                   <ArrowLeft className="h-5 w-5" />
                 </button>
               )}
-              {wizardStep < 2 ? (
+              {wizardStep < 5 ? (
                 <button type="button" onClick={handleNext} disabled={!canAdvance()} className="min-h-12 flex-1 rounded-xl px-5 font-bold shadow-sm disabled:cursor-not-allowed disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
-                  Continuar a productos <ArrowRight className="ml-2 inline h-4 w-4" />
+                  {wizardStep === 1 ? 'Continuar a cliente' : wizardStep === 2 ? 'Continuar a productos' : wizardStep === 3 ? 'Continuar a precios' : 'Continuar a pago'} <ArrowRight className="ml-2 inline h-4 w-4" />
                 </button>
               ) : (
                 <button type="button" onClick={handleCreate} disabled={creandoFactura || !canAdvance()} className="min-h-12 flex-1 rounded-xl px-5 font-bold shadow-sm disabled:cursor-wait disabled:opacity-60" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
