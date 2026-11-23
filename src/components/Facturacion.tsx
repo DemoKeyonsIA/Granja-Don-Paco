@@ -543,6 +543,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute }: Facturac
 
   const handleAnularFactura = async () => {
     if (!facturaParaAnular) return;
+    const facturaBase = facturaParaAnular;
     const motivo = motivoAnulacion.trim();
     if (motivo.length < 5) return toast.error('Indique un motivo de al menos 5 caracteres.');
     setAnulandoFactura(true);
@@ -557,7 +558,18 @@ export default function Facturacion({ currentUser, onNavigateToRoute }: Facturac
       setFacturaSeleccionada(null);
       setFacturaParaAnular(null);
       setMotivoAnulacion('');
-      toast.success(`Factura anulada con nota de crédito ${data.consecutivo || ''}.`.trim());
+      const documentoOriginal = documentosElectronicos.find(d => d.facturaId === facturaBase.id && ['Factura', 'Tiquete'].includes(d.tipoDocumento));
+      setTipoDocumento(documentoOriginal?.tipoDocumento === 'Tiquete' ? 'Tiquete' : 'Factura');
+      setProformaOrigenId(null);
+      setSelectedCliente(facturaBase.clienteId || '');
+      setDetalles((Array.isArray(facturaBase.detalles) ? facturaBase.detalles : []).map(d => ({ ...d })));
+      setPoliticasPrecio({});
+      setDescuento(Number(facturaBase.descuento) || 0);
+      setCondicionPago(facturaBase.condicion_pago || 'Contado');
+      setPagos([{ metodo: 'Efectivo', monto: 'total' }]);
+      setWizardStep(1);
+      setIsCreating(true);
+      toast.success(`Factura anulada con nota de crédito ${data.consecutivo || ''}. Revisa la factura corregida y confirma para emitirla.`.trim());
     } catch (error: any) {
       toast.error(error.message || 'No se pudo anular la factura.');
     } finally { setAnulandoFactura(false); }
@@ -860,11 +872,14 @@ export default function Facturacion({ currentUser, onNavigateToRoute }: Facturac
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <button onClick={() => abrirFactura(f)}
-                          title={`Ver factura ${f.consecutivo}`}
-                          className="p-1.5 hover:bg-stone-50 rounded-lg transition-colors inline-flex items-center space-x-1" style={{ color: 'var(--text-link)' }}>
-                          <FileText className="w-4 h-4" /><span className="text-xs font-bold">Ver</span>
-                        </button>
+                        <div className="inline-flex items-center gap-2">
+                          <button onClick={() => abrirFactura(f)}
+                            title={`Ver factura ${f.consecutivo}`}
+                            className="p-1.5 hover:bg-stone-50 rounded-lg transition-colors inline-flex items-center space-x-1" style={{ color: 'var(--text-link)' }}>
+                            <FileText className="w-4 h-4" /><span className="text-xs font-bold">Ver</span>
+                          </button>
+                          {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && !f.guiaId && <button type="button" onClick={() => abrirAnulacion(f)} className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', color: 'var(--text-primary)' }}><XCircle className="h-4 w-4" />Anular / corregir</button>}
+                        </div>
                       </td>
                     </tr>
                   ))}
