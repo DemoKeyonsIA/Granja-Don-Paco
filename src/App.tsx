@@ -700,7 +700,7 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
                   {effectiveSub === 'confirmar' && <CamioneroMovil currentUser={currentUser} />}
                   {effectiveSub === 'recibir' && <BodegaMovil currentUser={currentUser} />}
                   {effectiveSub === 'venta-movil' && <CajaRuta currentUser={currentUser} />}
-                  {effectiveSub === 'facturar-movil' && <Facturacion currentUser={currentUser} />}
+                  {effectiveSub === 'facturar-movil' && <Facturacion currentUser={currentUser} onNavigateToRoute={() => navegarComoComercial('ruta')} />}
                   {effectiveSub === 'cargas-comercial' && <CamioneroMovil currentUser={currentUser} />}
                 </div></Suspense>
               </div>

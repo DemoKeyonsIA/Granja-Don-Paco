@@ -17,6 +17,7 @@ const formatoCRC = (valor: number) => new Intl.NumberFormat('es-CR', { style: 'c
 
 interface FacturacionProps {
   currentUser: User;
+  onNavigateToRoute?: () => void;
 }
 
 interface RutaDia {
@@ -33,7 +34,7 @@ interface RutaDia {
   retornos: number;
 }
 
-export default function Facturacion({ currentUser }: FacturacionProps) {
+export default function Facturacion({ currentUser, onNavigateToRoute }: FacturacionProps) {
   const esVendedor = (currentUser.roles?.length ? currentUser.roles : [currentUser.role]).includes('Comercial');
   const [inventario, setInventario] = useState<InventarioItem[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -97,7 +98,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
   const [motivoAnulacion, setMotivoAnulacion] = useState('');
   const [anulandoFactura, setAnulandoFactura] = useState(false);
   const [correoReenvioFactura, setCorreoReenvioFactura] = useState('');
-  const [facturasExpandOf, setFacturasExpandOf] = useState<Set<string>>(() => new Set());
+  const [facturaExpandidaId, setFacturaExpandidaId] = useState<string | null>(null);
   const [filtroDocumentosVendedor, setFiltroDocumentosVendedor] = useState<'todos' | 'facturas' | 'proformas'>('todos');
   const [creandoFactura, setCreandoFactura] = useState(false);
 
@@ -568,6 +569,15 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
     setFacturaSeleccionada(factura);
   };
 
+  const alternarFacturaExpandida = (id: string) => {
+    setFacturaExpandidaId(actual => actual === id ? null : id);
+  };
+
+  const abrirAnulacion = (factura: Factura) => {
+    setFacturaParaAnular(factura);
+    setMotivoAnulacion('');
+  };
+
   const imprimirFacturaDesdeLista = (factura: Factura) => {
     abrirFactura(factura);
     window.setTimeout(handleImprimirFactura, 250);
@@ -765,17 +775,13 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                 {([['todos', 'Todos', facturasActivas.length + proformas.length], ['facturas', 'Facturas', facturasActivas.length], ['proformas', 'Proformas', proformas.length]] as const).map(([filtro, etiqueta, cantidad]) => <button key={filtro} type="button" role="tab" aria-selected={filtroDocumentosVendedor === filtro} onClick={() => setFiltroDocumentosVendedor(filtro)} className="min-h-9 rounded-lg px-2.5 text-xs font-bold" style={{ background: filtroDocumentosVendedor === filtro ? 'var(--bg-card)' : 'transparent', color: filtroDocumentosVendedor === filtro ? 'var(--brand-primary)' : 'var(--text-secondary)' }}>{etiqueta}<span className="ml-1 opacity-70">{cantidad}</span></button>)}
               </div>
             </div>
-            {documentosVendedor.length > 1 && <div className="mb-2 flex justify-end gap-2">
-              <button type="button" onClick={() => setFacturasExpandOf(new Set(documentosVendedor.map(doc => doc.id)))} className="min-h-8 rounded-lg px-2.5 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Expandir todo</button>
-              <button type="button" onClick={() => setFacturasExpandOf(new Set())} className="min-h-8 rounded-lg px-2.5 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Contraer todo</button>
-            </div>}
             <div className="space-y-2">
               {documentosVendedor.map(doc => {
-                const expandido = facturasExpandOf.has(doc.id);
+                const expandido = facturaExpandidaId === doc.id;
                 const fecha = new Date(doc.fecha);
                 const detalleProforma = doc.tipo === 'Proforma' ? (doc.data.detalles || []).map((detalle: any) => `${detalle.producto} · ${Number(detalle.cantidad || 0).toFixed(2)} kg`).join(' / ') : '';
                 return <article key={doc.id} className="rounded-xl border p-3" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
-                  <button type="button" aria-expanded={expandido} onClick={() => setFacturasExpandOf(prev => { const next = new Set(prev); if (next.has(doc.id)) next.delete(doc.id); else next.add(doc.id); return next; })} className="flex min-h-12 w-full items-center justify-between gap-2 text-left">
+                  <button type="button" aria-expanded={expandido} onClick={() => alternarFacturaExpandida(doc.id)} className="flex min-h-12 w-full items-center justify-between gap-2 text-left">
                     <span className="min-w-0"><span className="block truncate text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{doc.consecutivo}</span><span className="mt-1 block truncate text-xs" style={{ color: 'var(--text-secondary)' }}>{doc.cliente} · {Number.isNaN(fecha.getTime()) ? 'Fecha sin registrar' : fecha.toLocaleDateString('es-CR')}{doc.tipo === 'Factura' && (doc.data as any).guiaId ? ' · Entrega de ruta' : ''}</span></span>
                     <span className="shrink-0 text-right"><span className="block text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{formatoCRC(doc.total)}</span><span className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold" style={doc.estado === 'Pagada' || doc.estado === 'Vigente' ? { background: 'var(--status-success-soft)', color: 'var(--status-success)' } : doc.estado === 'Pendiente' ? { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' } : { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>{doc.tipo === 'Proforma' ? 'Proforma' : doc.estado}</span></span>
                     <span className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--brand-primary)' }}>{expandido ? '−' : '+'}</span>
@@ -787,6 +793,8 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                         <button type="button" onClick={() => abrirFactura(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><FileText className="mr-1 inline h-4 w-4" />Ver factura</button>
                         <button type="button" onClick={() => abrirFactura(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Send className="mr-1 inline h-4 w-4" />Reenviar</button>
                         <button type="button" onClick={() => imprimirFacturaDesdeLista(doc.data)} className="min-h-10 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Printer className="mr-1 inline h-4 w-4" />Imprimir</button>
+                        {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && !doc.data.guiaId && <button type="button" onClick={() => abrirAnulacion(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', borderColor: 'var(--status-danger)', color: 'var(--text-primary)' }}><XCircle className="mr-1 inline h-4 w-4" />Anular y corregir</button>}
+                        {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && doc.data.guiaId && <button type="button" onClick={() => onNavigateToRoute?.()} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><ArrowLeft className="mr-1 inline h-4 w-4" />Gestionar devolución en Mi Ruta</button>}
                       </div>
                     </> : <>
                       <p className="mb-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{detalleProforma || 'Cotización comercial'}</p>
@@ -867,14 +875,11 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
               </table>
             </div>
             <div className="md:hidden space-y-2 p-3" style={{ borderColor: 'var(--border-default)' }}>
-              {filteredFacturas.length > 1 && <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setFacturasExpandOf(new Set(filteredFacturas.map(f => String(f.id))))} className="min-h-9 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Expandir todo</button>
-                <button type="button" onClick={() => setFacturasExpandOf(new Set())} className="min-h-9 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>Contraer todo</button>
-              </div>}
               {filteredFacturas.map(f => {
-                const expandida = facturasExpandOf.has(String(f.id));
+                const facturaId = String(f.id);
+                const expandida = facturaExpandidaId === facturaId;
                 return <article key={f.id} className="rounded-xl border p-3" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
-                  <button type="button" aria-expanded={expandida} onClick={() => setFacturasExpandOf(prev => { const next = new Set(prev); const id = String(f.id); if (next.has(id)) next.delete(id); else next.add(id); return next; })} className="flex min-h-12 w-full items-center justify-between gap-3 text-left" style={{ color: 'var(--text-primary)' }}>
+                  <button type="button" aria-expanded={expandida} onClick={() => alternarFacturaExpandida(facturaId)} className="flex min-h-12 w-full items-center justify-between gap-3 text-left" style={{ color: 'var(--text-primary)' }}>
                     <span className="min-w-0"><span className="block truncate text-sm font-extrabold">{f.consecutivo}</span><span className="mt-1 block truncate text-xs" style={{ color: 'var(--text-secondary)' }}>{getCliente(f.clienteId)?.nombre || 'Desconocido'} · {new Date(f.fecha).toLocaleDateString('es-CR')}</span></span>
                     <span className="shrink-0 text-right"><span className="block text-sm font-extrabold">{formatoCRC(Number(f.total))}</span><span className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold" style={f.estado === 'Pagada' ? { background: 'var(--status-success-soft)', color: 'var(--status-success)' } : f.estado === 'Pendiente' ? { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' } : { background: 'var(--status-danger-soft)', color: 'var(--status-danger)' }}>{f.estado}</span></span>
                     <span className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--brand-primary)' }}>{expandida ? '−' : '+'}</span>
@@ -885,6 +890,8 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
                       <button type="button" onClick={() => abrirFactura(f)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><FileText className="mr-1 inline h-4 w-4" />Ver factura</button>
                       <button type="button" onClick={() => abrirFactura(f)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Send className="mr-1 inline h-4 w-4" />Reenviar</button>
                       <button type="button" onClick={() => imprimirFacturaDesdeLista(f)} className="min-h-10 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Printer className="mr-1 inline h-4 w-4" />Imprimir</button>
+                      {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && !f.guiaId && <button type="button" onClick={() => abrirAnulacion(f)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', borderColor: 'var(--status-danger)', color: 'var(--text-primary)' }}><XCircle className="mr-1 inline h-4 w-4" />Anular y corregir</button>}
+                      {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && f.guiaId && esVendedor && <button type="button" onClick={() => onNavigateToRoute?.()} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><ArrowLeft className="mr-1 inline h-4 w-4" />Gestionar devolución en Mi Ruta</button>}
                     </div>
                   </div>}
                 </article>;
