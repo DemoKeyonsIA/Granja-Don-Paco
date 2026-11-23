@@ -71,6 +71,7 @@ export interface Factura {
   fecha: string;
   clienteId: string;
   vendedorId: string;
+  guiaId?: string | null;
   detalles: DetalleFactura[];
   subtotal: number;
   descuento: number;

@@ -93,6 +93,9 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [facturaSeleccionada, setFacturaSeleccionada] = useState<Factura | null>(null);
+  const [facturaParaAnular, setFacturaParaAnular] = useState<Factura | null>(null);
+  const [motivoAnulacion, setMotivoAnulacion] = useState('');
+  const [anulandoFactura, setAnulandoFactura] = useState(false);
   const [correoReenvioFactura, setCorreoReenvioFactura] = useState('');
   const [facturasExpandOf, setFacturasExpandOf] = useState<Set<string>>(() => new Set());
   const [filtroDocumentosVendedor, setFiltroDocumentosVendedor] = useState<'todos' | 'facturas' | 'proformas'>('todos');
@@ -535,6 +538,28 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
       'Granja Don Paco · Siempre frescos',
     ].filter(Boolean).join('\n');
     window.location.href = `mailto:${encodeURIComponent(correo)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  };
+
+  const handleAnularFactura = async () => {
+    if (!facturaParaAnular) return;
+    const motivo = motivoAnulacion.trim();
+    if (motivo.length < 5) return toast.error('Indique un motivo de al menos 5 caracteres.');
+    setAnulandoFactura(true);
+    try {
+      const response = await fetch('/api/facturacion/nota-credito', {
+        method: 'POST', headers: authHeaders,
+        body: JSON.stringify({ facturaIdOriginal: facturaParaAnular.id, motivo, monto: Number(facturaParaAnular.total) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo anular la factura.');
+      await fetchData();
+      setFacturaSeleccionada(null);
+      setFacturaParaAnular(null);
+      setMotivoAnulacion('');
+      toast.success(`Factura anulada con nota de crédito ${data.consecutivo || ''}.`.trim());
+    } catch (error: any) {
+      toast.error(error.message || 'No se pudo anular la factura.');
+    } finally { setAnulandoFactura(false); }
   };
 
   const abrirFactura = (factura: Factura) => {
@@ -1041,7 +1066,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
               <div className="invoice-paper-topline" />
               <header className="invoice-paper-header">
                 <div className="invoice-issuer-brand"><img src="/granja-don-paco-logo.png" alt="Granja Don Paco" /><div><strong>Granja Don Paco</strong><span>Siempre frescos</span>{documentoFiscalFactura?.emisorNombre && <small>{documentoFiscalFactura.emisorNombre}</small>}{cedulaEmisorVisible && <small>Cédula: {cedulaEmisorVisible}</small>}</div></div>
-                <div className="invoice-document-number"><span>{documentoFiscalFactura?.tipoDocumento === 'Tiquete' ? 'TIQUETE · DEMO' : 'FACTURA · DEMO'}</span><strong id="detalle-factura-titulo">{facturaSeleccionada.consecutivo}</strong><small>Emitida {new Date(facturaSeleccionada.fecha).toLocaleString('es-CR')}</small><em className={`invoice-status invoice-status-${facturaSeleccionada.estado.toLowerCase()}`}>{facturaSeleccionada.estado}</em></div>
+                <div className="invoice-document-number"><span>{documentoFiscalFactura?.tipoDocumento === 'Tiquete' ? 'TIQUETE · DEMO' : 'FACTURA · DEMO'}</span><strong id="detalle-factura-titulo">{facturaSeleccionada.consecutivo}</strong><small>Emitida {new Date(facturaSeleccionada.fecha).toLocaleString('es-CR')}</small><em className={`invoice-status invoice-status-${String(facturaSeleccionada.estado || 'Pendiente').toLowerCase()}`}>{facturaSeleccionada.estado || 'Pendiente'}</em></div>
                 <button type="button" className="invoice-close no-print" onClick={() => setFacturaSeleccionada(null)} aria-label="Cerrar detalle"><X className="w-5 h-5" /></button>
               </header>
               <div className="invoice-paper-meta"><span>Representación de demostración</span><span>{documentoFiscalFactura ? `Estado: ${getEstadoFiscalVisible(documentoFiscalFactura.estado)}` : 'Pendiente de documento demo'}</span></div>
@@ -1052,7 +1077,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
               </div>
               {documentoFiscalFactura && <div className="invoice-fiscal-identifiers"><span><b>TIPO DE DOCUMENTO</b>{documentoFiscalFactura.tipoDocumento === 'Tiquete' ? 'Tiquete · demo' : 'Factura · demo'}</span><span><b>CONSECUTIVO DE DEMOSTRACIÓN</b>{consecutivoFiscalValido ? documentoFiscalFactura.consecutivo : 'No disponible'}</span><span className="invoice-key"><b>CLAVE DE DEMOSTRACIÓN</b>{claveFiscalValida ? documentoFiscalFactura.clave : 'No disponible'}</span></div>}
               <div className="invoice-payment-strip"><span><b>CONDICIÓN</b>{facturaSeleccionada.condicion_pago === 'Credito' ? 'Crédito' : 'Contado'}</span><span><b>MEDIO DE PAGO</b>{facturaSeleccionada.metodo_pago || 'Crédito'}</span><span><b>FECHA</b>{new Date(facturaSeleccionada.fecha).toLocaleDateString('es-CR')}</span></div>
-              <div className="invoice-lines-wrap"><table className="invoice-lines"><thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO / KG</th><th className="align-right">TOTAL</th></tr></thead><tbody>{facturaSeleccionada.detalles?.map((d, i) => <tr key={`${d.producto}-${i}`}><td>{Number(d.cantidad).toLocaleString('es-CR', { maximumFractionDigits: 2 })} kg</td><td><strong>{d.producto}</strong></td><td>{formatoCRC(d.precio_unitario)}</td><td className="align-right">{formatoCRC(d.subtotal)}</td></tr>)}</tbody></table>{!facturaSeleccionada.detalles?.length && <p className="invoice-empty-lines">No hay líneas de producto registradas en esta factura.</p>}</div>
+              <div className="invoice-lines-wrap"><table className="invoice-lines"><thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO / KG</th><th className="align-right">TOTAL</th></tr></thead><tbody>{(Array.isArray(facturaSeleccionada.detalles) ? facturaSeleccionada.detalles : []).map((d, i) => <tr key={`${d.producto}-${i}`}><td>{Number(d.cantidad).toLocaleString('es-CR', { maximumFractionDigits: 2 })} kg</td><td><strong>{d.producto}</strong></td><td>{formatoCRC(d.precio_unitario)}</td><td className="align-right">{formatoCRC(d.subtotal)}</td></tr>)}</tbody></table>{(!Array.isArray(facturaSeleccionada.detalles) || facturaSeleccionada.detalles.length === 0) && <p className="invoice-empty-lines">No hay líneas de producto registradas en esta factura.</p>}</div>
               <div className="invoice-bottom-grid"><div className="invoice-received"><span>RECIBIDO CONFORME</span><i /><small>Nombre y firma del cliente</small></div><div className="invoice-totals"><div><span>Subtotal</span><b>{formatoCRC(facturaSeleccionada.subtotal)}</b></div>{facturaSeleccionada.descuento > 0 && <div><span>Descuento</span><b>− {formatoCRC(facturaSeleccionada.descuento)}</b></div>}{Number(documentoFiscalFactura?.impuestos || 0) > 0 && <div><span>Impuestos</span><b>{formatoCRC(Number(documentoFiscalFactura?.impuestos))}</b></div>}<div className="invoice-grand-total"><span>TOTAL</span><strong>{formatoCRC(facturaSeleccionada.total)}</strong></div>{facturaSeleccionada.saldoPendiente != null && facturaSeleccionada.saldoPendiente > 0 && <div className="invoice-balance"><span>Saldo pendiente</span><b>{formatoCRC(facturaSeleccionada.saldoPendiente)}</b></div>}</div></div>
               <footer className="invoice-paper-footer"><span>Gracias por su compra</span><small>Representación de demostración · Formato de referencia basado en comprobantes electrónicos 4.4</small></footer>
             </div>
@@ -1062,17 +1087,25 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
             </label>
             <div className="invoice-actions no-print">
               <button type="button" onClick={() => setFacturaSeleccionada(null)} className="invoice-secondary-action">Cerrar</button>
+              {facturaSeleccionada.estado !== 'Anulada' && !['NotaCredito'].includes(facturaSeleccionada.estado) && !facturaSeleccionada.guiaId && <button type="button" onClick={() => { setFacturaParaAnular(facturaSeleccionada); setMotivoAnulacion(''); }} className="invoice-secondary-action" title="Anular con nota de crédito y corregir emitiendo un documento nuevo"><XCircle className="w-4 h-4" /> Anular y corregir</button>}
               <button type="button" onClick={handleEnviarCorreoFactura} className="invoice-secondary-action" title="Preparar reenvío de la factura">
                 <Send className="w-4 h-4" /> Preparar reenvío
               </button>
               <button type="button" onClick={handleImprimirFactura} className="invoice-primary-action"><Printer className="w-4 h-4" /> Imprimir factura</button>
             </div>
             <p className="no-print px-4 pb-4 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-              El correo se prepara en tu aplicación de correo para que lo revises y adjuntes el PDF impreso.
+              {facturaSeleccionada.guiaId ? 'Las ventas de ruta se corrigen registrando la devolución desde Mi Ruta y esperando la recepción de Bodega.' : 'El correo se prepara en tu aplicación para que lo revises. Las facturas emitidas no se editan: se anulan con nota de crédito y luego se emite un documento nuevo.'}
             </p>
           </section>
         </div>
       )}
+      {facturaParaAnular && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/55 p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !anulandoFactura) setFacturaParaAnular(null); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="anular-factura-titulo" className="w-full max-w-md space-y-4 rounded-2xl border p-5 shadow-2xl" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+          <div><h3 id="anular-factura-titulo" className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Anular y corregir {facturaParaAnular.consecutivo}</h3><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Se conservará el documento original y se generará una nota de crédito simulada por {formatoCRC(Number(facturaParaAnular.total))}. Luego emita el documento corregido.</p></div>
+          <label className="block text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Motivo de anulación<textarea value={motivoAnulacion} onChange={event => setMotivoAnulacion(event.target.value)} maxLength={300} rows={3} autoFocus className="mt-1 w-full rounded-xl border p-3 text-sm font-normal" placeholder="Describa brevemente el motivo" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} /></label>
+          <div className="flex justify-end gap-2"><button type="button" disabled={anulandoFactura} onClick={() => setFacturaParaAnular(null)} className="min-h-10 rounded-xl border px-4 text-sm font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>Cancelar</button><button type="button" disabled={anulandoFactura || motivoAnulacion.trim().length < 5} onClick={() => void handleAnularFactura()} className="min-h-10 rounded-xl px-4 text-sm font-bold disabled:opacity-50" style={{ background: 'var(--status-danger)', color: '#fff' }}>{anulandoFactura ? 'Anulando…' : 'Confirmar anulación'}</button></div>
+        </section>
+      </div>}
     </div>
   );
 }

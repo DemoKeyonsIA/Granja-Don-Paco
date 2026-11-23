@@ -479,8 +479,9 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
   app.post("/api/facturacion/nota-credito", requirePermission(['facturacion', 'notas_credito'], 'create'), async (req, res) => {
     try {
       const { facturaIdOriginal, motivo, monto, emisorNombre, emisorCedula } = req.body;
+      const motivoNormalizado = String(motivo || '').trim();
       
-      if (!facturaIdOriginal || !motivo || !monto) {
+      if (!facturaIdOriginal || motivoNormalizado.length < 5 || motivoNormalizado.length > 300 || monto === undefined || monto === null || monto === '') {
         return res.status(400).json({ error: "Faltan datos para nota de crédito" });
       }
 
@@ -491,6 +492,17 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
       if (!facturaOriginal) {
         return res.status(404).json({ error: "Factura original no encontrada" });
       }
+      const usuarioId = String(req.usuario?.id || '');
+      const rolesUsuario = Array.isArray(req.usuario?.roles) ? req.usuario.roles : String(req.usuario?.roles || req.usuario?.role || '').split(',').map((r: string) => r.trim());
+      if (!rolesUsuario.includes('Admin') && String(facturaOriginal.vendedorId || '') !== usuarioId) return res.status(403).json({ error: 'No tiene permiso para corregir esta factura.' });
+      if (facturaOriginal.guiaId) return res.status(409).json({ error: 'Las ventas de ruta se corrigen registrando la devolución desde Mi Ruta y esperando la recepción de Bodega.' });
+      if (['Anulada', 'NotaCredito'].includes(String(facturaOriginal.estado))) return res.status(409).json({ error: 'Esta factura ya está anulada o corresponde a una nota de crédito.' });
+      const montoSolicitado = Number(monto);
+      const totalOriginal = Number(facturaOriginal.total || 0);
+      if (!Number.isFinite(montoSolicitado) || montoSolicitado <= 0 || montoSolicitado > totalOriginal + 0.01) return res.status(400).json({ error: `El monto debe ser mayor que cero y no superar ${totalOriginal.toFixed(2)}.` });
+      const notasPrevias = await db.query.facturas_electronicas.findMany({ where: eq(facturas_electronicas.notasCreditoId, String(facturaIdOriginal)) });
+      const acreditadoPrevio = (notasPrevias as any[]).reduce((sum, nota) => sum + Number(nota.total || 0), 0);
+      if (montoSolicitado + acreditadoPrevio > totalOriginal + 0.01) return res.status(409).json({ error: 'El total de notas de crédito superaría el total de la factura.' });
 
       const [perfilEmisor, clienteOriginal, lineasOriginales, catalogo] = await Promise.all([
         db.query.configuracionFiscalEmisor.findFirst({ where: eq(schema.configuracionFiscalEmisor.id, 'emisor') }),
@@ -505,7 +517,7 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
         const producto = coincidencias.length === 1 ? coincidencias[0] : null;
         return {
           descripcionFactura: linea.producto, cantidadFuente: Number(linea.cantidad), montoFuente: Number(linea.subtotal),
-          montoAcreditado: Number(monto), productoCatalogoId: producto?.id || null, cabysCodigo: producto?.cabysCodigo || null,
+          montoAcreditado: montoSolicitado, productoCatalogoId: producto?.id || null, cabysCodigo: producto?.cabysCodigo || null,
           cabysDescripcion: producto?.cabysDescripcion || null, tratamientoFiscal: producto?.tratamientoFiscal || null,
           tarifaImpuesto: producto?.tarifaImpuesto ?? null, exoneracionReferencia: producto?.exoneracionReferencia || null,
           estadoRevisionFiscal: producto?.fiscalEstado || 'Sin producto fiscal asociado', coincidenciasCatalogo: coincidencias.length,
@@ -516,8 +528,8 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
         aviso: 'Nota de crédito simulada. No es un comprobante fiscal válido y requiere validar la referencia, el motivo, montos e impuestos con el contador.',
         emisor: perfilEmisor || null,
         receptor: clienteOriginal ? { clienteId: clienteOriginal.id, nombre: clienteOriginal.nombre, tipoIdentificacion: clienteOriginal.tipo_documento || null, identificacion: clienteOriginal.documento_id || null, actividadEconomica: clienteOriginal.actividad_economica || null } : null,
-        referencia: { facturaOriginalId: facturaOriginal.id, consecutivoOriginal: facturaOriginal.consecutivo || null, motivo: String(motivo).trim(), montoAcreditado: Number(monto), moneda: perfilEmisor?.monedaPresentacion || 'CRC' },
-        importesFuenteFactura: { subtotalOriginal: Number(facturaOriginal.subtotal), descuentoOriginal: Number(facturaOriginal.descuento || 0), totalOriginal: Number(facturaOriginal.total), montoAcreditado: Number(monto) },
+        referencia: { facturaOriginalId: facturaOriginal.id, consecutivoOriginal: facturaOriginal.consecutivo || null, motivo: motivoNormalizado, montoAcreditado: montoSolicitado, moneda: perfilEmisor?.monedaPresentacion || 'CRC' },
+        importesFuenteFactura: { subtotalOriginal: Number(facturaOriginal.subtotal), descuentoOriginal: Number(facturaOriginal.descuento || 0), totalOriginal: Number(facturaOriginal.total), montoAcreditado: montoSolicitado },
         lineas: lineasSnapshot,
         alertas: [!perfilEmisor?.razonSocial || !perfilEmisor?.identificacion ? 'Perfil fiscal del emisor incompleto.' : null, !clienteOriginal?.documento_id ? 'Receptor sin identificación registrada.' : null, !clienteOriginal?.actividad_economica ? 'Receptor sin actividad económica registrada.' : null, ...lineasSnapshot.filter((l: any) => !l.productoCatalogoId || l.estadoRevisionFiscal !== 'Aprobado').map((l: any) => `Clasificación fiscal por revisar para "${l.descripcionFactura}".`)],
       };
@@ -540,9 +552,9 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
           fecha: hoy,
           clienteId: facturaOriginal.clienteId,
           vendedorId: facturaOriginal.vendedorId,
-          subtotal: Number(monto),
+          subtotal: montoSolicitado,
           descuento: 0,
-          total: Number(monto),
+          total: montoSolicitado,
           condicion_pago: 'Contado',
           estado: 'NotaCredito',
           guiaId: facturaOriginal.guiaId || null,
@@ -563,8 +575,8 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
           receptorNombre: clienteOriginal?.nombre || null,
           receptorCedula: clienteOriginal?.documento_id || null,
           receptorCorreo: clienteOriginal?.email || null,
-          subtotal: Number(monto),
-          total: Number(monto),
+          subtotal: montoSolicitado,
+          total: montoSolicitado,
           condicionPago: 'Contado',
           estado: 'Borrador',
           notasCreditoId: facturaIdOriginal,
@@ -572,9 +584,14 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
           proveedor: 'Simulado',
           datosFiscalSnapshot: JSON.stringify(perfilSnapshot),
         });
+        if (acreditadoPrevio + montoSolicitado >= totalOriginal - 0.01) {
+          await tx.update(facturas).set({ estado: 'Anulada' }).where(eq(facturas.id, String(facturaIdOriginal)));
+        }
       });
 
-      res.status(201).json({ success: true, id: ncId, consecutivo });
+      const anulada = acreditadoPrevio + montoSolicitado >= totalOriginal - 0.01;
+      await logAudit(usuarioId, 'CrearNotaCreditoSimulada', 'Factura', String(facturaIdOriginal), { estado: facturaOriginal.estado }, { estado: anulada ? 'Anulada' : facturaOriginal.estado, notaCreditoId: ncId, consecutivo, monto: montoSolicitado, motivo: motivoNormalizado, transmitida: false });
+      res.status(201).json({ success: true, id: ncId, consecutivo, anulada });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
