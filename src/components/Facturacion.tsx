@@ -10,47 +10,10 @@ import { sessionHeaders } from '../lib/session';
 import { factorPara } from '../lib/kilos';
 import AccionFijaMovil from './AccionFijaMovil';
 
-const DRAFT_KEY = 'granja_don_paco_draft_invoice';
-
 // El valor de compatibilidad en BD sigue siendo `'Tiquete'`.
 const NOMBRE_NOTA_VENTA = 'Tiquete electrónico';
 const MEDIOS_PAGO = ['Efectivo', 'Transferencia', 'SINPE', 'Tarjeta', 'Cheque', 'Plataforma Digital', 'Otro'];
 const formatoCRC = (valor: number) => new Intl.NumberFormat('es-CR', { style: 'currency', currency: 'CRC', maximumFractionDigits: 0 }).format(Number(valor) || 0);
-
-interface DraftState {
-  tipoDocumento: 'Factura' | 'Tiquete' | 'Proforma';
-  selectedCliente: string;
-  detalles: DetalleFactura[];
-  condicionPago: 'Contado' | 'Credito';
-  metodoPago?: string;
-  pagos?: Array<{ metodo: string; monto: string }>;
-  descuento: number;
-  wizardStep: number;
-}
-
-function loadDraft(): DraftState | null {
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const savedAt = Number(parsed.savedAt || 0);
-      if (savedAt && Date.now() - savedAt > 24 * 60 * 60 * 1000) {
-        localStorage.removeItem(DRAFT_KEY);
-        return null;
-      }
-      return parsed;
-    }
-  } catch {}
-  return null;
-}
-
-function saveDraft(state: DraftState) {
-  localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...state, savedAt: Date.now() }));
-}
-
-function clearDraft() {
-  localStorage.removeItem(DRAFT_KEY);
-}
 
 interface FacturacionProps {
   currentUser: User;
@@ -151,19 +114,16 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
     w.document.close(); w.focus(); w.print();
   };
 
-  // Load draft on mount
-  const draft = loadDraft();
-  const [wizardStep, setWizardStep] = useState(Math.min(draft?.wizardStep || 1, 5));
-  const [tipoDocumento, setTipoDocumento] = useState<'Factura' | 'Tiquete' | 'Proforma'>(draft?.tipoDocumento || 'Factura');
+  // Los documentos nuevos se inician desde Mi Ruta. Aquí se consulta el historial.
+  const [wizardStep, setWizardStep] = useState(1);
+  const [tipoDocumento, setTipoDocumento] = useState<'Factura' | 'Tiquete' | 'Proforma'>('Factura');
   const [proformaOrigenId, setProformaOrigenId] = useState<string | null>(null);
-  const [selectedCliente, setSelectedCliente] = useState(draft?.selectedCliente || '');
-  const [detalles, setDetalles] = useState<DetalleFactura[]>(draft?.detalles || [{ producto: '', cantidad: 1, precio_unitario: 0, subtotal: 0 }]);
+  const [selectedCliente, setSelectedCliente] = useState('');
+  const [detalles, setDetalles] = useState<DetalleFactura[]>([{ producto: '', cantidad: 1, precio_unitario: 0, subtotal: 0 }]);
   const [politicasPrecio, setPoliticasPrecio] = useState<Record<string, { precio: number; precioMinimo: number; precioMaximo: number; descuentoMaximo: number; listaUsada: string }>>({});
-  const [condicionPago, setCondicionPago] = useState<'Contado' | 'Credito'>(draft?.condicionPago || 'Contado');
-  const [pagos, setPagos] = useState<Array<{ metodo: string; monto: string }>>(
-    draft?.pagos || [{ metodo: draft?.metodoPago || 'Efectivo', monto: 'total' }],
-  );
-  const [descuento, setDescuento] = useState(draft?.descuento || 0);
+  const [condicionPago, setCondicionPago] = useState<'Contado' | 'Credito'>('Contado');
+  const [pagos, setPagos] = useState<Array<{ metodo: string; monto: string }>>([{ metodo: 'Efectivo', monto: 'total' }]);
+  const [descuento, setDescuento] = useState(0);
 
   const [enviandoFE, setEnviandoFE] = useState<string | null>(null);
   const [consolidandoRuta, setConsolidandoRuta] = useState<string | null>(null);
@@ -211,13 +171,6 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
   })).filter(pago => pago.monto > 0);
   const totalRecibido = pagosNormalizados.reduce((suma, pago) => suma + pago.monto, 0);
   const saldoACredito = Math.max(0, total - totalRecibido);
-
-  // Persist draft whenever state changes
-  useEffect(() => {
-    if (isCreating) {
-      saveDraft({ tipoDocumento, selectedCliente, detalles, condicionPago, pagos, descuento, wizardStep });
-    }
-  }, [isCreating, tipoDocumento, selectedCliente, detalles, condicionPago, pagos, descuento, wizardStep]);
 
   const getCliente = (id: string) => clientes.find(c => c.id === id);
 
@@ -367,7 +320,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
         const respuesta = await fetch('/api/proformas', { method: 'POST', headers: authHeaders, body: JSON.stringify({ clienteId: selectedCliente || null, detalles: lineasCotizacion, descuento }) });
         const data = await respuesta.json();
         if (!respuesta.ok) throw new Error(data.error || 'No se pudo crear la proforma.');
-        clearDraft(); resetForm(); setIsCreating(false); setWizardStep(1);
+        resetForm(); setIsCreating(false); setWizardStep(1);
         await fetchData();
         toast.success(`${data.consecutivo} guardada como cotización no fiscal; no se movió inventario.`);
       } catch (error: any) { toast.error(error.message || 'No se pudo crear la proforma.'); }
@@ -437,7 +390,6 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
         })
       });
 
-      clearDraft();
       resetForm();
       setIsCreating(false);
       setWizardStep(1);
@@ -619,34 +571,7 @@ export default function Facturacion({ currentUser }: FacturacionProps) {
           </h2>
           <p className="text-sm text-neutral-500 mt-1">{esVendedor ? 'Facturas y proformas' : 'Facturas, documentos electrónicos y rutas por facturar.'}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <button onClick={() => {
-            if (isCreating) { clearDraft(); resetForm(); setWizardStep(1); }
-            setIsCreating(!isCreating);
-          }}
-            className={`flex min-h-10 items-center justify-center rounded-xl text-sm font-bold transition-all shadow-sm ${esVendedor ? 'px-3 py-2' : 'px-4 py-2.5'}`}
-            style={isCreating
-              ? { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }
-              : { background: 'var(--brand-primary)', color: 'var(--text-on-action)' }
-            }>
-            {isCreating ? <><X className="h-4 w-4 sm:mr-2" /><span className={esVendedor ? 'hidden sm:inline' : ''}>Cancelar</span></> : <><Plus className="h-4 w-4 sm:mr-1.5" /><span className={esVendedor ? 'hidden sm:inline' : ''}>Nueva venta</span><span className="sr-only sm:hidden">Nueva venta</span></>}
-          </button>
-        </div>
       </div>
-
-      {/* Draft indicator */}
-      {!isCreating && draft && (
-        <div role="status" className={`flex items-center justify-between gap-3 ${esVendedor ? 'rounded-lg px-3 py-2' : 'rounded-xl border p-4'}`} style={esVendedor ? { background: 'var(--bg-muted)' } : { background: 'var(--status-warning-soft)', borderColor: 'var(--status-warning)' }}>
-          <div className="flex min-w-0 items-center gap-2">
-            {!esVendedor && <AlertTriangle className="h-5 w-5 shrink-0" style={{ color: 'var(--status-warning)' }} />}
-            <p className="truncate text-sm" style={{ color: 'var(--text-secondary)' }}><strong style={{ color: 'var(--text-primary)' }}>Borrador pendiente</strong>{!esVendedor && <span> · Tienes una factura en progreso sin finalizar.</span>}</p>
-          </div>
-          <button onClick={() => { setIsCreating(true); setWizardStep(1); }}
-            className="min-h-9 shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition-colors" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
-            Continuar
-          </button>
-        </div>
-      )}
 
       {isCreating ? (
         <div className="min-w-0 overflow-x-hidden rounded-3xl p-3 pb-36 animate-in slide-in-from-top-4 md:p-6 md:pb-6" style={{ background: 'var(--bg-muted)' }}>
