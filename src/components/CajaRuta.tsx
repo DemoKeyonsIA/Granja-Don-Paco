@@ -63,6 +63,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const [tipoDocumentoRuta, setTipoDocumentoRuta] = useState<'Factura' | 'Tiquete' | 'Proforma'>('Factura');
   const [selectorDocumentoAbierto, setSelectorDocumentoAbierto] = useState(false);
   const [proformaOrigenIdRuta, setProformaOrigenIdRuta] = useState<string | null>(null);
+  const [clientePreseleccionadoDesdeEntrega, setClientePreseleccionadoDesdeEntrega] = useState(false);
   const [menuNuevaAccionAbierto, setMenuNuevaAccionAbierto] = useState(false);
   const [solicitudClienteAbierta, setSolicitudClienteAbierta] = useState(false);
   const [enviandoSolicitudCliente, setEnviandoSolicitudCliente] = useState(false);
@@ -529,7 +530,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                     {menuNuevaAccionAbierto && <>
                       <button type="button" aria-label="Cerrar menú" className="fixed inset-0 z-20 cursor-default" onClick={() => setMenuNuevaAccionAbierto(false)} />
                       <div role="menu" className="absolute right-0 top-full z-30 mt-2 w-60 rounded-xl border p-1.5 shadow-xl" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
-                        <button type="button" role="menuitem" onClick={() => { setMenuNuevaAccionAbierto(false); resetPos(); setPasoVenta(1); setVentaWizardAbierto(true); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold" style={{ color: 'var(--text-primary)' }}><Plus className="h-4 w-4" style={{ color: 'var(--brand-primary)' }} />Nueva factura</button>
+                        <button type="button" role="menuitem" onClick={() => { setMenuNuevaAccionAbierto(false); setClientePreseleccionadoDesdeEntrega(false); resetPos(); setPasoVenta(1); setVentaWizardAbierto(true); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold" style={{ color: 'var(--text-primary)' }}><Plus className="h-4 w-4" style={{ color: 'var(--brand-primary)' }} />Nueva factura</button>
                         {esVendedorRuta && <button type="button" role="menuitem" onClick={() => { setMenuNuevaAccionAbierto(false); setBorradorCliente({ nombre: '', tipo_documento: 'Fisica', documento_id: '', telefono: '', email: '', direccion: '' }); setSolicitudClienteAbierta(true); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold" style={{ color: 'var(--text-primary)' }}><UserPlus className="h-4 w-4" style={{ color: 'var(--brand-primary)' }} />Solicitar cliente nuevo</button>}
                       </div>
                     </>}
@@ -596,7 +597,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                   </div>
                   <button type="button" onClick={() => {
                     setClienteId(String(cliente.clienteId)); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0');
-                    setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setProformaOrigenIdRuta(null); setPasoVenta(1); setVentaWizardAbierto(true);
+                    setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setProformaOrigenIdRuta(null); setClientePreseleccionadoDesdeEntrega(true); setPasoVenta(1); setVentaWizardAbierto(true);
                   }} className="min-h-10 shrink-0 rounded-lg px-4 py-2 text-sm font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
                     Iniciar entrega
                   </button>
@@ -684,16 +685,17 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
           <div className="route-pos-main min-w-0 space-y-4">
             {ventaWizardAbierto && <>
               <div className="grid grid-cols-5 gap-1" aria-label="Pasos de la factura">
-                {['Documento', 'Cliente', 'Producto', 'Precio', 'Pago'].map((label, index) => <div key={label} className="rounded-lg px-1 py-2 text-center text-[10px] font-bold sm:text-xs" style={{ background: pasoVenta === index + 1 ? 'var(--brand-primary)' : 'var(--bg-muted)', color: pasoVenta === index + 1 ? 'var(--text-on-action)' : 'var(--text-muted)' }}>{index + 1} {label}</div>)}
+                {['Documento', 'Cliente', 'Producto', 'Precio', 'Pago'].map((label, index) => <div key={label} className="rounded-lg px-1 py-2 text-center text-[10px] font-bold sm:text-xs" style={{ background: pasoVenta === index + 1 ? 'var(--brand-primary)' : (clientePreseleccionadoDesdeEntrega && index === 1 ? 'var(--status-success-soft)' : 'var(--bg-muted)'), color: pasoVenta === index + 1 ? 'var(--text-on-action)' : (clientePreseleccionadoDesdeEntrega && index === 1 ? 'var(--status-success)' : 'var(--text-muted)') }}>{clientePreseleccionadoDesdeEntrega && index === 1 ? '✓ Cliente' : `${index + 1} ${label}`}</div>)}
               </div>
               {pasoVenta === 1 && <section className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
                 <p className="mb-3 text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>1 · Tipo de documento</p>
                 <button type="button" onClick={() => setSelectorDocumentoAbierto(true)} aria-haspopup="dialog" className="flex min-h-12 w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><span>{tipoDocumentoRuta === 'Factura' ? 'Factura electrónica' : tipoDocumentoRuta === 'Tiquete' ? 'Tiquete electrónico' : 'Proforma'}</span><span aria-hidden="true">⌄</span></button>
+                {clientePreseleccionadoDesdeEntrega && clienteId && <p className="mt-3 rounded-xl px-3 py-2.5 text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}>Entrega para: <strong>{clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || 'Cliente seleccionado'}</strong></p>}
               </section>}
               {pasoVenta === 2 && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
                 <p className="mb-3 flex items-center gap-2 text-base font-extrabold" style={{ color: 'var(--text-primary)' }}><UserIcon className="h-4 w-4" /> 2 · Elija el cliente</p>
                 <div className="route-pos-choice-grid">
-                  {clientesPorEntregar.map((c: any) => <button key={c.clienteId} onClick={() => { setClienteId(c.clienteId); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setProformaOrigenIdRuta(null); setPasoVenta(3); }} aria-pressed={clienteId === c.clienteId} className={cn('min-h-14 rounded-xl px-4 py-3 text-left text-base font-bold transition-all border focus-visible:ring-2', clienteId === c.clienteId && 'ring-2')} style={clienteId === c.clienteId ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)', borderColor: 'var(--brand-primary)' } : { background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}>{c.nombre}{c.ventanaIni && <span className="block text-[10px] font-medium opacity-80">{c.ventanaIni}–{c.ventanaFin}</span>}</button>)}
+                  {clientesPorEntregar.map((c: any) => <button key={c.clienteId} onClick={() => { setClienteId(c.clienteId); setClientePreseleccionadoDesdeEntrega(false); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setProformaOrigenIdRuta(null); setPasoVenta(3); }} aria-pressed={clienteId === c.clienteId} className={cn('min-h-14 rounded-xl px-4 py-3 text-left text-base font-bold transition-all border focus-visible:ring-2', clienteId === c.clienteId && 'ring-2')} style={clienteId === c.clienteId ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)', borderColor: 'var(--brand-primary)' } : { background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}>{c.nombre}{c.ventanaIni && <span className="block text-[10px] font-medium opacity-80">{c.ventanaIni}–{c.ventanaFin}</span>}</button>)}
                 </div>
                 {clientesPorEntregar.length === 0 && <p className="rounded-xl p-3 text-sm" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>{clientesRuta.length === 0 ? 'Esta ruta no tiene clientes asignados.' : 'Todos los clientes ya recibieron su entrega. Consulte el historial en Facturas.'}</p>}
               </div>}
@@ -706,7 +708,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
               </p>
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2.5" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}>
                 <p className="text-sm">Cliente: <strong>{clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || 'Seleccione un cliente'}</strong></p>
-                <button type="button" onClick={() => setPasoVenta(2)} className="min-h-10 rounded-lg border px-3 text-sm font-bold" style={{ background: 'var(--bg-card)', color: 'var(--brand-primary)', borderColor: 'var(--border-default)' }}>{clienteId ? 'Cambiar cliente' : 'Elegir cliente'}</button>
+                <button type="button" onClick={() => { setClientePreseleccionadoDesdeEntrega(false); setPasoVenta(2); }} className="min-h-10 rounded-lg border px-3 text-sm font-bold" style={{ background: 'var(--bg-card)', color: 'var(--brand-primary)', borderColor: 'var(--border-default)' }}>{clienteId ? 'Cambiar cliente' : 'Elegir cliente'}</button>
               </div>
               <div className="route-pos-choice-grid mb-4">
                 {productosDisponibles.map((i: any) => (
@@ -869,14 +871,14 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
               </button>}
             </div>}
             <div className="flex gap-2">
-              {ventaWizardAbierto && pasoVenta > 1 && <button type="button" onClick={() => setPasoVenta(v => Math.max(1, v - 1))} className="min-h-12 flex-1 rounded-xl border px-4 text-sm font-bold" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }}>Volver</button>}
+              {ventaWizardAbierto && pasoVenta > 1 && <button type="button" onClick={() => { if (pasoVenta === 3) setClientePreseleccionadoDesdeEntrega(false); setPasoVenta(v => Math.max(1, v - 1)); }} className="min-h-12 flex-1 rounded-xl border px-4 text-sm font-bold" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }}>Volver</button>}
               {ventaWizardAbierto && pasoVenta < 5 && <button type="button" onClick={() => {
                 if (pasoVenta === 2 && !clienteId) return toast.error('Seleccione el cliente de la ruta.');
                 if (pasoVenta === 3 && !producto) return toast.error('Seleccione el producto que va a vender.');
                 if (pasoVenta === 4 && (!producto || cantidad <= 0 || cantidad > stockProducto)) return toast.error('Indique kilos dentro del saldo disponible.');
                 if (pasoVenta === 4 && (!precioAutorizado || cargandoPrecio || precioFueraDeRango)) return toast.error(`El precio debe respetar el rango autorizado de ${fmtCRC(precioMinimo)} a ${fmtCRC(precioMaximo)} por kg.`);
                 if (pasoVenta === 4 && (descuento < 0 || descuento > descuentoPermitido)) return toast.error(`El descuento máximo permitido es ${fmtCRC(descuentoPermitido)}.`);
-                setPasoVenta(v => v + 1);
+                setPasoVenta(pasoVenta === 1 && clientePreseleccionadoDesdeEntrega && clienteId ? 3 : pasoVenta + 1);
               }} disabled={(pasoVenta === 2 && !clienteId) || (pasoVenta === 3 && !producto) || (pasoVenta === 4 && (!producto || cantidad <= 0 || cantidad > stockProducto || !precioAutorizado || cargandoPrecio || precioFueraDeRango || descuento < 0 || descuento > descuentoPermitido))} className="min-h-12 flex-1 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>{pasoVenta === 4 && precioFueraDeRango ? 'Ajuste el precio autorizado' : 'Continuar'}</button>}
             </div>
           </div>
