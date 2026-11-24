@@ -434,7 +434,8 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
     .filter((i: any) => i.unidad === 'kg')
     .reduce((s: number, i: any) => s + Number(i.cantidad || 0), 0);
   const ventaEnPreparacion = Boolean(clienteId && producto && pasoVenta >= 4);
-  const kilosApartadosTemporalmente = ventaEnPreparacion ? Math.min(Math.max(0, cantidad), stockProducto) : 0;
+  const cantidadPuedeConfirmarse = cantidad > 0 && cantidad <= stockProducto;
+  const kilosApartadosTemporalmente = ventaEnPreparacion && cantidadPuedeConfirmarse ? cantidad : 0;
   const disponibleCamionVisual = Math.max(0, inventarioKgCamion - kilosApartadosTemporalmente);
   const clientesRuta = (guia?.rutaOrden || []).length > 0 ? guia.rutaOrden : (guia?.clientesRuta || []);
   const clientesCompletadosIds = new Set(ventas.filter((venta: any) => venta.estado === 'Emitida' && venta.clienteId).map((venta: any) => String(venta.clienteId)));
@@ -557,8 +558,9 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                 <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{vendidoKg.toFixed(2)} kg</p>
               </div>
               <div className="route-pos-metric rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
-                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{ventaEnPreparacion ? 'Disponible al confirmar' : 'Disponible'}</p>
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{ventaEnPreparacion && cantidadPuedeConfirmarse ? 'Total si confirma' : 'Disponible total'}</p>
                 <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{disponibleCamionVisual.toFixed(2)} kg</p>
+                <p className="mt-0.5 text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>Suma todos los productos</p>
               </div>
             </div>
           )}
