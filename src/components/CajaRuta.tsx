@@ -684,8 +684,8 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
           {/* Columna izquierda: cliente + producto */}
           <div className="route-pos-main min-w-0 space-y-4">
             {ventaWizardAbierto && <>
-              <div className="grid grid-cols-5 gap-1" aria-label="Pasos de la factura">
-                {['Documento', 'Cliente', 'Producto', 'Precio', 'Pago'].map((label, index) => <div key={label} className="rounded-lg px-1 py-2 text-center text-[10px] font-bold sm:text-xs" style={{ background: pasoVenta === index + 1 ? 'var(--brand-primary)' : (clientePreseleccionadoDesdeEntrega && index === 1 ? 'var(--status-success-soft)' : 'var(--bg-muted)'), color: pasoVenta === index + 1 ? 'var(--text-on-action)' : (clientePreseleccionadoDesdeEntrega && index === 1 ? 'var(--status-success)' : 'var(--text-muted)') }}>{clientePreseleccionadoDesdeEntrega && index === 1 ? '✓ Cliente' : `${index + 1} ${label}`}</div>)}
+              <div className={`grid ${clientePreseleccionadoDesdeEntrega ? 'grid-cols-4' : 'grid-cols-5'} gap-1`} aria-label="Pasos de la factura">
+                {(clientePreseleccionadoDesdeEntrega ? [{ paso: 1, label: 'Documento' }, { paso: 3, label: 'Producto' }, { paso: 4, label: 'Precio' }, { paso: 5, label: 'Pago' }] : [{ paso: 1, label: 'Documento' }, { paso: 2, label: 'Cliente' }, { paso: 3, label: 'Producto' }, { paso: 4, label: 'Precio' }, { paso: 5, label: 'Pago' }]).map((item, index) => <div key={item.paso} className="rounded-lg px-1 py-2 text-center text-[10px] font-bold sm:text-xs" style={{ background: pasoVenta === item.paso ? 'var(--brand-primary)' : 'var(--bg-muted)', color: pasoVenta === item.paso ? 'var(--text-on-action)' : 'var(--text-muted)' }}>{index + 1} {item.label}</div>)}
               </div>
               {pasoVenta === 1 && <section className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
                 <p className="mb-3 text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>1 · Tipo de documento</p>
