@@ -126,11 +126,15 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
           onReturnHandled?.();
         }
         setStockCamion((await invRes.json()).filter((i: any) => i.ubicacion === det.camionNombre));
-        const gastosRes = await fetch(`/api/gastos/guia/${id}`, { headers: sessionHeaders(currentUser.id) }).catch(() => null);
-        setGastosRuta(gastosRes?.ok ? await gastosRes.json() : []);
+        if (esVendedorRuta) {
+          setGastosRuta([]);
+        } else {
+          const gastosRes = await fetch(`/api/gastos/guia/${id}`, { headers: sessionHeaders(currentUser.id) }).catch(() => null);
+          setGastosRuta(gastosRes?.ok ? await gastosRes.json() : []);
+        }
       }
     } catch { toast.error('Error al cargar la guía.'); }
-  }, [currentUser.id, returnInvoiceId, onReturnHandled]);
+  }, [currentUser.id, returnInvoiceId, onReturnHandled, esVendedorRuta]);
 
   useEffect(() => { fetchBase(); }, [fetchBase]);
   useEffect(() => { loadGuia(guiaId); }, [guiaId, loadGuia]);
@@ -575,7 +579,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
                   <button type="button" onClick={() => { setVentaWizardAbierto(false); resetPos(); setPasoVenta(1); }} aria-label="Cancelar factura" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}><X className="h-5 w-5" /></button>
                 ) : (
                   <div className="relative shrink-0">
-                    <button type="button" aria-label="Crear" aria-haspopup="menu" aria-expanded={menuNuevaAccionAbierto} onClick={() => setMenuNuevaAccionAbierto(open => !open)} className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Plus className="h-5 w-5" /></button>
+                    <button type="button" aria-label="Crear" aria-haspopup="menu" aria-expanded={menuNuevaAccionAbierto} onClick={() => setMenuNuevaAccionAbierto(open => !open)} className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}><Plus className="h-5 w-5" /></button>
                     {menuNuevaAccionAbierto && <>
                       <button type="button" aria-label="Cerrar menú" className="fixed inset-0 z-20 cursor-default" onClick={() => setMenuNuevaAccionAbierto(false)} />
                       <div role="menu" className="absolute right-0 top-full z-30 mt-2 w-60 rounded-xl border p-1.5 shadow-xl" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
@@ -647,7 +651,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
                   <button type="button" onClick={() => {
                     setClienteId(String(cliente.clienteId)); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0');
                     setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setProformaOrigenIdRuta(null); setClientePreseleccionadoDesdeEntrega(true); setPasoVenta(1); setVentaWizardAbierto(true);
-                  }} className="min-h-10 shrink-0 rounded-lg px-4 py-2 text-sm font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
+                  }} className="min-h-10 shrink-0 rounded-lg px-4 py-2 text-sm font-bold" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}>
                     Iniciar entrega
                   </button>
                 </li>
@@ -699,7 +703,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
               <button type="button" onClick={() => { if (documentoCreado.tipo === 'Proforma') imprimirProformaRuta(documentoCreado.data, documentoCreado.cliente); else { setDocumentoCreado(null); setPreviewTiqueteAbierto(true); } }} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Eye className="h-4 w-4" />Ver documento</button>
               <button type="button" onClick={() => { if (documentoCreado.tipo === 'Proforma') imprimirProformaRuta(documentoCreado.data, documentoCreado.cliente); else imprimirTiquete(); }} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Printer className="h-4 w-4" />Imprimir</button>
-              <button type="button" onClick={() => prepararCorreoDocumento(documentoCreado)} disabled={!documentoCreado.cliente?.email && !documentoCreado.cliente?.correo} className="flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50 sm:col-span-2" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Mail className="h-4 w-4" />Preparar correo para el cliente</button>
+              <button type="button" onClick={() => prepararCorreoDocumento(documentoCreado)} disabled={!documentoCreado.cliente?.email && !documentoCreado.cliente?.correo} className="flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50 sm:col-span-2" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}><Mail className="h-4 w-4" />Preparar correo para el cliente</button>
             </div>
             <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>{documentoCreado.cliente?.email || documentoCreado.cliente?.correo ? `Se abrirá el correo dirigido a ${documentoCreado.cliente.email || documentoCreado.cliente.correo}.` : 'El cliente no tiene correo registrado. Agréguelo en su perfil para habilitar el envío.'} El correo se abrirá como borrador en su aplicación de email.</p>
           </section>
@@ -723,7 +727,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
             {(guia.detalle || []).filter((e: any) => e.estadoEtiqueta === 'Cargada').map((e: any) => <div key={e.etiquetaId} className="flex justify-between gap-3 border-t pt-3" style={{ borderColor: 'var(--border-default)' }}><span style={{ color: 'var(--text-secondary)' }}>{e.producto}</span><strong style={{ color: 'var(--text-primary)' }}>{Number(e.saldoKg ?? e.pesoNeto ?? 0).toFixed(2)} kg</strong></div>)}
             <p className="border-t pt-3 text-sm font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>Total esperado <span className="float-right">{inventarioKgCamion.toFixed(2)} kg</span></p>
           </div>
-          <button type="button" onClick={() => void confirmarInicioRuta()} disabled={loading} className="min-h-14 w-full rounded-xl px-4 py-3 text-base font-extrabold disabled:opacity-60" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>{loading ? 'Confirmando…' : 'Confirmar carga recibida e iniciar ruta'}</button>
+          <button type="button" onClick={() => void confirmarInicioRuta()} disabled={loading} className="min-h-14 w-full rounded-xl px-4 py-3 text-base font-extrabold disabled:opacity-60" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}>{loading ? 'Confirmando…' : 'Confirmar carga recibida e iniciar ruta'}</button>
           <p className="mt-3 text-center text-xs" style={{ color: 'var(--text-muted)' }}>Al confirmar, quedará registrada la hora y podrá iniciar ventas.</p>
         </section>
       ) : guia.estado !== 'EnRuta' ? (
@@ -733,9 +737,16 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
           {/* Columna izquierda: cliente + producto */}
           <div className="route-pos-main min-w-0 space-y-4">
             {ventaWizardAbierto && <>
-              <div className={`grid ${clientePreseleccionadoDesdeEntrega ? 'grid-cols-4' : 'grid-cols-5'} gap-1`} aria-label="Pasos de la factura">
-                {(clientePreseleccionadoDesdeEntrega ? [{ paso: 1, label: 'Documento' }, { paso: 3, label: 'Producto' }, { paso: 4, label: 'Precio' }, { paso: 5, label: 'Pago' }] : [{ paso: 1, label: 'Documento' }, { paso: 2, label: 'Cliente' }, { paso: 3, label: 'Producto' }, { paso: 4, label: 'Precio' }, { paso: 5, label: 'Pago' }]).map((item, index) => <div key={item.paso} className="rounded-lg px-1 py-2 text-center text-[10px] font-bold sm:text-xs" style={{ background: pasoVenta === item.paso ? 'var(--brand-primary)' : 'var(--bg-muted)', color: pasoVenta === item.paso ? 'var(--text-on-action)' : 'var(--text-muted)' }}>{index + 1} {item.label}</div>)}
-              </div>
+              {(() => {
+                const pasosVisibles = clientePreseleccionadoDesdeEntrega
+                  ? [{ paso: 1, label: 'Documento' }, { paso: 3, label: 'Producto' }, { paso: 4, label: 'Precio' }, { paso: 5, label: 'Pago' }]
+                  : [{ paso: 1, label: 'Documento' }, { paso: 2, label: 'Cliente' }, { paso: 3, label: 'Producto' }, { paso: 4, label: 'Precio' }, { paso: 5, label: 'Pago' }];
+                const pasoActivo = pasosVisibles.findIndex(item => item.paso === pasoVenta);
+                return <div className="route-pos-stepper rounded-xl px-3 py-2" role="group" aria-label={`Venta, paso ${pasoActivo + 1} de ${pasosVisibles.length}: ${pasosVisibles[pasoActivo]?.label || ''}`} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+                  <div className="flex items-baseline justify-between gap-3"><span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Paso {pasoActivo + 1} de {pasosVisibles.length}</span><span className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{pasosVisibles[pasoActivo]?.label}</span></div>
+                  <div className="mt-2 grid grid-cols-5 gap-1" aria-hidden="true">{pasosVisibles.map((item, index) => <span key={item.paso} className="h-1.5 rounded-full" style={{ background: index <= pasoActivo ? 'var(--brand-action)' : 'var(--bg-muted)' }} />)}</div>
+                </div>;
+              })()}
               {pasoVenta === 1 && <section className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
                 <p className="mb-3 text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>1 · Tipo de documento</p>
                 <button type="button" onClick={() => setSelectorDocumentoAbierto(true)} aria-haspopup="dialog" className="flex min-h-12 w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><span>{tipoDocumentoRuta === 'Factura' ? 'Factura electrónica' : tipoDocumentoRuta === 'Tiquete' ? 'Tiquete electrónico' : 'Proforma'}</span><span aria-hidden="true">⌄</span></button>
@@ -744,7 +755,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
               {pasoVenta === 2 && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
                 <p className="mb-3 flex items-center gap-2 text-base font-extrabold" style={{ color: 'var(--text-primary)' }}><UserIcon className="h-4 w-4" /> 2 · Elija el cliente</p>
                 <div className="route-pos-choice-grid">
-                  {clientesPorEntregar.map((c: any) => <button key={c.clienteId} onClick={() => { setClienteId(c.clienteId); setClientePreseleccionadoDesdeEntrega(false); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setProformaOrigenIdRuta(null); setPasoVenta(3); }} aria-pressed={clienteId === c.clienteId} className={cn('min-h-14 rounded-xl px-4 py-3 text-left text-base font-bold transition-all border focus-visible:ring-2', clienteId === c.clienteId && 'ring-2')} style={clienteId === c.clienteId ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)', borderColor: 'var(--brand-primary)' } : { background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}>{c.nombre}{c.ventanaIni && <span className="block text-[10px] font-medium opacity-80">{c.ventanaIni}–{c.ventanaFin}</span>}</button>)}
+                  {clientesPorEntregar.map((c: any) => <button key={c.clienteId} onClick={() => { setClienteId(c.clienteId); setClientePreseleccionadoDesdeEntrega(false); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setProformaOrigenIdRuta(null); setPasoVenta(3); }} aria-pressed={clienteId === c.clienteId} className={cn('min-h-14 rounded-xl px-4 py-3 text-left text-base font-bold transition-all border focus-visible:ring-2', clienteId === c.clienteId && 'ring-2')} style={clienteId === c.clienteId ? { background: 'var(--brand-action)', color: 'var(--text-on-action)', borderColor: 'var(--brand-primary)' } : { background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}>{c.nombre}{c.ventanaIni && <span className="block text-[10px] font-medium opacity-80">{c.ventanaIni}–{c.ventanaFin}</span>}</button>)}
                 </div>
                 {clientesPorEntregar.length === 0 && <p className="rounded-xl p-3 text-sm" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>{clientesRuta.length === 0 ? 'Esta ruta no tiene clientes asignados.' : 'Todos los clientes ya recibieron su entrega. Consulte el historial en Facturas.'}</p>}
               </div>}
@@ -767,7 +778,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
                     aria-pressed={producto === i.producto}
                     className={cn('min-h-16 rounded-xl px-4 py-3 text-left text-base font-bold border transition-all', producto === i.producto && 'ring-2')}
                     style={producto === i.producto
-                      ? { background: 'var(--brand-primary)', color: 'var(--text-on-action)', borderColor: 'var(--brand-primary)' }
+                      ? { background: 'var(--brand-action)', color: 'var(--text-on-action)', borderColor: 'var(--brand-primary)' }
                       : { background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}
                   >
                     {i.producto}
@@ -784,7 +795,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
               {!clienteId && (
                 <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl px-3 py-3 text-sm" style={{ background: 'var(--status-warning-soft)', color: 'var(--text-primary)', border: '1px solid var(--status-warning)' }}>
                   <span>Primero elija el cliente para cargar su precio y calcular el total.</span>
-                  <button type="button" onClick={() => setPasoVenta(2)} className="min-h-10 rounded-lg px-4 font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>Elegir cliente</button>
+                  <button type="button" onClick={() => setPasoVenta(2)} className="min-h-10 rounded-lg px-4 font-bold" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}>Elegir cliente</button>
                 </div>
               )}
 
@@ -910,7 +921,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
               </div>
               <button onClick={vender} disabled={ventaDeshabilitada}
                 className="min-h-14 w-full flex items-center justify-center gap-2 rounded-xl px-4 py-4 text-lg font-extrabold disabled:opacity-50"
-                style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
+                style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}>
                 <CheckCircle2 className="w-5 h-5" /> {tipoDocumentoRuta === 'Proforma' ? 'Guardar proforma' : precioAutorizado ? `Registrar venta y ${tipoDocumentoRuta === 'Factura' ? 'factura' : 'tiquete'} · ${fmtCRC(total)}` : 'Precio no configurado'}
               </button>
               {tipoDocumentoRuta !== 'Proforma' && <button type="button" onClick={() => previsualizarTiquete()} disabled={!clienteId || !producto || cantidad <= 0}
@@ -928,7 +939,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
                 if (pasoVenta === 4 && (!precioAutorizado || cargandoPrecio || precioFueraDeRango)) return toast.error(`El precio debe respetar el rango autorizado de ${fmtCRC(precioMinimo)} a ${fmtCRC(precioMaximo)} por kg.`);
                 if (pasoVenta === 4 && (descuento < 0 || descuento > descuentoPermitido)) return toast.error(`El descuento máximo permitido es ${fmtCRC(descuentoPermitido)}.`);
                 setPasoVenta(pasoVenta === 1 && clientePreseleccionadoDesdeEntrega && clienteId ? 3 : pasoVenta + 1);
-              }} disabled={(pasoVenta === 2 && !clienteId) || (pasoVenta === 3 && !producto) || (pasoVenta === 4 && (!producto || cantidad <= 0 || cantidad > stockProducto || !precioAutorizado || cargandoPrecio || precioFueraDeRango || descuento < 0 || descuento > descuentoPermitido))} className="min-h-12 flex-1 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>{pasoVenta === 4 && precioFueraDeRango ? 'Ajuste el precio autorizado' : 'Continuar'}</button>}
+              }} disabled={(pasoVenta === 2 && !clienteId) || (pasoVenta === 3 && !producto) || (pasoVenta === 4 && (!producto || cantidad <= 0 || cantidad > stockProducto || !precioAutorizado || cargandoPrecio || precioFueraDeRango || descuento < 0 || descuento > descuentoPermitido))} className="min-h-12 flex-1 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}>{pasoVenta === 4 && precioFueraDeRango ? 'Ajuste el precio autorizado' : 'Continuar'}</button>}
             </div>
           </div>
 
@@ -936,7 +947,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
           {cierreRutaAbierto && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center">
             <div className="route-pos-sidebar max-h-[92dvh] w-full max-w-2xl min-w-0 space-y-4 overflow-y-auto rounded-2xl p-4" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-default)' }}>
             <div className="flex items-start justify-between gap-3">
-              <div><h2 className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>Cierre de ruta y entrega a Bodega</h2><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Revise ventas y gastos, registre devoluciones o daños y cuente el efectivo antes de finalizar el día.</p></div>
+              <div><h2 className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>Cierre de ruta y entrega a Bodega</h2><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>{esVendedorRuta ? 'Revise las entregas, cuente el efectivo y entregue el sobrante a Bodega.' : 'Revise ventas y gastos, registre devoluciones o daños y cuente el efectivo antes de finalizar el día.'}</p></div>
               <button type="button" onClick={() => initialOpenClosure ? onClose?.() : setCierreRutaAbierto(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Cerrar panel de cierre"><X className="h-5 w-5" /></button>
             </div>
             <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
@@ -958,10 +969,10 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
               )}
             </div>
 
-            <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+            {!esVendedorRuta && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>Gastos de esta ruta</p><p className="text-xs" style={{ color: 'var(--text-muted)' }}>{gastosRuta.length} registros · asociados a {guia?.consecutivo || 'la guía'}</p></div><p className="text-sm font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{fmtCRC(gastosRuta.reduce((sum: number, gasto: any) => sum + Number(gasto.monto || 0), 0))}</p></div>
               {gastosRuta.length === 0 ? <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Aún no hay gastos registrados para esta ruta.</p> : <div className="space-y-2">{gastosRuta.slice().sort((a: any, b: any) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 4).map((gasto: any) => <div key={gasto.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2" style={{ background: 'var(--bg-muted)' }}><div><p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{gasto.categoria} · {fmtCRC(Number(gasto.monto))}</p><p className="text-xs" style={{ color: 'var(--text-muted)' }}>{gasto.descripcion} · {fmtHora(gasto.fecha)}</p>{gasto.motivoRevision && <p className="text-xs font-semibold" style={{ color: 'var(--status-danger)' }}>Observación: {gasto.motivoRevision}</p>}</div><span className="rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: gasto.estadoRevision === 'Aprobado' ? 'var(--status-success-soft)' : gasto.estadoRevision === 'Observado' ? 'var(--status-danger-soft)' : 'var(--status-warning-soft)', color: gasto.estadoRevision === 'Aprobado' ? 'var(--status-success)' : gasto.estadoRevision === 'Observado' ? 'var(--status-danger)' : 'var(--status-warning)' }}>{gasto.estadoRevision === 'Aprobado' ? 'Revisado' : gasto.estadoRevision}</span></div>)}</div>}
-            </div>
+            </div>}
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <button type="button" onClick={() => { setDevSel(null); setModoDevolucion(true); setCierreRutaAbierto(false); }} disabled={loading || cajaCerrada || emitidas.length === 0} className="min-h-12 flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}><RotateCcw className="h-4 w-4" /> Registrar devolución</button>
@@ -1160,7 +1171,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
             </label>
             <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => setSolicitudClienteAbierta(false)} disabled={enviandoSolicitudCliente} className="min-h-11 rounded-xl border px-4 text-sm font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>Cancelar</button>
-              <button type="submit" disabled={enviandoSolicitudCliente || !borradorCliente.nombre.trim()} className="min-h-11 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>{enviandoSolicitudCliente ? 'Enviando solicitud…' : 'Enviar a Administración'}</button>
+              <button type="submit" disabled={enviandoSolicitudCliente || !borradorCliente.nombre.trim()} className="min-h-11 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}>{enviandoSolicitudCliente ? 'Enviando solicitud…' : 'Enviar a Administración'}</button>
             </div>
           </form>
         </div>

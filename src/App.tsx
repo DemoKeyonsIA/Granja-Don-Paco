@@ -109,6 +109,7 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
     () => rolesEfectivos(currentUser.role, currentUser.roles),
     [currentUser.role, currentUser.roles]
   );
+  const vistaVendedorMovil = userRoles.includes('Comercial') && !userRoles.includes('Admin');
 
   const [activeTab, setActiveTab] = useState<string>(
     moduloPorDefecto(rolesEfectivos(currentUser.role, currentUser.roles))
@@ -289,11 +290,8 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
         navegarAModuloVisible('finanzas', userRoles.includes('Admin') ? 'documentos' : 'resumen');
       }
     } else if (lower.includes('gasto')) {
-      // El registro de gastos se ofrece dentro de Finanzas al Administrador.
-      // Quien no es Admin aterriza en el primer tab que sí ve, no en
-      // `resumen` a ciegas.
-      if (userRoles.includes('Comercial')) setIsRegistroGastoOpen(true);
-      else navegarAModuloVisible('finanzas', subTabPorDefecto('finanzas', userRoles));
+      // Gastos pertenece a Finanzas y no es una acción disponible para el vendedor.
+      if (!userRoles.includes('Comercial')) navegarAModuloVisible('finanzas', subTabPorDefecto('finanzas', userRoles));
     } else if (lower.includes('granja') || lower.includes('galero')) {
       // La granja dejó de ser módulo y pasó a ser grupo del hub de Operaciones.
       irAGrupoOperaciones('granja');
@@ -473,15 +471,15 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
   );
 
   return (
-    <div className="h-screen h-[100dvh] flex overflow-hidden font-sans" style={{ color: 'var(--text-primary)', background: 'var(--bg-page)' }}>
+    <div className={cn('app-shell h-screen h-[100dvh] flex overflow-hidden font-sans', vistaVendedorMovil && 'app-shell--seller')} style={{ color: 'var(--text-primary)', background: 'var(--bg-page)' }}>
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 z-10 shrink-0" style={{ background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border-default)' }}>
+      <aside className="desktop-sidebar hidden lg:flex flex-col w-64 z-10 shrink-0" style={{ background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border-default)' }}>
         {renderSidebarContent()}
       </aside>
 
       {/* Mobile Sidebar Overlay */}
       {isMenuOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
+        <div className="mobile-menu-overlay lg:hidden fixed inset-0 z-50 flex">
           <div className="fixed inset-0 bg-black/50" onClick={() => setIsMenuOpen(false)} />
           <aside aria-label="Navegación principal" className="relative w-72 max-w-[85vw] h-full flex flex-col" style={{ background: 'var(--bg-sidebar)' }}>
             {renderSidebarContent(true)}
@@ -499,12 +497,12 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
               aria-label="Abrir navegación"
               aria-expanded={isMenuOpen}
               onClick={() => setIsMenuOpen(true)}
-              className="p-2 -ml-2 rounded-lg lg:hidden transition-colors"
+              className={cn('seller-mobile-menu-toggle p-2 -ml-2 rounded-lg lg:hidden transition-colors', vistaVendedorMovil && 'seller-visible-menu-toggle')}
               style={{ color: 'var(--text-secondary)' }}
             >
               <Menu className="w-6 h-6" />
             </button>
-            <div className="hidden md:flex items-center rounded-lg px-3 py-2 w-64 transition-all" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
+            <div className={cn('seller-module-search hidden md:flex items-center rounded-lg px-3 py-2 w-64 transition-all', vistaVendedorMovil && 'seller-hide-module-search')} style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
               <Search className="w-4 h-4 mr-2" style={{ color: 'var(--text-muted)' }} />
               <input 
                 type="text" 
@@ -549,16 +547,18 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
                       </div>
                     </div>
                     <div className="p-2">
-                      <button onClick={() => { setIsUserMenuOpen(false); toast.info('Mi Cuenta: funcionalidad próximamente'); }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors" style={{ color: 'var(--text-secondary)' }}>
-                        <UserIcon className="w-4 h-4" />
-                        Mi Cuenta
-                      </button>
-                      <button onClick={() => { setIsUserMenuOpen(false); toast.info('Configuración: funcionalidad próximamente'); }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors" style={{ color: 'var(--text-secondary)' }}>
-                        <Settings className="w-4 h-4" />
-                        Configuracion
-                      </button>
+                      {!vistaVendedorMovil && <>
+                        <button onClick={() => { setIsUserMenuOpen(false); toast.info('Mi Cuenta: funcionalidad próximamente'); }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors" style={{ color: 'var(--text-secondary)' }}>
+                          <UserIcon className="w-4 h-4" />
+                          Mi Cuenta
+                        </button>
+                        <button onClick={() => { setIsUserMenuOpen(false); toast.info('Configuración: funcionalidad próximamente'); }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors" style={{ color: 'var(--text-secondary)' }}>
+                          <Settings className="w-4 h-4" />
+                          Configuración
+                        </button>
+                      </>}
                       <div className="my-1" style={{ borderTop: '1px solid var(--border-muted)' }} />
                       <button onClick={() => { setIsUserMenuOpen(false); onLogout(); }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors" style={{ color: 'var(--status-danger)' }}>
@@ -574,7 +574,7 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
         </div>
 
         {/* Estela AI - chat bubble */}
-        {['Admin', 'Socio', 'Comercial'].includes(currentUser.role) && (
+        {userRoles.some(role => role === 'Admin' || role === 'Socio') && (
           <>
             {isEstelaOpen && (
               <div className={`fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] lg:bottom-24 right-4 z-50 w-[360px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[calc(100dvh-7rem-env(safe-area-inset-bottom))] rounded-2xl shadow-2xl flex flex-col overflow-hidden ${ocultarEstelaEnMovil ? 'estela-oculta-en-movil' : ''}`} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
@@ -672,7 +672,7 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
           </>
         )}
 
-        <main className="flex-1 overflow-y-auto w-full p-4 lg:p-6 pb-24 lg:pb-6" style={{ background: 'var(--bg-page)' }}>
+        <main className={cn('flex-1 overflow-y-auto w-full p-4 lg:p-6 pb-24 lg:pb-6', vistaVendedorMovil && 'seller-main-content')} style={{ background: 'var(--bg-page)' }}>
           {(() => {
             const crumbs = breadcrumbDe(activeTab as ModuleId, subTab, userRoles);
             if (!crumbs) return null;
@@ -814,7 +814,7 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
       )}
 
       {/* Mobile Bottom Nav */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 backdrop-blur-lg z-40 px-2 py-1 safe-area-pb" style={{ background: 'var(--bg-card)', borderTop: '1px solid var(--border-default)' }}>
+      <nav className={cn('seller-bottom-nav lg:hidden fixed bottom-0 left-0 right-0 backdrop-blur-lg z-40 px-2 py-1 safe-area-pb', vistaVendedorMovil && 'seller-bottom-nav--active')} style={{ background: 'var(--bg-card)', borderTop: '1px solid var(--border-default)' }}>
         <div className="flex items-center justify-around">
           {userRoles.includes('Comercial') ? ([
             { id: 'ruta', label: 'Mi Ruta', icon: 'PackageOpen', active: activeTab === 'operaciones' && subTab !== 'facturar-movil', onClick: () => navegarComoComercial('ruta') },

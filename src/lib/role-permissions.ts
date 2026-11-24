@@ -13,8 +13,11 @@ export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     approve: [],
   },
   Comercial: {
-    view: ['rutas_propias', 'clientes_propios', 'ventas_propias', 'inventario_camion', 'facturacion', 'clientes', 'inventario', 'ventas', 'cargas_asignadas', 'catalogo'],
-    create: ['ventas', 'gastos_ruta', 'facturacion', 'notas_credito', 'caja'],
+    // El vendedor solo trabaja con su ruta asignada, sus clientes y documentos.
+    // `ventas` también limita inventario y clientes al contexto del vendedor en
+    // los endpoints que lo soportan; no se concede inventario general ni gastos.
+    view: ['rutas_propias', 'clientes_propios', 'ventas_propias', 'inventario_camion', 'facturacion', 'clientes', 'ventas', 'cargas_asignadas', 'catalogo'],
+    create: ['ventas', 'facturacion', 'notas_credito'],
     approve: ['carga'],
   },
   Despachador: { view: ['bodega', 'etiquetas', 'pesos', 'inventario_bodega', 'catalogo', 'rutas', 'produccion', 'granjas_admin', 'cargas_asignadas', 'traslados'], create: ['etiquetas', 'pesos', 'carga_camion', 'rutas', 'produccion', 'traslados'], approve: [] },
