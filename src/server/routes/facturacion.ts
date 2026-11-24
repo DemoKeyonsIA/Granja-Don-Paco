@@ -4,7 +4,7 @@ import { siguienteConsecutivo, getClienteConsumidorFinal } from '../services/con
 
 /** Registra documentos en modo de prueba; no sustituye el conector fiscal oficial. */
 export function registrarRutasFacturacion(app: any, db: any, requirePermission: (...args: any[]) => any, _testMode: boolean, logAudit: (...args: any[]) => Promise<void>) {
-  const { facturas, detallesFactura, facturas_electronicas, productosCatalogo, clientes, guias_despacho, ventas_ruta, ventas_ruta_kg } = schema;
+  const { facturas, detallesFactura, facturas_electronicas, productosCatalogo, clientes, guias_despacho, ventas_ruta, ventas_ruta_kg, camiones, inventario, etiquetas, retornos_camion, movimientosInventario, pagos, movimientos_insumos, inventario_insumos } = schema;
   app.get('/api/proformas', requirePermission(['facturacion', 'ventas'], 'view'), async (req: any, res: any) => {
     try {
       const usuarioId = String(req.usuario?.id || '');
@@ -479,6 +479,7 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
   app.post("/api/facturacion/nota-credito", requirePermission(['facturacion', 'notas_credito'], 'create'), async (req, res) => {
     try {
       const { facturaIdOriginal, motivo, monto, emisorNombre, emisorCedula } = req.body;
+      const sinEntrega = req.body?.sinEntrega === true;
       const motivoNormalizado = String(motivo || '').trim();
       
       if (!facturaIdOriginal || motivoNormalizado.length < 5 || motivoNormalizado.length > 300 || monto === undefined || monto === null || monto === '') {
@@ -495,11 +496,13 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
       const usuarioId = String(req.usuario?.id || '');
       const rolesUsuario = Array.isArray(req.usuario?.roles) ? req.usuario.roles : String(req.usuario?.roles || req.usuario?.role || '').split(',').map((r: string) => r.trim());
       if (!rolesUsuario.includes('Admin') && String(facturaOriginal.vendedorId || '') !== usuarioId) return res.status(403).json({ error: 'No tiene permiso para corregir esta factura.' });
-      if (facturaOriginal.guiaId) return res.status(409).json({ error: 'Las ventas de ruta se corrigen registrando la devolución desde Mi Ruta y esperando la recepción de Bodega.' });
+      if (facturaOriginal.guiaId && !sinEntrega) return res.status(409).json({ error: 'Si el cliente recibió el producto y lo devolvió, registre la devolución física desde Mi Ruta y espere la confirmación de Bodega.' });
+      if (sinEntrega && !facturaOriginal.guiaId) return res.status(400).json({ error: 'La corrección sin entrega solo aplica a ventas en ruta.' });
       if (['Anulada', 'NotaCredito'].includes(String(facturaOriginal.estado))) return res.status(409).json({ error: 'Esta factura ya está anulada o corresponde a una nota de crédito.' });
       const montoSolicitado = Number(monto);
       const totalOriginal = Number(facturaOriginal.total || 0);
       if (!Number.isFinite(montoSolicitado) || montoSolicitado <= 0 || montoSolicitado > totalOriginal + 0.01) return res.status(400).json({ error: `El monto debe ser mayor que cero y no superar ${totalOriginal.toFixed(2)}.` });
+      if (sinEntrega && Math.abs(montoSolicitado - totalOriginal) > 0.01) return res.status(400).json({ error: 'Una venta anulada antes de entregar debe acreditarse por el total completo.' });
       const notasPrevias = await db.query.facturas_electronicas.findMany({ where: eq(facturas_electronicas.notasCreditoId, String(facturaIdOriginal)) });
       const acreditadoPrevio = (notasPrevias as any[]).reduce((sum, nota) => sum + Number(nota.total || 0), 0);
       if (montoSolicitado + acreditadoPrevio > totalOriginal + 0.01) return res.status(409).json({ error: 'El total de notas de crédito superaría el total de la factura.' });
@@ -542,8 +545,66 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
       const hoy = new Date().toISOString();
       let consecutivo = '';
       let consecutivoNCR = '';
+      let ventaRutaAnulada: any = null;
+      let etiquetasRestauradas: any[] = [];
 
       await db.transaction(async (tx) => {
+        if (sinEntrega) {
+          const conflicto = (message: string) => Object.assign(new Error(message), { status: 409 });
+          const guia = await tx.query.guias_despacho.findFirst({ where: eq(guias_despacho.id, String(facturaOriginal.guiaId)) });
+          if (!guia || guia.estado !== 'EnRuta' || guia.finDiaFecha) throw conflicto('Solo puede anular sin entrega mientras la ruta siga activa y abierta.');
+          const ventaKg = await tx.query.ventas_ruta_kg.findFirst({ where: eq(ventas_ruta_kg.facturaId, String(facturaOriginal.id)) });
+          const ventaLegacy = ventaKg ? null : await tx.query.ventas_ruta.findFirst({ where: eq(ventas_ruta.facturaId, String(facturaOriginal.id)) });
+          const venta: any = ventaKg || ventaLegacy;
+          if (!venta || venta.estado !== 'Emitida') throw conflicto('La venta ya cambió de estado o no está vinculada a la ruta activa. Actualice la pantalla.');
+          const retornosVenta = await tx.query.retornos_camion.findMany({ where: eq(retornos_camion.ventaRutaId, String(venta.id)) });
+          if (retornosVenta.length) throw conflicto('Esta venta ya tiene un retorno físico registrado. Continúe ese proceso con Bodega; no se puede anular como no entregada.');
+          const camion = await tx.query.camiones.findFirst({ where: eq(camiones.id, String(guia.camionId || facturaOriginal.camionId || '')) });
+          if (!camion) throw conflicto('No se encontró el camión de la ruta para restaurar el inventario.');
+          const producto = String(venta.producto || '');
+          const unidad = String(ventaKg?.unidadInventario || ventaLegacy?.unidadInventario || 'kg');
+          const cantidadInventario = Number(ventaKg?.cantidadInventario ?? ventaLegacy?.cantidadInventario ?? ventaKg?.cantidadKg ?? ventaLegacy?.cantidadKg ?? ventaLegacy?.cartones ?? 0);
+          if (!producto || !Number.isFinite(cantidadInventario) || cantidadInventario <= 0) throw conflicto('La venta no contiene una cantidad de inventario válida para revertir.');
+          let asignaciones: any[] = [];
+          try { asignaciones = JSON.parse(ventaKg?.etiquetasAsignadasJson || ventaLegacy?.etiquetasAsignadasJson || '[]'); } catch { asignaciones = []; }
+          if (!asignaciones.length && venta.etiquetaId) asignaciones = [{ etiquetaId: venta.etiquetaId, kg: Number(venta.cantidadKg ?? venta.cartones ?? 0) }];
+          for (const asignacion of asignaciones) {
+            const etiquetaId = String(asignacion.etiquetaId || '');
+            const etiqueta = etiquetaId ? await tx.query.etiquetas.findFirst({ where: eq(etiquetas.id, etiquetaId) }) : null;
+            if (!etiqueta) throw conflicto('No se encontró uno de los lotes consumidos por esta venta. Solicite revisión de Bodega.');
+            const cantidadKg = Number(asignacion.kg || 0);
+            if (cantidadKg <= 0) continue;
+            const saldo = Number(etiqueta.saldoKg ?? etiqueta.pesoNeto ?? 0);
+            await tx.update(etiquetas).set({ saldoKg: Math.round((saldo + cantidadKg) * 10000) / 10000, estado: 'Cargada', ubicacionActual: camion.nombre }).where(eq(etiquetas.id, etiqueta.id));
+            etiquetasRestauradas.push({ etiquetaId: etiqueta.id, kg: cantidadKg, lote: etiqueta.lote || null });
+          }
+          const stock = await tx.query.inventario.findFirst({ where: and(eq(inventario.producto, producto), eq(inventario.ubicacion, camion.nombre), eq(inventario.unidad, unidad)) });
+          const ahoraRuta = new Date().toISOString();
+          if (stock) await tx.update(inventario).set({ cantidad: Number(stock.cantidad) + cantidadInventario, ultima_actualizacion: ahoraRuta }).where(eq(inventario.id, stock.id));
+          else await tx.insert(inventario).values({ id: crypto.randomUUID(), producto, cantidad: cantidadInventario, unidad, ubicacion: camion.nombre, ultima_actualizacion: ahoraRuta });
+          if (etiquetasRestauradas.length) {
+            for (const lote of etiquetasRestauradas) await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto, cantidad: lote.kg, unidad: 'kg', tipo: 'Anulación sin entrega', origen: 'Cliente (no entregado)', destino: camion.nombre, fecha: ahoraRuta, referencia_id: venta.id, registradoPor: usuarioId, lote: lote.lote });
+          } else {
+            await tx.insert(movimientosInventario).values({ id: crypto.randomUUID(), producto, cantidad: cantidadInventario, unidad, tipo: 'Anulación sin entrega', origen: 'Cliente (no entregado)', destino: camion.nombre, fecha: ahoraRuta, referencia_id: venta.id, registradoPor: usuarioId, lote: null });
+          }
+          const consumosInsumo = await tx.query.movimientos_insumos.findMany({ where: eq(movimientos_insumos.referenciaId, String(venta.id)) }).catch(() => [] as any[]);
+          for (const consumo of consumosInsumo.filter((fila: any) => String(fila.tipo || '').startsWith('Consumo estimado'))) {
+            const insumo = await tx.query.inventario_insumos.findFirst({ where: eq(inventario_insumos.id, String(consumo.insumoId)) });
+            if (!insumo) continue;
+            await tx.update(inventario_insumos).set({ cantidadActual: Number(insumo.cantidadActual || 0) + Number(consumo.cantidad || 0) }).where(eq(inventario_insumos.id, insumo.id));
+            await tx.insert(movimientos_insumos).values({ id: crypto.randomUUID(), insumoId: insumo.id, tipo: 'Reverso por anulación sin entrega', cantidad: Number(consumo.cantidad || 0), unidad: consumo.unidad, referenciaId: String(venta.id), kgHuevo: Number(consumo.kgHuevo || 0), registradoPor: usuarioId, fecha: ahoraRuta, observacion: `Reversión de venta ${venta.tiqueteConsecutivo}` });
+          }
+          const pagosVenta = await tx.query.pagos.findMany({ where: eq(pagos.facturaId, String(facturaOriginal.id)) });
+          const pagosAplicados = pagosVenta.filter((pago: any) => Number(pago.monto) > 0);
+          for (const pago of pagosAplicados) await tx.insert(pagos).values({ id: crypto.randomUUID(), facturaId: String(facturaOriginal.id), fecha: ahoraRuta, monto: -Math.abs(Number(pago.monto)), metodo: `Reverso · ${pago.metodo || 'Pago'}`, usuarioId, nota: `Reversión del cobro: anulación sin entrega · ${motivoNormalizado}` });
+          const saldoCreditoRevertir = Math.max(0, totalOriginal - pagosAplicados.reduce((suma: number, pago: any) => suma + Number(pago.monto || 0), 0));
+          if (saldoCreditoRevertir > 0 && facturaOriginal.clienteId) {
+            const cliente = await tx.query.clientes.findFirst({ where: eq(clientes.id, String(facturaOriginal.clienteId)) });
+            if (cliente) await tx.update(clientes).set({ saldo_pendiente: Math.max(0, Number(cliente.saldo_pendiente || 0) - saldoCreditoRevertir) }).where(eq(clientes.id, cliente.id));
+          }
+          await tx.update(ventaKg ? ventas_ruta_kg : ventas_ruta).set({ estado: 'Anulada', anuladoEn: ahoraRuta, anuladoPor: usuarioId }).where(eq(ventaKg ? ventas_ruta_kg.id : ventas_ruta.id, String(venta.id)));
+          ventaRutaAnulada = venta;
+        }
         const ncr = await siguienteConsecutivo(tx, 'NOTA_CREDITO', 'GLOBAL', 'NCR', 6);
         consecutivoNCR = ncr.s;
         await tx.insert(facturas).values({
@@ -590,10 +651,13 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
       });
 
       const anulada = acreditadoPrevio + montoSolicitado >= totalOriginal - 0.01;
-      await logAudit(usuarioId, 'CrearNotaCreditoSimulada', 'Factura', String(facturaIdOriginal), { estado: facturaOriginal.estado }, { estado: anulada ? 'Anulada' : facturaOriginal.estado, notaCreditoId: ncId, consecutivo, monto: montoSolicitado, motivo: motivoNormalizado, transmitida: false });
+      if (ventaRutaAnulada) {
+        for (const etiqueta of etiquetasRestauradas) await logAudit(usuarioId, 'RevertirLoteVentaNoEntregada', 'Etiqueta', etiqueta.etiquetaId, null, { ventaRutaId: ventaRutaAnulada.id, facturaId: facturaOriginal.id, cantidadKg: etiqueta.kg, motivo: motivoNormalizado });
+      }
+      await logAudit(usuarioId, sinEntrega ? 'AnularVentaRutaNoEntregada' : 'CrearNotaCreditoSimulada', 'Factura', String(facturaIdOriginal), { estado: facturaOriginal.estado }, { estado: anulada ? 'Anulada' : facturaOriginal.estado, notaCreditoId: ncId, consecutivo, monto: montoSolicitado, motivo: motivoNormalizado, transmitida: false, sinEntrega });
       res.status(201).json({ success: true, id: ncId, consecutivo, anulada });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(Number(error.status) || 500).json({ error: error.message });
     }
   });
 

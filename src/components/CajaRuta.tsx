@@ -10,6 +10,8 @@ interface CajaRutaProps {
   initialGuideId?: string;
   returnInvoiceId?: string;
   onReturnHandled?: () => void;
+  correctionFactura?: any | null;
+  onCorrectionHandled?: () => void;
   onClose?: () => void;
   initialOpenClosure?: boolean;
 }
@@ -22,7 +24,7 @@ const METODOS_PAGO_RUTA = ['Efectivo', 'Transferencia', 'SINPE', 'Tarjeta', 'Che
 
 type SugerenciaVenta = { producto: string; kilos: number; precio: number; pedidosAnalizados: number; precioMinimo: number; precioMaximo: number; metodo: string };
 
-export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId, onReturnHandled, onClose, initialOpenClosure = false }: CajaRutaProps) {
+export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId, onReturnHandled, correctionFactura, onCorrectionHandled, onClose, initialOpenClosure = false }: CajaRutaProps) {
   const rolesUsuario = currentUser.roles?.length ? currentUser.roles : [currentUser.role];
   const puedeElegirGuia = rolesUsuario.some((role) => role === 'Admin' || role === 'Despachador');
   const esVendedorRuta = rolesUsuario.includes('Comercial') && !rolesUsuario.includes('Admin');
@@ -54,6 +56,8 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
   const [modoDevolucion, setModoDevolucion] = useState(false);
   const [devSel, setDevSel] = useState<any>(null);
   const returnInvoiceHandled = useRef(false);
+  const correctionInvoiceHandled = useRef<string | null>(null);
+  const precioCorreccionPendiente = useRef<number | null>(null);
   const [modoMerma, setModoMerma] = useState(false);
   const [etiquetaMerma, setEtiquetaMerma] = useState('');
   const [cantidadMerma, setCantidadMerma] = useState(0.1);
@@ -131,6 +135,32 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
   useEffect(() => { fetchBase(); }, [fetchBase]);
   useEffect(() => { loadGuia(guiaId); }, [guiaId, loadGuia]);
   useEffect(() => {
+    const invoiceId = String(correctionFactura?.id || '');
+    if (!invoiceId || !guia || String(guia.id) !== String(correctionFactura.guiaId) || correctionInvoiceHandled.current === invoiceId) return;
+    const linea = (Array.isArray(correctionFactura.detalles) ? correctionFactura.detalles : [])[0];
+    if (!linea?.producto) {
+      toast.error('La factura se anuló, pero no se pudo precargar el producto. Inicie la corrección desde Mi Ruta.');
+      correctionInvoiceHandled.current = invoiceId;
+      onCorrectionHandled?.();
+      return;
+    }
+    correctionInvoiceHandled.current = invoiceId;
+    setClienteId(String(correctionFactura.clienteId || ''));
+    setProducto(String(linea.producto));
+    setCantidadTexto(String(Number(linea.cantidad || 0)));
+    precioCorreccionPendiente.current = Number(linea.precio_unitario || 0);
+    setPrecioNegociado(Number(linea.precio_unitario || 0));
+    setDescuentoTexto(String(Number(correctionFactura.descuento || 0)));
+    setTipoDocumentoRuta(correctionFactura.tipoDocumentoOriginal === 'Tiquete' ? 'Tiquete' : 'Factura');
+    setProformaOrigenIdRuta(null);
+    setPagosVenta([{ metodo: String(correctionFactura.metodo_pago || 'Efectivo').split(',')[0].trim() || 'Efectivo', monto: 'total' }]);
+    setClientePreseleccionadoDesdeEntrega(true);
+    setPasoVenta(1);
+    setVentaWizardAbierto(true);
+    onCorrectionHandled?.();
+    toast.success('Venta corregida lista para revisar. Confirme kilos, precio y pago antes de emitir el nuevo documento.');
+  }, [correctionFactura, guia, onCorrectionHandled]);
+  useEffect(() => {
     if (!clienteId) {
       setPreciosProductos({});
       setPoliticaPrecio(null);
@@ -194,7 +224,9 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
     const precio = preciosProductos[producto];
     if (!precio) return;
     setPoliticaPrecio(precio);
-    setPrecioNegociado(Number(precio.precio) || 0);
+    const precioCorregido = precioCorreccionPendiente.current;
+    setPrecioNegociado(precioCorregido !== null ? precioCorregido : Number(precio.precio) || 0);
+    if (precioCorregido !== null) precioCorreccionPendiente.current = null;
   }, [clienteId, producto, preciosProductos]);
   useEffect(() => {
     if (!tiquete) return;

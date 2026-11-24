@@ -18,6 +18,7 @@ const formatoCRC = (valor: number) => new Intl.NumberFormat('es-CR', { style: 'c
 interface FacturacionProps {
   currentUser: User;
   onNavigateToRoute?: (factura?: Factura) => void;
+  onCorrectRouteInvoice?: (factura: Factura) => void;
   onNavigateToBodega?: () => void;
 }
 
@@ -35,7 +36,7 @@ interface RutaDia {
   retornos: number;
 }
 
-export default function Facturacion({ currentUser, onNavigateToRoute, onNavigateToBodega }: FacturacionProps) {
+export default function Facturacion({ currentUser, onNavigateToRoute, onCorrectRouteInvoice, onNavigateToBodega }: FacturacionProps) {
   const esVendedor = (currentUser.roles?.length ? currentUser.roles : [currentUser.role]).includes('Comercial');
   const [inventario, setInventario] = useState<InventarioItem[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -97,6 +98,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
   const [facturaSeleccionada, setFacturaSeleccionada] = useState<Factura | null>(null);
   const [facturaParaAnular, setFacturaParaAnular] = useState<Factura | null>(null);
   const [motivoAnulacion, setMotivoAnulacion] = useState('');
+  const [confirmacionSinEntrega, setConfirmacionSinEntrega] = useState(false);
   const [anulandoFactura, setAnulandoFactura] = useState(false);
   const [proformaParaAnular, setProformaParaAnular] = useState<any | null>(null);
   const [motivoAnulacionProforma, setMotivoAnulacionProforma] = useState('');
@@ -554,7 +556,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
     try {
       const response = await fetch('/api/facturacion/nota-credito', {
         method: 'POST', headers: authHeaders,
-        body: JSON.stringify({ facturaIdOriginal: facturaParaAnular.id, motivo, monto: Number(facturaParaAnular.total) }),
+        body: JSON.stringify({ facturaIdOriginal: facturaParaAnular.id, motivo, monto: Number(facturaParaAnular.total), sinEntrega: Boolean(facturaParaAnular.guiaId) }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo anular la factura.');
@@ -562,7 +564,13 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
       setFacturaSeleccionada(null);
       setFacturaParaAnular(null);
       setMotivoAnulacion('');
+      setConfirmacionSinEntrega(false);
       const documentoOriginal = documentosElectronicos.find(d => d.facturaId === facturaBase.id && ['Factura', 'Tiquete'].includes(d.tipoDocumento));
+      if (facturaBase.guiaId && esVendedor) {
+        onCorrectRouteInvoice?.({ ...facturaBase, tipoDocumentoOriginal: documentoOriginal?.tipoDocumento } as Factura);
+        toast.success(`Factura anulada con nota de crédito ${data.consecutivo || ''}. Se abrió la venta corregida en Mi Ruta.`.trim());
+        return;
+      }
       setTipoDocumento(documentoOriginal?.tipoDocumento === 'Tiquete' ? 'Tiquete' : 'Factura');
       setProformaOrigenId(null);
       setSelectedCliente(facturaBase.clienteId || '');
@@ -592,6 +600,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
   const abrirAnulacion = (factura: Factura) => {
     setFacturaParaAnular(factura);
     setMotivoAnulacion('');
+    setConfirmacionSinEntrega(false);
   };
 
   const handleAnularProforma = async () => {
@@ -828,8 +837,8 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
                         <button type="button" onClick={() => abrirFactura(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><FileText className="mr-1 inline h-4 w-4" />Ver factura</button>
                         <button type="button" onClick={() => abrirFactura(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Send className="mr-1 inline h-4 w-4" />Reenviar</button>
                         <button type="button" onClick={() => imprimirFacturaDesdeLista(doc.data)} className="min-h-10 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Printer className="mr-1 inline h-4 w-4" />Imprimir</button>
-                        {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && !doc.data.guiaId && <button type="button" onClick={() => abrirAnulacion(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', borderColor: 'var(--status-danger)', color: 'var(--text-primary)' }}><XCircle className="mr-1 inline h-4 w-4" />Anular y corregir</button>}
-                        {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && doc.data.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.(doc.data) : onNavigateToBodega?.()} title="Registre la devolución física en Mi Ruta; Bodega debe confirmar la recepción para completar la nota de crédito." className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><ArrowLeft className="mr-1 inline h-4 w-4" />{esVendedor ? 'Registrar devolución' : 'Devolución en Bodega'}</button>}
+                        {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && <button type="button" onClick={() => abrirAnulacion(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', borderColor: 'var(--status-danger)', color: 'var(--text-primary)' }}><XCircle className="mr-1 inline h-4 w-4" />{doc.data.guiaId ? 'Anular (no entregada)' : 'Anular y corregir'}</button>}
+                        {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && doc.data.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.(doc.data) : onNavigateToBodega?.()} title="Use esta opción cuando el cliente sí recibió el producto y lo devolvió físicamente." className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><ArrowLeft className="mr-1 inline h-4 w-4" />{esVendedor ? 'Producto devuelto' : 'Devolución en Bodega'}</button>}
                       </div>
                     </> : <>
                       <p className="mb-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{detalleProforma || 'Cotización comercial'}</p>
@@ -904,7 +913,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
                             className="p-1.5 hover:bg-stone-50 rounded-lg transition-colors inline-flex items-center space-x-1" style={{ color: 'var(--text-link)' }}>
                             <FileText className="w-4 h-4" /><span className="text-xs font-bold">Ver</span>
                           </button>
-                          {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && !f.guiaId && <button type="button" onClick={() => abrirAnulacion(f)} className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', color: 'var(--text-primary)' }}><XCircle className="h-4 w-4" />Anular / corregir</button>}
+                          {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && <button type="button" onClick={() => abrirAnulacion(f)} className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', color: 'var(--text-primary)' }}><XCircle className="h-4 w-4" />{f.guiaId ? 'Anular (no entregada)' : 'Anular / corregir'}</button>}
                           {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && f.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.(f) : onNavigateToBodega?.()} className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)' }}><ArrowLeft className="h-4 w-4" />{esVendedor ? 'Registrar devolución' : 'Control de Bodega'}</button>}
                         </div>
                       </td>
@@ -932,8 +941,8 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
                       <button type="button" onClick={() => abrirFactura(f)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><FileText className="mr-1 inline h-4 w-4" />Ver factura</button>
                       <button type="button" onClick={() => abrirFactura(f)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Send className="mr-1 inline h-4 w-4" />Reenviar</button>
                       <button type="button" onClick={() => imprimirFacturaDesdeLista(f)} className="min-h-10 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Printer className="mr-1 inline h-4 w-4" />Imprimir</button>
-                      {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && !f.guiaId && <button type="button" onClick={() => abrirAnulacion(f)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', borderColor: 'var(--status-danger)', color: 'var(--text-primary)' }}><XCircle className="mr-1 inline h-4 w-4" />Anular y corregir</button>}
-                      {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && f.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.(f) : onNavigateToBodega?.()} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><ArrowLeft className="mr-1 inline h-4 w-4" />{esVendedor ? 'Registrar devolución' : 'Ir a Control de Bodega'}</button>}
+                      {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && <button type="button" onClick={() => abrirAnulacion(f)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', borderColor: 'var(--status-danger)', color: 'var(--text-primary)' }}><XCircle className="mr-1 inline h-4 w-4" />{f.guiaId ? 'Anular (no entregada)' : 'Anular y corregir'}</button>}
+                      {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && f.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.(f) : onNavigateToBodega?.()} title="Solo si el producto se entregó y luego regresó físicamente." className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><ArrowLeft className="mr-1 inline h-4 w-4" />{esVendedor ? 'Producto devuelto' : 'Ir a Control de Bodega'}</button>}
                     </div>
                   </div>}
                 </article>;
@@ -1136,7 +1145,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
             </label>
             <div className="invoice-actions no-print">
               <button type="button" onClick={() => setFacturaSeleccionada(null)} className="invoice-secondary-action">Cerrar</button>
-              {facturaSeleccionada.estado !== 'Anulada' && !['NotaCredito'].includes(facturaSeleccionada.estado) && !facturaSeleccionada.guiaId && <button type="button" onClick={() => abrirAnulacion(facturaSeleccionada)} className="invoice-secondary-action" title="Anular con nota de crédito y corregir emitiendo un documento nuevo"><XCircle className="w-4 h-4" /> Anular y corregir</button>}
+              {facturaSeleccionada.estado !== 'Anulada' && !['NotaCredito'].includes(facturaSeleccionada.estado) && <button type="button" onClick={() => abrirAnulacion(facturaSeleccionada)} className="invoice-secondary-action" title={facturaSeleccionada.guiaId ? 'Solo para corregir un error antes de entregar físicamente el producto.' : 'Anular con nota de crédito y corregir emitiendo un documento nuevo'}><XCircle className="w-4 h-4" /> {facturaSeleccionada.guiaId ? 'Anular (no entregada)' : 'Anular y corregir'}</button>}
               {facturaSeleccionada.estado !== 'Anulada' && !['NotaCredito'].includes(facturaSeleccionada.estado) && facturaSeleccionada.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.(facturaSeleccionada) : onNavigateToBodega?.()} className="invoice-secondary-action" title={esVendedor ? 'Se abrirá la devolución de esta venta en Mi Ruta. Bodega debe confirmar la recepción.' : 'Continuar la recepción de devolución en Bodega'}><ArrowLeft className="w-4 h-4" /> {esVendedor ? 'Registrar devolución' : 'Control de Bodega'}</button>}
               <button type="button" onClick={handleEnviarCorreoFactura} className="invoice-secondary-action" title="Preparar reenvío de la factura">
                 <Send className="w-4 h-4" /> Preparar reenvío
@@ -1144,16 +1153,17 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
               <button type="button" onClick={handleImprimirFactura} className="invoice-primary-action"><Printer className="w-4 h-4" /> Imprimir factura</button>
             </div>
             <p className="no-print px-4 pb-4 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-              {facturaSeleccionada.guiaId ? 'Las ventas de ruta se corrigen registrando la devolución desde Mi Ruta y esperando la recepción de Bodega.' : 'El correo se prepara en tu aplicación para que lo revises. Las facturas emitidas no se editan: se anulan con nota de crédito y luego se emite un documento nuevo.'}
+              {facturaSeleccionada.guiaId ? 'Si no se entregó: anule la venta aquí. Si el cliente recibió el producto y luego lo devolvió: registre el retorno desde Mi Ruta.' : 'El correo se prepara en tu aplicación para que lo revises. Las facturas emitidas no se editan: se anulan con nota de crédito y luego se emite un documento nuevo.'}
             </p>
           </section>
         </div>
       )}
       {facturaParaAnular && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/55 p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !anulandoFactura) setFacturaParaAnular(null); }}>
         <section role="dialog" aria-modal="true" aria-labelledby="anular-factura-titulo" className="w-full max-w-md space-y-4 rounded-2xl border p-5 shadow-2xl" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
-          <div><h3 id="anular-factura-titulo" className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Anular y corregir {facturaParaAnular.consecutivo}</h3><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Se conservará el documento original y se generará una nota de crédito simulada por {formatoCRC(Number(facturaParaAnular.total))}. Luego emita el documento corregido.</p></div>
+          <div><h3 id="anular-factura-titulo" className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>{facturaParaAnular.guiaId && esVendedor ? 'Anular venta no entregada' : 'Anular y corregir'} · {facturaParaAnular.consecutivo}</h3><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>{facturaParaAnular.guiaId && esVendedor ? 'Úselo solo si hubo un error y el cliente aún no recibió el producto. Se emitirá la nota de crédito, se revertirá el cobro registrado y el inventario volverá a la ruta.' : <>Se conservará el documento original y se generará una nota de crédito simulada por {formatoCRC(Number(facturaParaAnular.total))}. Luego emita el documento corregido.</>}</p></div>
+          {facturaParaAnular.guiaId && <label className="flex items-start gap-2 rounded-xl p-3 text-sm" style={{ background: 'var(--status-warning-soft)', color: 'var(--text-primary)' }}><input type="checkbox" checked={confirmacionSinEntrega} onChange={event => setConfirmacionSinEntrega(event.target.checked)} className="mt-1" /><span>Confirmo que el cliente aún no recibió el producto y que cualquier monto cobrado ya fue devuelto o no se llegó a cobrar.</span></label>}
           <label className="block text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Motivo de anulación<textarea value={motivoAnulacion} onChange={event => setMotivoAnulacion(event.target.value)} maxLength={300} rows={3} autoFocus className="mt-1 w-full rounded-xl border p-3 text-sm font-normal" placeholder="Describa brevemente el motivo" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} /></label>
-          <div className="flex justify-end gap-2"><button type="button" disabled={anulandoFactura} onClick={() => setFacturaParaAnular(null)} className="min-h-10 rounded-xl border px-4 text-sm font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>Cancelar</button><button type="button" disabled={anulandoFactura || motivoAnulacion.trim().length < 5} onClick={() => void handleAnularFactura()} className="min-h-10 rounded-xl px-4 text-sm font-bold disabled:opacity-50" style={{ background: 'var(--status-danger)', color: '#fff' }}>{anulandoFactura ? 'Anulando…' : 'Confirmar anulación'}</button></div>
+          <div className="flex justify-end gap-2"><button type="button" disabled={anulandoFactura} onClick={() => { setFacturaParaAnular(null); setConfirmacionSinEntrega(false); }} className="min-h-10 rounded-xl border px-4 text-sm font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>Cancelar</button><button type="button" disabled={anulandoFactura || motivoAnulacion.trim().length < 5 || Boolean(facturaParaAnular.guiaId && !confirmacionSinEntrega)} onClick={() => void handleAnularFactura()} className="min-h-10 rounded-xl px-4 text-sm font-bold disabled:opacity-50" style={{ background: 'var(--status-danger)', color: '#fff' }}>{anulandoFactura ? 'Anulando…' : 'Confirmar anulación'}</button></div>
         </section>
       </div>}
       {proformaParaAnular && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/55 p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !anulandoProforma) setProformaParaAnular(null); }}>
