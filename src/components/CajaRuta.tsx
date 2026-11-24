@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Truck, PackageOpen, User as UserIcon, UserPlus, Banknote, CreditCard, ArrowLeftRight, RotateCcw, Printer, CheckCircle2, X, AlertTriangle, Minus, Plus, Eye, Mail } from 'lucide-react';
 import { User } from '../types';
 import { toast } from 'sonner';
@@ -8,6 +8,8 @@ import { sessionHeaders } from '../lib/session';
 interface CajaRutaProps {
   currentUser: User;
   initialGuideId?: string;
+  returnInvoiceId?: string;
+  onReturnHandled?: () => void;
   onClose?: () => void;
   initialOpenClosure?: boolean;
 }
@@ -20,7 +22,7 @@ const METODOS_PAGO_RUTA = ['Efectivo', 'Transferencia', 'SINPE', 'Tarjeta', 'Che
 
 type SugerenciaVenta = { producto: string; kilos: number; precio: number; pedidosAnalizados: number; precioMinimo: number; precioMaximo: number; metodo: string };
 
-export default function CajaRuta({ currentUser, initialGuideId, onClose, initialOpenClosure = false }: CajaRutaProps) {
+export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId, onReturnHandled, onClose, initialOpenClosure = false }: CajaRutaProps) {
   const rolesUsuario = currentUser.roles?.length ? currentUser.roles : [currentUser.role];
   const puedeElegirGuia = rolesUsuario.some((role) => role === 'Admin' || role === 'Despachador');
   const esVendedorRuta = rolesUsuario.includes('Comercial') && !rolesUsuario.includes('Admin');
@@ -51,6 +53,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const [gastosRuta, setGastosRuta] = useState<any[]>([]);
   const [modoDevolucion, setModoDevolucion] = useState(false);
   const [devSel, setDevSel] = useState<any>(null);
+  const returnInvoiceHandled = useRef(false);
   const [modoMerma, setModoMerma] = useState(false);
   const [etiquetaMerma, setEtiquetaMerma] = useState('');
   const [cantidadMerma, setCantidadMerma] = useState(0.1);
@@ -104,13 +107,26 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
       if (detRes.ok) {
         const det = await detRes.json();
         setGuia(det);
-        setVentas((det.ventas || []).slice().sort((a: any, b: any) => String(a.tiqueteConsecutivo).localeCompare(String(b.tiqueteConsecutivo))));
+        const ventasCargadas = (det.ventas || []).slice().sort((a: any, b: any) => String(a.tiqueteConsecutivo).localeCompare(String(b.tiqueteConsecutivo)));
+        setVentas(ventasCargadas);
+        if (returnInvoiceId && !returnInvoiceHandled.current) {
+          const ventaObjetivo = ventasCargadas.find((venta: any) => String(venta.facturaId || '') === String(returnInvoiceId));
+          returnInvoiceHandled.current = true;
+          if (ventaObjetivo && ventaObjetivo.estado === 'Emitida') {
+            setDevSel(ventaObjetivo);
+            setModoDevolucion(true);
+            setCierreRutaAbierto(false);
+          } else {
+            toast.error('No se encontró la venta activa en esta ruta. Si la ruta ya cerró, solicite a Administración gestionar la devolución.');
+          }
+          onReturnHandled?.();
+        }
         setStockCamion((await invRes.json()).filter((i: any) => i.ubicacion === det.camionNombre));
         const gastosRes = await fetch(`/api/gastos/guia/${id}`, { headers: sessionHeaders(currentUser.id) }).catch(() => null);
         setGastosRuta(gastosRes?.ok ? await gastosRes.json() : []);
       }
     } catch { toast.error('Error al cargar la guía.'); }
-  }, [currentUser.id]);
+  }, [currentUser.id, returnInvoiceId, onReturnHandled]);
 
   useEffect(() => { fetchBase(); }, [fetchBase]);
   useEffect(() => { loadGuia(guiaId); }, [guiaId, loadGuia]);
@@ -444,8 +460,9 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const metricasProducto = Boolean(ventaWizardAbierto && producto);
   const cargadoVisual = metricasProducto ? (cargadoProductoKg || stockProducto + vendidoProductoKg) : Number(guia?.totalKg ?? guia?.totalCartones ?? 0);
   const vendidoVisual = metricasProducto ? vendidoProductoKg : vendidoKg;
+  const cantidadTemporalApartada = Math.min(Math.max(0, cantidad), Math.max(0, stockProducto));
   const disponibleVisual = metricasProducto
-    ? Math.max(0, stockProducto - (ventaEnPreparacion && cantidadPuedeConfirmarse ? cantidad : 0))
+    ? Math.max(0, stockProducto - (ventaEnPreparacion ? cantidadTemporalApartada : 0))
     : disponibleCamionVisual;
   const clientesRuta = (guia?.rutaOrden || []).length > 0 ? guia.rutaOrden : (guia?.clientesRuta || []);
   const clientesCompletadosIds = new Set(ventas.filter((venta: any) => venta.estado === 'Emitida' && venta.clienteId).map((venta: any) => String(venta.clienteId)));

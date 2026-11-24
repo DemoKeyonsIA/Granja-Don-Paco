@@ -1,5 +1,5 @@
 import React from "react";
-import { lazy, Suspense, useState, useRef, useEffect, useMemo } from "react";
+import { lazy, Suspense, useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Bot, ChevronRight, ChevronDown, DollarSign, LogOut, Send, Settings, User as UserIcon, X, Info, Sparkles, Menu, Search, Shield, FileText } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { cn } from './lib/utils';
@@ -116,6 +116,8 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
 
   // For sub-tabs within macro modules
   const [subTab, setSubTab] = useState<string>('');
+  const [devolucionRutaObjetivo, setDevolucionRutaObjetivo] = useState<{ guiaId: string; facturaId: string } | null>(null);
+  const limpiarObjetivoDevolucion = useCallback(() => setDevolucionRutaObjetivo(null), []);
   // Marca que la sub-vista fue elegida explícitamente (búsqueda o menú Nuevo)
   // para que el reset por cambio de macro-módulo no la pise.
   const subTabManual = useRef(false);
@@ -699,8 +701,8 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
                   {effectiveSub === 'incidencias' && <IncidentesMovil currentUser={currentUser} />}
                   {effectiveSub === 'confirmar' && <CamioneroMovil currentUser={currentUser} />}
                   {effectiveSub === 'recibir' && <BodegaMovil currentUser={currentUser} />}
-                  {effectiveSub === 'venta-movil' && <CajaRuta currentUser={currentUser} />}
-                  {effectiveSub === 'facturar-movil' && <Facturacion currentUser={currentUser} onNavigateToRoute={() => navegarComoComercial('ruta')} />}
+                  {effectiveSub === 'venta-movil' && <CajaRuta currentUser={currentUser} initialGuideId={devolucionRutaObjetivo?.guiaId} returnInvoiceId={devolucionRutaObjetivo?.facturaId} onReturnHandled={limpiarObjetivoDevolucion} />}
+                  {effectiveSub === 'facturar-movil' && <Facturacion currentUser={currentUser} onNavigateToRoute={(factura) => { if (factura?.guiaId) setDevolucionRutaObjetivo({ guiaId: String(factura.guiaId), facturaId: String(factura.id) }); navegarComoComercial('ruta'); }} />}
                   {effectiveSub === 'cargas-comercial' && <CamioneroMovil currentUser={currentUser} />}
                 </div></Suspense>
               </div>

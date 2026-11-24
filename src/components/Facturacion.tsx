@@ -17,7 +17,7 @@ const formatoCRC = (valor: number) => new Intl.NumberFormat('es-CR', { style: 'c
 
 interface FacturacionProps {
   currentUser: User;
-  onNavigateToRoute?: () => void;
+  onNavigateToRoute?: (factura?: Factura) => void;
   onNavigateToBodega?: () => void;
 }
 
@@ -829,7 +829,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
                         <button type="button" onClick={() => abrirFactura(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Send className="mr-1 inline h-4 w-4" />Reenviar</button>
                         <button type="button" onClick={() => imprimirFacturaDesdeLista(doc.data)} className="min-h-10 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Printer className="mr-1 inline h-4 w-4" />Imprimir</button>
                         {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && !doc.data.guiaId && <button type="button" onClick={() => abrirAnulacion(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', borderColor: 'var(--status-danger)', color: 'var(--text-primary)' }}><XCircle className="mr-1 inline h-4 w-4" />Anular y corregir</button>}
-                        {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && doc.data.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.() : onNavigateToBodega?.()} title="Las ventas de ruta se anulan al devolver el producto y completar la recepción de Bodega." className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><ArrowLeft className="mr-1 inline h-4 w-4" />{esVendedor ? 'Anular / corregir venta' : 'Devolución en Bodega'}</button>}
+                        {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && doc.data.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.(doc.data) : onNavigateToBodega?.()} title="Registre la devolución física en Mi Ruta; Bodega debe confirmar la recepción para completar la nota de crédito." className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><ArrowLeft className="mr-1 inline h-4 w-4" />{esVendedor ? 'Registrar devolución' : 'Devolución en Bodega'}</button>}
                       </div>
                     </> : <>
                       <p className="mb-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{detalleProforma || 'Cotización comercial'}</p>
@@ -905,7 +905,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
                             <FileText className="w-4 h-4" /><span className="text-xs font-bold">Ver</span>
                           </button>
                           {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && !f.guiaId && <button type="button" onClick={() => abrirAnulacion(f)} className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', color: 'var(--text-primary)' }}><XCircle className="h-4 w-4" />Anular / corregir</button>}
-                          {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && f.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.() : onNavigateToBodega?.()} className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)' }}><ArrowLeft className="h-4 w-4" />{esVendedor ? 'Devolución en Mi Ruta' : 'Control de Bodega'}</button>}
+                          {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && f.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.(f) : onNavigateToBodega?.()} className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)' }}><ArrowLeft className="h-4 w-4" />{esVendedor ? 'Registrar devolución' : 'Control de Bodega'}</button>}
                         </div>
                       </td>
                     </tr>
@@ -933,7 +933,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
                       <button type="button" onClick={() => abrirFactura(f)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Send className="mr-1 inline h-4 w-4" />Reenviar</button>
                       <button type="button" onClick={() => imprimirFacturaDesdeLista(f)} className="min-h-10 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Printer className="mr-1 inline h-4 w-4" />Imprimir</button>
                       {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && !f.guiaId && <button type="button" onClick={() => abrirAnulacion(f)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', borderColor: 'var(--status-danger)', color: 'var(--text-primary)' }}><XCircle className="mr-1 inline h-4 w-4" />Anular y corregir</button>}
-                      {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && f.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.() : onNavigateToBodega?.()} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><ArrowLeft className="mr-1 inline h-4 w-4" />{esVendedor ? 'Registrar devolución en Mi Ruta' : 'Ir a Control de Bodega'}</button>}
+                      {String(f.estado) !== 'Anulada' && String(f.estado) !== 'NotaCredito' && f.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.(f) : onNavigateToBodega?.()} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><ArrowLeft className="mr-1 inline h-4 w-4" />{esVendedor ? 'Registrar devolución' : 'Ir a Control de Bodega'}</button>}
                     </div>
                   </div>}
                 </article>;
@@ -1137,7 +1137,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onNavigate
             <div className="invoice-actions no-print">
               <button type="button" onClick={() => setFacturaSeleccionada(null)} className="invoice-secondary-action">Cerrar</button>
               {facturaSeleccionada.estado !== 'Anulada' && !['NotaCredito'].includes(facturaSeleccionada.estado) && !facturaSeleccionada.guiaId && <button type="button" onClick={() => abrirAnulacion(facturaSeleccionada)} className="invoice-secondary-action" title="Anular con nota de crédito y corregir emitiendo un documento nuevo"><XCircle className="w-4 h-4" /> Anular y corregir</button>}
-              {facturaSeleccionada.estado !== 'Anulada' && !['NotaCredito'].includes(facturaSeleccionada.estado) && facturaSeleccionada.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.() : onNavigateToBodega?.()} className="invoice-secondary-action" title={esVendedor ? 'La devolución se registra en Mi Ruta' : 'Continuar la recepción de devolución en Bodega'}><ArrowLeft className="w-4 h-4" /> {esVendedor ? 'Registrar devolución' : 'Control de Bodega'}</button>}
+              {facturaSeleccionada.estado !== 'Anulada' && !['NotaCredito'].includes(facturaSeleccionada.estado) && facturaSeleccionada.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.(facturaSeleccionada) : onNavigateToBodega?.()} className="invoice-secondary-action" title={esVendedor ? 'Se abrirá la devolución de esta venta en Mi Ruta. Bodega debe confirmar la recepción.' : 'Continuar la recepción de devolución en Bodega'}><ArrowLeft className="w-4 h-4" /> {esVendedor ? 'Registrar devolución' : 'Control de Bodega'}</button>}
               <button type="button" onClick={handleEnviarCorreoFactura} className="invoice-secondary-action" title="Preparar reenvío de la factura">
                 <Send className="w-4 h-4" /> Preparar reenvío
               </button>
