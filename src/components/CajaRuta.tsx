@@ -527,6 +527,37 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
         </div>
       </div>
 
+      {guia?.estado === 'EnRuta' && !cajaCerrada && !ventaWizardAbierto && (
+        <section className="rounded-2xl p-4 sm:p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }} aria-labelledby="clientes-pendientes-ruta">
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 id="clientes-pendientes-ruta" className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>Entregas pendientes</h2>
+              <p className="mt-0.5 text-sm" style={{ color: 'var(--text-secondary)' }}>{clientesPorEntregar.length} {clientesPorEntregar.length === 1 ? 'cliente por atender' : 'clientes por atender'} en esta ruta</p>
+            </div>
+          </div>
+          {clientesPorEntregar.length > 0 ? (
+            <ul className="space-y-2">
+              {clientesPorEntregar.map((cliente: any) => (
+                <li key={cliente.clienteId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3" style={{ background: 'var(--bg-page)', borderColor: 'var(--border-default)' }}>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{cliente.nombre || cliente.clienteNombre || 'Cliente'}</p>
+                    {(cliente.ventanaIni || cliente.ventanaFin) && <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>Horario {cliente.ventanaIni || '—'}–{cliente.ventanaFin || '—'}</p>}
+                  </div>
+                  <button type="button" onClick={() => {
+                    setClienteId(String(cliente.clienteId)); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0');
+                    setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setProformaOrigenIdRuta(null); setPasoVenta(1); setVentaWizardAbierto(true);
+                  }} className="min-h-10 shrink-0 rounded-lg px-4 py-2 text-sm font-bold" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>
+                    Iniciar entrega
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="rounded-xl p-3 text-sm" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>{clientesRuta.length === 0 ? 'Esta ruta no tiene clientes asignados.' : 'Ya completaste la entrega a todos los clientes de esta ruta.'}</p>
+          )}
+        </section>
+      )}
+
       {cajaCerrada && (
         <div className="rounded-2xl p-4 flex items-center gap-3" style={{ background: 'var(--status-danger-soft)', color: 'var(--status-danger)', border: '1px solid var(--status-danger)' }}>
           <X className="w-5 h-5 shrink-0" />
