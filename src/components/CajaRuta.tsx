@@ -430,6 +430,9 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const cajaCerrada = Boolean(guia?.finDiaFecha);
   const emitidas = ventas.filter((v: any) => v.estado === 'Emitida');
   const vendidoKg = emitidas.reduce((s: number, v: any) => s + Number(v.cantidadKg ?? 0), 0);
+  const vendidoProductoKg = emitidas.filter((v: any) => String(v.producto || '') === producto).reduce((s: number, v: any) => s + Number(v.cantidadKg ?? 0), 0);
+  const cargadoProductoKg = (guia?.detalle || []).filter((d: any) => String(d.producto || '') === producto)
+    .reduce((s: number, d: any) => s + Number(d.cantidadKg ?? d.cantidad ?? d.saldoKg ?? d.pesoNeto ?? d.cartones ?? 0), 0);
   const inventarioKgCamion = productosDisponibles
     .filter((i: any) => i.unidad === 'kg')
     .reduce((s: number, i: any) => s + Number(i.cantidad || 0), 0);
@@ -437,6 +440,12 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const cantidadPuedeConfirmarse = cantidad > 0 && cantidad <= stockProducto;
   const kilosApartadosTemporalmente = ventaEnPreparacion && cantidadPuedeConfirmarse ? cantidad : 0;
   const disponibleCamionVisual = Math.max(0, inventarioKgCamion - kilosApartadosTemporalmente);
+  const metricasProducto = Boolean(ventaWizardAbierto && producto);
+  const cargadoVisual = metricasProducto ? (cargadoProductoKg || stockProducto + vendidoProductoKg) : Number(guia?.totalKg ?? guia?.totalCartones ?? 0);
+  const vendidoVisual = metricasProducto ? vendidoProductoKg : vendidoKg;
+  const disponibleVisual = metricasProducto
+    ? Math.max(0, stockProducto - (ventaEnPreparacion && cantidadPuedeConfirmarse ? cantidad : 0))
+    : disponibleCamionVisual;
   const clientesRuta = (guia?.rutaOrden || []).length > 0 ? guia.rutaOrden : (guia?.clientesRuta || []);
   const clientesCompletadosIds = new Set(ventas.filter((venta: any) => venta.estado === 'Emitida' && venta.clienteId).map((venta: any) => String(venta.clienteId)));
   const clientesPorEntregar = clientesRuta.filter((cliente: any) => !clientesCompletadosIds.has(String(cliente.clienteId)));
@@ -549,18 +558,20 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
           {guia && (
             <div className="route-pos-metrics">
               <div className="route-pos-metric rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
-                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Cargado</p>
-                <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{Number(guia.totalKg ?? guia.totalCartones).toFixed(2)} {guia.totalKg != null ? 'kg' : 'ct'}</p>
-                {Number(guia.colchonKg ?? guia.colchonCartones) > 0 && <p className="text-[10px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Extra: {Number(guia.colchonKg ?? guia.colchonCartones).toFixed(2)} kg</p>}
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{metricasProducto ? 'Cargado' : 'Cargado total'}</p>
+                {metricasProducto && <p className="text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>{producto}</p>}
+                <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{cargadoVisual.toFixed(2)} kg</p>
+                {!metricasProducto && Number(guia.colchonKg ?? guia.colchonCartones) > 0 && <p className="text-[10px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Extra: {Number(guia.colchonKg ?? guia.colchonCartones).toFixed(2)} kg</p>}
               </div>
               <div className="route-pos-metric rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
-                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Vendido</p>
-                <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{vendidoKg.toFixed(2)} kg</p>
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{metricasProducto ? 'Vendido' : 'Vendido total'}</p>
+                {metricasProducto && <p className="text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>{producto}</p>}
+                <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{vendidoVisual.toFixed(2)} kg</p>
               </div>
               <div className="route-pos-metric rounded-xl p-3" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-default)' }}>
-                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{ventaEnPreparacion && cantidadPuedeConfirmarse ? 'Total si confirma' : 'Disponible total'}</p>
-                <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{disponibleCamionVisual.toFixed(2)} kg</p>
-                <p className="mt-0.5 text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>Suma todos los productos</p>
+                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{metricasProducto ? (ventaEnPreparacion && cantidadPuedeConfirmarse ? 'Quedaría disponible' : 'Disponible') : ventaEnPreparacion && cantidadPuedeConfirmarse ? 'Disponible tras venta' : 'Disponible total'}</p>
+                <p className="mt-1 text-lg font-extrabold tabular-nums" style={{ color: 'var(--text-primary)' }}>{disponibleVisual.toFixed(2)} kg</p>
+                <p className="mt-0.5 text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>{metricasProducto ? producto : 'Suma todos los productos'}</p>
               </div>
             </div>
           )}
@@ -736,7 +747,7 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                 <PackageOpen className="w-4 h-4" /> Cantidad y precio
               </p>
               <p className="mb-3 text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                {clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || 'Cliente'} · {producto || 'Producto'} · {stockProducto.toFixed(2)} kg disponibles
+                {clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || 'Cliente'} · {producto || 'Producto'} · Stock actual {stockProducto.toFixed(2)} kg
               </p>
 
               <div className="route-pos-sale-fields">
