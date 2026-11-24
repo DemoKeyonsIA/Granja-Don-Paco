@@ -511,6 +511,20 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
                   {guia ? nombreRutaAsignada : 'Cargando ruta asignada…'}
                 </p>
                 {guia && <span className="route-pos-status">{estadoRutaLabel}</span>}
+                {guia?.estado === 'EnRuta' && !cajaCerrada && (ventaWizardAbierto ? (
+                  <button type="button" onClick={() => { setVentaWizardAbierto(false); resetPos(); setPasoVenta(1); }} aria-label="Cancelar factura" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}><X className="h-5 w-5" /></button>
+                ) : (
+                  <div className="relative shrink-0">
+                    <button type="button" aria-label="Crear" aria-haspopup="menu" aria-expanded={menuNuevaAccionAbierto} onClick={() => setMenuNuevaAccionAbierto(open => !open)} className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Plus className="h-5 w-5" /></button>
+                    {menuNuevaAccionAbierto && <>
+                      <button type="button" aria-label="Cerrar menú" className="fixed inset-0 z-20 cursor-default" onClick={() => setMenuNuevaAccionAbierto(false)} />
+                      <div role="menu" className="absolute right-0 top-full z-30 mt-2 w-60 rounded-xl border p-1.5 shadow-xl" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+                        <button type="button" role="menuitem" onClick={() => { setMenuNuevaAccionAbierto(false); resetPos(); setPasoVenta(1); setVentaWizardAbierto(true); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold" style={{ color: 'var(--text-primary)' }}><Plus className="h-4 w-4" style={{ color: 'var(--brand-primary)' }} />Nueva factura</button>
+                        {esVendedorRuta && <button type="button" role="menuitem" onClick={() => { setMenuNuevaAccionAbierto(false); setBorradorCliente({ nombre: '', tipo_documento: 'Fisica', documento_id: '', telefono: '', email: '', direccion: '' }); setSolicitudClienteAbierta(true); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold" style={{ color: 'var(--text-primary)' }}><UserPlus className="h-4 w-4" style={{ color: 'var(--brand-primary)' }} />Solicitar cliente nuevo</button>}
+                      </div>
+                    </>}
+                  </div>
+                ))}
               </div>
               <p className="mt-1 break-words text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
                 {guia ? `${guia.consecutivo} · ${guia.camionNombre}` : 'El administrador debe asignar un camión y una guía activa.'}
@@ -548,20 +562,6 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
               </div>
             </div>
           )}
-          {guia?.estado === 'EnRuta' && !cajaCerrada && (ventaWizardAbierto ? (
-            <button type="button" onClick={() => { setVentaWizardAbierto(false); resetPos(); setPasoVenta(1); }} className="mt-3 min-h-11 w-full rounded-xl px-4 py-2.5 text-sm font-extrabold sm:w-auto" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}><X className="mr-2 inline h-4 w-4" />Cancelar factura</button>
-          ) : (
-            <div className="relative mt-3">
-              <button type="button" aria-label="Crear" aria-haspopup="menu" aria-expanded={menuNuevaAccionAbierto} onClick={() => setMenuNuevaAccionAbierto(open => !open)} className="flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Plus className="h-5 w-5" /></button>
-              {menuNuevaAccionAbierto && <>
-                <button type="button" aria-label="Cerrar menú" className="fixed inset-0 z-20 cursor-default" onClick={() => setMenuNuevaAccionAbierto(false)} />
-                <div role="menu" className="absolute left-0 top-full z-30 mt-2 w-60 rounded-xl border p-1.5 shadow-xl" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
-                  <button type="button" role="menuitem" onClick={() => { setMenuNuevaAccionAbierto(false); resetPos(); setPasoVenta(1); setVentaWizardAbierto(true); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold" style={{ color: 'var(--text-primary)' }}><Plus className="h-4 w-4" style={{ color: 'var(--brand-primary)' }} />Nueva factura</button>
-                  {esVendedorRuta && <button type="button" role="menuitem" onClick={() => { setMenuNuevaAccionAbierto(false); setBorradorCliente({ nombre: '', tipo_documento: 'Fisica', documento_id: '', telefono: '', email: '', direccion: '' }); setSolicitudClienteAbierta(true); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold" style={{ color: 'var(--text-primary)' }}><UserPlus className="h-4 w-4" style={{ color: 'var(--brand-primary)' }} />Solicitar cliente nuevo</button>}
-                </div>
-              </>}
-            </div>
-          ))}
         </div>
       </div>
 
