@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Truck, PackageOpen, User as UserIcon, Banknote, CreditCard, ArrowLeftRight, RotateCcw, Printer, CheckCircle2, X, AlertTriangle, Minus, Plus, Eye, Mail } from 'lucide-react';
+import { Truck, PackageOpen, User as UserIcon, UserPlus, Banknote, CreditCard, ArrowLeftRight, RotateCcw, Printer, CheckCircle2, X, AlertTriangle, Minus, Plus, Eye, Mail } from 'lucide-react';
 import { User } from '../types';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -23,6 +23,7 @@ type SugerenciaVenta = { producto: string; kilos: number; precio: number; pedido
 export default function CajaRuta({ currentUser, initialGuideId, onClose, initialOpenClosure = false }: CajaRutaProps) {
   const rolesUsuario = currentUser.roles?.length ? currentUser.roles : [currentUser.role];
   const puedeElegirGuia = rolesUsuario.some((role) => role === 'Admin' || role === 'Despachador');
+  const esVendedorRuta = rolesUsuario.includes('Comercial') && !rolesUsuario.includes('Admin');
   const [guias, setGuias] = useState<any[]>([]);
   const [camiones, setCamiones] = useState<any[]>([]);
   const [guiaId, setGuiaId] = useState<string>(initialGuideId || '');
@@ -62,6 +63,10 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
   const [tipoDocumentoRuta, setTipoDocumentoRuta] = useState<'Factura' | 'Tiquete' | 'Proforma'>('Factura');
   const [selectorDocumentoAbierto, setSelectorDocumentoAbierto] = useState(false);
   const [proformaOrigenIdRuta, setProformaOrigenIdRuta] = useState<string | null>(null);
+  const [menuNuevaAccionAbierto, setMenuNuevaAccionAbierto] = useState(false);
+  const [solicitudClienteAbierta, setSolicitudClienteAbierta] = useState(false);
+  const [enviandoSolicitudCliente, setEnviandoSolicitudCliente] = useState(false);
+  const [borradorCliente, setBorradorCliente] = useState({ nombre: '', tipo_documento: 'Fisica', documento_id: '', telefono: '', email: '', direccion: '' });
 
   const fetchBase = useCallback(async () => {
     try {
@@ -402,6 +407,26 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
     setLoading(false);
   };
 
+  const solicitarAltaCliente = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!borradorCliente.nombre.trim() || !guia) return;
+    setEnviandoSolicitudCliente(true);
+    try {
+      const response = await fetch('/api/clientes/solicitudes', {
+        method: 'POST',
+        headers: sessionHeaders(currentUser.id, true),
+        body: JSON.stringify({ ...borradorCliente, nombre: borradorCliente.nombre.trim(), ruta: nombreRutaAsignada }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'No se pudo enviar la solicitud.');
+      toast.success('Solicitud enviada. El cliente aparecerá en la ruta solo cuando Administración la apruebe.');
+      setSolicitudClienteAbierta(false);
+      setBorradorCliente({ nombre: '', tipo_documento: 'Fisica', documento_id: '', telefono: '', email: '', direccion: '' });
+    } catch (error: any) {
+      toast.error(error.message || 'No se pudo enviar la solicitud.');
+    } finally { setEnviandoSolicitudCliente(false); }
+  };
+
   const cajaCerrada = Boolean(guia?.finDiaFecha);
   const emitidas = ventas.filter((v: any) => v.estado === 'Emitida');
   const vendidoKg = emitidas.reduce((s: number, v: any) => s + Number(v.cantidadKg ?? 0), 0);
@@ -523,7 +548,20 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
               </div>
             </div>
           )}
-          {guia?.estado === 'EnRuta' && !cajaCerrada && <button type="button" onClick={() => { if (ventaWizardAbierto) { setVentaWizardAbierto(false); resetPos(); setPasoVenta(1); } else { resetPos(); setPasoVenta(1); setVentaWizardAbierto(true); } }} className="mt-3 min-h-11 w-full rounded-xl px-4 py-2.5 text-sm font-extrabold sm:w-auto" style={{ background: ventaWizardAbierto ? 'var(--bg-muted)' : 'var(--brand-primary)', color: ventaWizardAbierto ? 'var(--text-secondary)' : 'var(--text-on-action)' }}>{ventaWizardAbierto ? <><X className="mr-2 inline h-4 w-4" />Cancelar factura</> : <><Plus className="mr-2 inline h-4 w-4" />Crear nueva factura</>}</button>}
+          {guia?.estado === 'EnRuta' && !cajaCerrada && (ventaWizardAbierto ? (
+            <button type="button" onClick={() => { setVentaWizardAbierto(false); resetPos(); setPasoVenta(1); }} className="mt-3 min-h-11 w-full rounded-xl px-4 py-2.5 text-sm font-extrabold sm:w-auto" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}><X className="mr-2 inline h-4 w-4" />Cancelar factura</button>
+          ) : (
+            <div className="relative mt-3">
+              <button type="button" aria-label="Crear" aria-haspopup="menu" aria-expanded={menuNuevaAccionAbierto} onClick={() => setMenuNuevaAccionAbierto(open => !open)} className="flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}><Plus className="h-5 w-5" /></button>
+              {menuNuevaAccionAbierto && <>
+                <button type="button" aria-label="Cerrar menú" className="fixed inset-0 z-20 cursor-default" onClick={() => setMenuNuevaAccionAbierto(false)} />
+                <div role="menu" className="absolute left-0 top-full z-30 mt-2 w-60 rounded-xl border p-1.5 shadow-xl" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+                  <button type="button" role="menuitem" onClick={() => { setMenuNuevaAccionAbierto(false); resetPos(); setPasoVenta(1); setVentaWizardAbierto(true); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold" style={{ color: 'var(--text-primary)' }}><Plus className="h-4 w-4" style={{ color: 'var(--brand-primary)' }} />Nueva factura</button>
+                  {esVendedorRuta && <button type="button" role="menuitem" onClick={() => { setMenuNuevaAccionAbierto(false); setBorradorCliente({ nombre: '', tipo_documento: 'Fisica', documento_id: '', telefono: '', email: '', direccion: '' }); setSolicitudClienteAbierta(true); }} className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold" style={{ color: 'var(--text-primary)' }}><UserPlus className="h-4 w-4" style={{ color: 'var(--brand-primary)' }} />Solicitar cliente nuevo</button>}
+                </div>
+              </>}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -1027,6 +1065,40 @@ export default function CajaRuta({ currentUser, initialGuideId, onClose, initial
               {(['Factura', 'Tiquete', 'Proforma'] as const).map(tipo => <button key={tipo} type="button" onClick={() => { setTipoDocumentoRuta(tipo); setSelectorDocumentoAbierto(false); }} className="flex min-h-12 w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-bold" style={tipoDocumentoRuta === tipo ? { background: 'var(--brand-primary-soft)', borderColor: 'var(--brand-primary)', color: 'var(--brand-primary-dark)' } : { background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><span>{tipo === 'Factura' ? 'Factura electrónica' : tipo === 'Tiquete' ? 'Tiquete electrónico' : 'Proforma'}</span>{tipoDocumentoRuta === tipo && <CheckCircle2 className="h-5 w-5" />}</button>)}
             </div>
           </section>
+        </div>
+      )}
+      {solicitudClienteAbierta && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/55 p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !enviandoSolicitudCliente) setSolicitudClienteAbierta(false); }}>
+          <form role="dialog" aria-modal="true" aria-labelledby="solicitud-cliente-titulo" onSubmit={solicitarAltaCliente} className="max-h-[90dvh] w-full max-w-lg space-y-4 overflow-y-auto rounded-2xl border p-5 shadow-2xl" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+            <div className="flex items-start justify-between gap-3">
+              <div><h2 id="solicitud-cliente-titulo" className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>Solicitar cliente nuevo</h2><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Ruta: {nombreRutaAsignada}. Administración debe aprobarlo antes de incorporarlo y venderle.</p></div>
+              <button type="button" onClick={() => setSolicitudClienteAbierta(false)} disabled={enviandoSolicitudCliente} aria-label="Cerrar" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg" style={{ color: 'var(--text-secondary)' }}><X className="h-5 w-5" /></button>
+            </div>
+            <label className="block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>Nombre del cliente *
+              <input required autoFocus maxLength={160} value={borradorCliente.nombre} onChange={event => setBorradorCliente(prev => ({ ...prev, nombre: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border px-3 text-base font-normal" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>Tipo de identificación
+                <select value={borradorCliente.tipo_documento} onChange={event => setBorradorCliente(prev => ({ ...prev, tipo_documento: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border px-3 text-sm font-normal" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><option value="Fisica">Física</option><option value="Juridica">Jurídica</option><option value="DIMEX">DIMEX</option><option value="NITE">NITE</option></select>
+              </label>
+              <label className="block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>Identificación
+                <input maxLength={40} value={borradorCliente.documento_id} onChange={event => setBorradorCliente(prev => ({ ...prev, documento_id: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border px-3 text-base font-normal" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} />
+              </label>
+              <label className="block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>Teléfono
+                <input type="tel" maxLength={40} value={borradorCliente.telefono} onChange={event => setBorradorCliente(prev => ({ ...prev, telefono: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border px-3 text-base font-normal" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} />
+              </label>
+              <label className="block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>Correo
+                <input type="email" maxLength={160} value={borradorCliente.email} onChange={event => setBorradorCliente(prev => ({ ...prev, email: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border px-3 text-base font-normal" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} />
+              </label>
+            </div>
+            <label className="block text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>Dirección
+              <input maxLength={240} value={borradorCliente.direccion} onChange={event => setBorradorCliente(prev => ({ ...prev, direccion: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border px-3 text-base font-normal" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} />
+            </label>
+            <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setSolicitudClienteAbierta(false)} disabled={enviandoSolicitudCliente} className="min-h-11 rounded-xl border px-4 text-sm font-bold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>Cancelar</button>
+              <button type="submit" disabled={enviandoSolicitudCliente || !borradorCliente.nombre.trim()} className="min-h-11 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50" style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)' }}>{enviandoSolicitudCliente ? 'Enviando solicitud…' : 'Enviar a Administración'}</button>
+            </div>
+          </form>
         </div>
       )}
     </div>
