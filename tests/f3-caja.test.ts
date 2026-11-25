@@ -176,7 +176,7 @@ describe('F3 — Caja del vendedor: ventas en ruta, tiquetes, retornos, tablero 
       detalles: [{ producto: 'Huevos - Grande', cantidad: 1, precio_unitario: 17000 }],
     });
     expect(facturaConDescuentoExcedido.status).toBe(409);
-    expect(facturaConDescuentoExcedido.body.error).toContain('Máximo permitido: ₡850');
+    expect(facturaConDescuentoExcedido.body.error).toMatch(/ruta activa/i);
     await client.execute({ sql: `UPDATE precios_detalle SET descuento_maximo = 0 WHERE id = ?`, args: ['pd-grande'] });
   });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, AlertTriangle, Plus, Trash2, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Cliente, User } from '../types';
@@ -52,6 +52,10 @@ export default function Cliente360({ cliente, currentUser, esVendedor = false, o
   const [isLoading, setIsLoading] = useState(false);
   const [preciosRecomendados, setPreciosRecomendados] = useState<Record<string, any>>({});
   const [cargandoPrecios, setCargandoPrecios] = useState(false);
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const closeRef = useRef(onClose);
+  const focusAnterior = useRef<HTMLElement | null>(null);
+  closeRef.current = onClose;
 
   const [catalogo, setCatalogo] = useState<ProductoCatalogo[]>([]);
   const [showExcForm, setShowExcForm] = useState(false);
@@ -128,10 +132,27 @@ export default function Cliente360({ cliente, currentUser, esVendedor = false, o
   }, [open, esVendedor, cliente?.id, data?.recomendaciones, currentUser.id]);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && open) onClose(); };
+    if (!open) return;
+    focusAnterior.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')?.focus());
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { closeRef.current(); return; }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusables = Array.from(dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+        .filter(element => element.offsetParent !== null);
+      if (!focusables.length) { event.preventDefault(); dialogRef.current.focus(); return; }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
     document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open, onClose]);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', handler);
+      focusAnterior.current?.focus();
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -143,9 +164,9 @@ export default function Cliente360({ cliente, currentUser, esVendedor = false, o
     return (
       <div className="gcrm">
         <div className="drawer-fixed" onClick={onClose}>
-          <aside className="drawer" onClick={e => e.stopPropagation()}>
+          <aside ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="cliente360-titulo" tabIndex={-1} className="drawer" onClick={e => e.stopPropagation()}>
             <div className="identity" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-              <div><div className="mini">Pedidos y recomendación de venta</div><h2 style={{ margin: '5px 0 0', color: 'var(--ink)' }}>{clienteNombre}</h2></div>
+              <div><div className="mini">Pedidos y recomendación de venta</div><h2 id="cliente360-titulo" style={{ margin: '5px 0 0', color: 'var(--ink)' }}>{clienteNombre}</h2></div>
               {cerrar}
             </div>
             <div style={{ padding: 20, display: 'grid', gap: 20 }}>
@@ -207,7 +228,7 @@ export default function Cliente360({ cliente, currentUser, esVendedor = false, o
   return (
     <div className="gcrm">
       <div className="drawer-fixed" onClick={onClose}>
-        <aside className="drawer" onClick={(e) => e.stopPropagation()}>
+        <aside ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="cliente360-titulo" tabIndex={-1} className="drawer" onClick={(e) => e.stopPropagation()}>
           <div className="identity">
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -219,7 +240,7 @@ export default function Cliente360({ cliente, currentUser, esVendedor = false, o
               <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
                 <div className="ava">{iniciales}</div>
                 <div>
-                  <div style={{ fontSize: '20px', fontWeight: 800, lineHeight: 1.15, color: 'var(--ink)' }}>{c.nombre}</div>
+                  <div id="cliente360-titulo" style={{ fontSize: '20px', fontWeight: 800, lineHeight: 1.15, color: 'var(--ink)' }}>{c.nombre}</div>
                   <div className="mini" style={{ marginTop: 3 }}>{c.tipoDocumento || 'Identificación'} {c.documentoId || '—'} · {c.telefono || 'Sin teléfono'} · {c.email || 'Sin correo'}</div>
                   <div className="mini" style={{ marginTop: 5, color: 'var(--ink2)', maxWidth: 560 }}>
                     {ubicacionCliente || 'Ubicación sin registrar'}{c.ruta ? ` · ${c.ruta}` : ''}

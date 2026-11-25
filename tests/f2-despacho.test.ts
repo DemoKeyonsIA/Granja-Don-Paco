@@ -37,8 +37,8 @@ beforeAll(async () => {
     args: ['c3', 'Cliente C', 10.2, -84.2, 'R1', 'Credito', 'Activo']
   });
   await client.execute({
-    sql: `INSERT INTO rutas (id, nombre, cliente_ids, centroide_lat, centroide_lng, capacidad_max_cartones, estado) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    args: ['r1', 'Ruta 1', JSON.stringify(['c1', 'c2', 'c3']), 10.1, -84.1, 100, 'Activa']
+    sql: `INSERT INTO rutas (id, nombre, vendedor_asignado, cliente_ids, centroide_lat, centroide_lng, capacidad_max_cartones, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: ['r1', 'Ruta 1', '3', JSON.stringify(['c1', 'c2', 'c3']), 10.1, -84.1, 100, 'Activa']
   });
   await client.execute({
     sql: `INSERT INTO inventario (id, producto, cantidad, unidad, ubicacion, ultima_actualizacion) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -92,13 +92,15 @@ describe('F2 — Despacho: camión, guía de despacho, venta y cierre', () => {
       .send({
         camionId: camion.id,
         rutaId: 'r1',
+        vendedorId: '3',
+        clienteIds: ['c1', 'c2', 'c3'],
         etiquetasIds: ['e1', 'e2'], // 30 + 40 = 70 kg
         colchonEtiquetaIds: ['e2'], // 40 kg de reserva incluidos en la carga
         responsablesCarga: 'Bodeguero',
         responsableTransporte: 'Vendedor',
         pesoSalida: 45
       });
-    expect(res.status).toBe(201);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.colchonKg).toBe(40);
     expect(res.body.colchonPorProducto).toEqual([{ etiquetaId: 'e2', producto: 'Huevos - Grande', unidad: 'kg', cantidad: 40 }]);
@@ -182,6 +184,8 @@ describe('F2 — Despacho: camión, guía de despacho, venta y cierre', () => {
   it('Venta en ruta con guiaId descuenta del camión correcto (fix bug hardcodeado)', async () => {
     const guias = await requestAs(app, 'admin-f2').get('/api/logistica/guias');
     const guia = guias.body[0];
+    const salida = await requestAs(app, 'admin-f2').post(`/api/logistica/guias/${guia.id}/marcar-en-ruta`);
+    expect(salida.status).toBe(200);
 
     const res = await requestAs(app, 'admin-f2').post('/api/ventas')
       .set('x-user-id', '3')
@@ -217,8 +221,8 @@ describe('F2 — Despacho: camión, guía de despacho, venta y cierre', () => {
     expect(e1.saldoKg).toBe(20);
   });
 
-  it('Venta sin guiaId usa fallback Camión Ruta 1 (compatibilidad)', async () => {
-    await requestAs(app, 'admin-f2').post('/api/ventas').set('x-user-id', '3').send({
+  it('rechaza una venta de Comercial sin guía activa y no altera inventario', async () => {
+    const venta = await requestAs(app, 'admin-f2').post('/api/ventas').set('x-user-id', '3').send({
       factura: {
         id: 'f2', consecutivo: 'F-0002', fecha: new Date().toISOString(),
         clienteId: 'c1', vendedorId: '3',
@@ -227,10 +231,12 @@ describe('F2 — Despacho: camión, guía de despacho, venta y cierre', () => {
       },
       detalles: [{ producto: 'Huevos - Grande', cantidad: 1, precio_unitario: 16000, subtotal: 16000 }]
     });
+    expect(venta.status).toBe(409);
+    expect(venta.body.error).toContain('ruta activa');
 
     const inv = await requestAs(app, 'admin-f2').get('/api/inventario');
     const camion1 = inv.body.find((i: any) => i.ubicacion === 'Camión Ruta 1' && i.producto === 'Huevos - Grande');
-    expect(camion1.cantidad).toBe(4); // 5 - 1 del fallback histórico
+    expect(camion1.cantidad).toBe(5);
   });
 
   it('Marcar EnRuta requiere estado Cargada', async () => {
@@ -238,7 +244,7 @@ describe('F2 — Despacho: camión, guía de despacho, venta y cierre', () => {
     const guia = guias.body[0];
 
     const mal = await requestAs(app, 'admin-f2').post(`/api/logistica/guias/${guia.id}/marcar-en-ruta`);
-    expect(mal.status).toBe(200); // estaba Cargada → OK
+    expect(mal.status).toBe(400); // la prueba de venta anterior ya la puso EnRuta
     const guias2 = await requestAs(app, 'admin-f2').get('/api/logistica/guias');
     expect(guias2.body[0].estado).toBe('EnRuta');
 
@@ -355,6 +361,7 @@ describe('F2 — Despacho: camión, guía de despacho, venta y cierre', () => {
       sql: `INSERT INTO clientes (id, nombre, ruta, condicion_pago, estado, provincia, canton, distrito) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       args: ['g3', 'Geo Alajuela A', 'R1', 'Contado', 'Activo', 'Alajuela', 'Central', 'San Rafael']
     });
+    await client.execute({ sql: `UPDATE rutas SET cliente_ids = ? WHERE id = ?`, args: [JSON.stringify(['c1', 'c2', 'c3', 'g1', 'g2', 'g3']), 'r1'] });
 
     await requestAs(app, 'admin-f2').post('/api/logistica/camiones')
       .send({ nombre: 'Camión Ruta 5', placa: 'CR-555', capacidad_cartones: 100 });
@@ -373,7 +380,7 @@ describe('F2 — Despacho: camión, guía de despacho, venta y cierre', () => {
         etiquetasIds: ['e4'],
         clienteIds: ['g1', 'g2', 'g3'] // desordenado a propósito
       });
-    expect(res.status).toBe(201);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
 
     const guias = await requestAs(app, 'admin-f2').get('/api/logistica/guias');
     const guia = guias.body.find((g: any) => g.camionNombre === 'Camión Ruta 5');

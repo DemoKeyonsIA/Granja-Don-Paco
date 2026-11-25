@@ -73,25 +73,20 @@ describe('E2E — Office (correo + documentos + vinculaciones)', () => {
     expectApi(res, 409);
   });
 
-  it('Socio y Comercial ven la bandeja, pero no pueden conectar cuentas', async () => {
+  it('Socio ve la bandeja; Comercial no tiene acceso al módulo Dirección', async () => {
     const socioList = await como(SOCIO, request(app).get('/api/office/cuentas'));
     expectApi(socioList, 200, 'socio lista cuentas');
     expect(socioList.body.length).toBe(1);
 
     const comList = await como(COMERCIAL, request(app).get('/api/office/cuentas'));
-    expectApi(comList, 200, 'comercial lista cuentas');
-
-    const comPost = await como(COMERCIAL, request(app).post('/api/office/cuentas')).send({
-      email: 'ventas@gdp.cr', etiqueta: 'Ventas',
-    });
-    expectApi(comPost, 403, 'comercial no conecta');
+    expectApi(comList, 403, 'comercial sin acceso a Dirección');
   });
 
-  it('Bodeguero no accede a Office; Comercial (incluido el perfil Camionero legado) sí puede leer', async () => {
+  it('Bodeguero y Comercial (incluido Camionero legado) no acceden a Office', async () => {
     const res = await como(BODEGUERO, request(app).get('/api/office/cuentas'));
     expectApi(res, 403);
     const camionero = await como(CAMIONERO, request(app).get('/api/office/cuentas'));
-    expectApi(camionero, 200);
+    expectApi(camionero, 403);
   });
 
   it('Admin crea una regla automática; no-admin no', async () => {

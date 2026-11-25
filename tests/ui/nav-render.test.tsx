@@ -113,8 +113,16 @@ const breadcrumb = (): string[] | null => {
 
 const abrirModulo = async (nombre: string) => {
   const user = userEvent.setup();
-  const botones = within(document.querySelector('aside')!).getAllByRole('button', { name: nombre });
-  await user.click(botones[0]);
+  const aside = within(document.querySelector('aside')!);
+  const botones = aside.getAllByRole('button');
+  const boton = botones.find(b => (b.textContent ?? '').trim() === nombre)
+    ?? (nombre === 'Finanzas' ? botones.find(b => (b.textContent ?? '').trim() === 'Gastos') : undefined);
+  if (!boton && nombre === 'Finanzas') {
+    const facturas = Array.from(document.querySelectorAll('button')).find(b => (b.textContent ?? '').trim() === 'Facturas');
+    if (facturas) { await user.click(facturas); return; }
+  }
+  if (!boton) throw new Error(`No se encontró el módulo ${nombre}`);
+  await user.click(boton);
   await waitFor(() => expect(screen.queryByTestId('module-loading')).toBeNull());
 };
 
@@ -136,24 +144,24 @@ afterEach(() => {
 });
 
 describe('sidebar por rol', () => {
-  it('Admin ve los 5 módulos: Granja y Logística se hicieron grupos del hub', () => {
+  it('Admin ve los módulos operativos y administrativos', () => {
     renderComo('Admin');
     expect(modulosDelSidebar()).toEqual([
-      'Dirección', 'Operaciones y Bodegas', 'Clientes', 'Finanzas', 'Admin',
+      'Dirección', 'Operaciones y Bodegas', 'Inventario', 'Clientes', 'Gastos', 'Admin',
     ]);
   });
 
   it('Socio ve Dirección, Clientes y Finanzas', () => {
     renderComo('Socio');
-    expect(modulosDelSidebar()).toEqual(['Dirección', 'Clientes', 'Finanzas']);
+    expect(modulosDelSidebar()).toEqual(['Dirección', 'Clientes', 'Gastos']);
   });
 
-  it('Comercial ve Dirección, Mi Ruta, Clientes y Documentos', () => {
-    // El Comercial usa Documentos para facturar y no ve analítica.
+  it('Comercial ve Mi Ruta, Clientes y Facturas, sin módulos administrativos', () => {
     renderComo('Comercial');
-    expect(modulosDelSidebar()).toEqual([
-      'Dirección', 'Mi Ruta', 'Clientes', 'Finanzas',
-    ]);
+    expect(modulosDelSidebar()).toEqual(['Mi Ruta', 'Clientes', 'Facturas']);
+    expect(modulosDelSidebar()).not.toContain('Dirección');
+    expect(modulosDelSidebar()).not.toContain('Gastos');
+    expect(modulosDelSidebar()).not.toContain('Admin');
   });
 
   it('un Bodeguero solo ve su módulo móvil, con etiqueta propia', () => {
@@ -168,7 +176,7 @@ describe('sidebar por rol', () => {
 
   it('Camionero legado entra con el mismo perfil Comercial', () => {
     renderComo('Camionero');
-    expect(modulosDelSidebar()).toEqual(['Dirección', 'Mi Ruta', 'Clientes', 'Finanzas']);
+    expect(modulosDelSidebar()).toEqual(['Mi Ruta', 'Clientes', 'Facturas']);
   });
 
   it('un Bodeguero que además es Admin vuelve al hub de escritorio', () => {
@@ -194,15 +202,15 @@ describe('módulo de entrada por defecto', () => {
     // Bug 7 corregido en Fase 1: antes caía en Logística, que no ve, y quedaba
     // sin ninguna entrada de navegación desde la que salir. Fase 5: el módulo
     // es Finanzas, que sí ve, y por eso ahora sí hay breadcrumb que lo delata.
-    expect(breadcrumb()).toEqual(['Finanzas', 'Resumen']);
-    expect(modulosDelSidebar()).toContain('Finanzas');
+    expect(breadcrumb()).toEqual(['Gastos', 'Resumen']);
+    expect(modulosDelSidebar()).toContain('Gastos');
     expect(screen.getAllByTestId('stub-modulo')).toHaveLength(1);
   });
 
   it('Comercial entra a Mi Ruta por Venta móvil', async () => {
     renderComo('Comercial');
-    await abrirModulo('Mi Ruta');
-    expect(tabsActivos()).toEqual(['venta-movil']);
+    expect(idsDeTabs()).toEqual([]);
+    expect(document.querySelector('nav button[aria-label="Mi Ruta"]')?.getAttribute('aria-current')).toBe('page');
   });
 
   it('un Bodeguero entra directo al camino móvil', () => {
@@ -212,10 +220,10 @@ describe('módulo de entrada por defecto', () => {
 });
 
 describe('tabs de Finanzas', () => {
-  it('Admin ve los 4 tabs con Resumen activo', async () => {
+  it('Admin ve los cinco tabs con Resumen activo', async () => {
     renderComo('Admin');
     await abrirModulo('Finanzas');
-    expect(idsDeTabs()).toEqual(['resumen', 'documentos', 'cobranza', 'analitica']);
+    expect(idsDeTabs()).toEqual(['resumen', 'documentos', 'gastos-ruta', 'cobranza', 'analitica']);
     expect(tabsActivos()).toEqual(['resumen']);
   });
 
@@ -226,11 +234,13 @@ describe('tabs de Finanzas', () => {
     expect(tabsActivos()).toEqual(['resumen']);
   });
 
-  it('Comercial solo ve Documentos y entra directamente a facturación', async () => {
+  it('Comercial abre Facturas sin entrar en Finanzas', async () => {
     renderComo('Comercial');
-    await abrirModulo('Finanzas');
-    expect(idsDeTabs()).toEqual(['documentos']);
-    expect(tabsActivos()).toEqual(['documentos']);
+    const user = userEvent.setup();
+    await user.click(within(document.querySelector('aside')!).getByRole('button', { name: 'Facturas' }));
+    await esperarCuerpo('/Facturacion');
+    expect(screen.queryByTestId('finanzas-hub')).toBeNull();
+    expect(modulosDelSidebar()).not.toContain('Gastos');
   });
 
   it('cambiar de tab marca solo ese tab como activo', async () => {
@@ -250,7 +260,7 @@ describe('tabs de Finanzas', () => {
     await abrirModulo('Operaciones y Bodegas');
     await user.type(screen.getByRole('textbox'), 'factura');
     await user.keyboard('{Enter}');
-    expect(idsDeTabs()).toEqual(['resumen', 'documentos', 'cobranza', 'analitica']);
+    expect(idsDeTabs()).toEqual(['resumen', 'documentos', 'gastos-ruta', 'cobranza', 'analitica']);
     expect(tabsActivos()).toEqual(['documentos']);
   });
 
@@ -288,14 +298,13 @@ describe('tabs de Finanzas', () => {
     await user.type(screen.getByRole('textbox'), 'factura');
     await user.keyboard('{Enter}');
     expect(tabsActivos()).toEqual(['documentos']);
-    await abrirModulo('Operaciones y Bodegas');
     await abrirModulo('Finanzas');
     expect(tabsActivos()).toEqual(['resumen']);
   });
 });
 
 describe('tabs de Despacho y Ventas (el módulo Logística como sub-fila)', () => {
-  it('Admin ve los pasos de Despacho, incluida la configuración', async () => {
+  it('Admin ve preparación, seguimiento e historial de Despacho', async () => {
     const user = userEvent.setup();
     renderComo('Admin');
     await abrirModulo('Operaciones y Bodegas');
@@ -304,13 +313,13 @@ describe('tabs de Despacho y Ventas (el módulo Logística como sub-fila)', () =
     expect(
       Array.from(document.querySelectorAll('[data-banda="secundario"] [data-tab-id]'))
         .map(el => el.getAttribute('data-tab-id')),
-    ).toEqual(['despacho-guias', 'despacho-camiones', 'despacho-etiquetas', 'despacho-pesos']);
+    ).toEqual(['despacho-preparar', 'despacho-en-ruta', 'despacho-historico-ventas']);
 
-    await user.click(document.querySelector('[data-tab-id="ventas"]')!);
+    await user.click(document.querySelector('[data-tab-id="despacho-en-ruta"]')!);
     expect(
       Array.from(document.querySelectorAll('[data-banda="secundario"] [data-tab-id]'))
         .map(el => el.getAttribute('data-tab-id')),
-    ).toEqual(['ventas-tablero', 'ventas-precios']);
+    ).toEqual(['despacho-preparar', 'despacho-en-ruta', 'despacho-historico-ventas']);
   });
 
   it('Admin elige un paso y la fila sigue marcando su grupo', async () => {
@@ -318,12 +327,12 @@ describe('tabs de Despacho y Ventas (el módulo Logística como sub-fila)', () =
     renderComo('Admin');
     await abrirModulo('Operaciones y Bodegas');
     await user.click(document.querySelector('[data-tab-id="despacho"]')!);
-    await user.click(document.querySelector('[data-banda="secundario"] [data-tab-id="despacho-camiones"]')!);
+    await user.click(document.querySelector('[data-banda="secundario"] [data-tab-id="despacho-en-ruta"]')!);
     // El paso se monta (− Flota y Rutas es del grupo Despacho, ya no del módulo
     // Logística) y la sub-fila se queda: es la única forma de volver a los otros
     // pasos.
     expect(bandasDeTabs()).toEqual(['primario', 'secundario']);
-    await esperarCuerpo('/FlotaRutas');
+    await esperarCuerpo('/TableroRutas');
     expect(cuerpoMontado('/Logistica')).toBe(false);
     expect(
       Array.from(document.querySelectorAll('[data-banda="primario"] [data-tab-id="despacho"]'))
@@ -331,10 +340,10 @@ describe('tabs de Despacho y Ventas (el módulo Logística como sub-fila)', () =
     ).toBe(true);
   });
 
-  it('Comercial usa el flujo móvil de venta, factura y cargas, sin configuración', async () => {
+  it('Comercial usa venta y ruta; Facturas tiene un acceso separado, sin configuración', async () => {
     renderComo('Comercial');
-    expect(idsDeTabs()).toEqual(['venta-movil', 'facturar-movil', 'cargas-comercial']);
-    expect(tabsActivos()).toEqual(['venta-movil']);
+    expect(idsDeTabs()).toEqual([]);
+    expect(document.querySelector('nav button[aria-label="Mi Ruta"]')?.getAttribute('aria-current')).toBe('page');
   });
 
   it('las etiquetas coinciden con el modelo del boceto', async () => {
@@ -342,26 +351,26 @@ describe('tabs de Despacho y Ventas (el módulo Logística como sub-fila)', () =
     renderComo('Admin');
     await abrirModulo('Operaciones y Bodegas');
     await user.click(document.querySelector('[data-tab-id="despacho"]')!);
-    expect(etiquetasDeTabs()).toContain('Guías de Despacho');
-    expect(etiquetasDeTabs()).toContain('Flota y Rutas');
-    expect(etiquetasDeTabs()).toContain('Pesos');
+    expect(etiquetasDeTabs()).toContain('Preparar salida');
+    expect(etiquetasDeTabs()).toContain('Rutas en vivo');
+    expect(etiquetasDeTabs()).toContain('Historial de ventas');
     // Facturación no vive aquí: es Finanzas → Documentos.
     expect(etiquetasDeTabs()).not.toContain('Facturación');
   });
 });
 
 describe('hub de Operaciones de escritorio', () => {
-  it('Admin ve los cinco grupos con Resumen del día activo', async () => {
+  it('Admin ve los cuatro grupos con Resumen del día activo', async () => {
     renderComo('Admin');
     await abrirModulo('Operaciones y Bodegas');
-    expect(idsDeTabs()).toEqual(['resumen', 'granja', 'bodega', 'despacho', 'ventas']);
+    expect(idsDeTabs()).toEqual(['resumen', 'granja', 'bodega', 'despacho']);
     expect(tabsActivos()).toEqual(['resumen']);
   });
 
   it('Comercial ve solo su fila móvil, sin grupos de administración', async () => {
     renderComo('Comercial');
-    expect(idsDeTabs()).toEqual(['venta-movil', 'facturar-movil', 'cargas-comercial']);
-    expect(tabsActivos()).toEqual(['venta-movil']);
+    expect(idsDeTabs()).toEqual([]);
+    expect(document.querySelector('nav button[aria-label="Mi Ruta"]')?.getAttribute('aria-current')).toBe('page');
   });
 
   it('cada grupo monta su cuerpo y solo el suyo', async () => {
@@ -381,8 +390,8 @@ describe('hub de Operaciones de escritorio', () => {
     // remisión GR- con el alistamiento viven bajo Bodega.
     await esperarCuerpo('/Despacho');
 
-    await user.click(document.querySelector('[data-tab-id="ventas"]')!);
-    await esperarCuerpo('/CajaRuta');
+    await user.click(document.querySelector('[data-tab-id="despacho-en-ruta"]')!);
+    await esperarCuerpo('/TableroRutas');
     expect(screen.getAllByTestId('stub-modulo')).toHaveLength(1);
   });
 
@@ -408,12 +417,12 @@ describe('hub de Operaciones de escritorio', () => {
     expect(
       Array.from(document.querySelectorAll('[data-banda="secundario"] [data-tab-id]'))
         .map(el => el.getAttribute('data-tab-id')),
-    ).toEqual(['bodega-entradas', 'existencias', 'control']);
+    ).toEqual(['existencias', 'bodega-entradas', 'control']);
 
     await user.click(document.querySelector('[data-banda="secundario"] [data-tab-id="bodega-entradas"]')!);
     // Entradas y Alistamiento es la remisión GR- con el alistamiento, que salió
     // del grupo Despacho: se monta el panel de DespachoAdmin en su lugar.
-    await esperarCuerpo('/operaciones/DespachoAdmin');
+    expect(screen.getByTestId('bodega-unificada').getAttribute('data-vista-bodega')).toBe('entradas');
     expect(bandasDeTabs()).toEqual(['primario', 'secundario']);
   });
 
@@ -447,7 +456,7 @@ describe('hub de Operaciones de escritorio', () => {
     // "Entradas y Alistamiento"; la GD- es el cuerpo del grupo Despacho.
     expect(idsDeTabs()).toContain('bodega');
     expect(idsDeTabs()).toContain('bodega-entradas');
-    await esperarCuerpo('/operaciones/DespachoAdmin');
+    expect(screen.getByTestId('bodega-unificada').getAttribute('data-vista-bodega')).toBe('entradas');
   });
 
   it('un Socio que busca "granja" se queda en su módulo, en vez de abrir uno vacío', async () => {
@@ -503,8 +512,8 @@ describe('camino móvil de Operaciones', () => {
 
   it('Camionero legado recibe el flujo móvil Comercial completo', () => {
     renderComo('Camionero');
-    expect(idsDeTabs()).toEqual(['venta-movil', 'facturar-movil', 'cargas-comercial']);
-    expect(tabsActivos()).toEqual(['venta-movil']);
+    expect(idsDeTabs()).toEqual([]);
+    expect(document.querySelector('nav button[aria-label="Mi Ruta"]')?.getAttribute('aria-current')).toBe('page');
   });
 
   it('un Bodeguero tampoco ve fila de tabs', () => {
@@ -534,7 +543,7 @@ describe('breadcrumbs', () => {
   it('Finanzas muestra módulo y tab activo en el breadcrumb', async () => {
     renderComo('Admin');
     await abrirModulo('Finanzas');
-    expect(breadcrumb()).toEqual(['Finanzas', 'Resumen']);
+    expect(breadcrumb()).toEqual(['Gastos', 'Resumen']);
   });
 
   it('el breadcrumb sigue al tab que se elige', async () => {
@@ -542,7 +551,7 @@ describe('breadcrumbs', () => {
     renderComo('Admin');
     await abrirModulo('Finanzas');
     await user.click(document.querySelector('[data-tab-id="cobranza"]')!);
-    expect(breadcrumb()).toEqual(['Finanzas', 'Cobranza']);
+    expect(breadcrumb()).toEqual(['Gastos', 'Cobranza']);
   });
 
   it('el hub de Operaciones nombra el grupo activo en el breadcrumb', async () => {
@@ -550,7 +559,7 @@ describe('breadcrumbs', () => {
     renderComo('Admin');
     await abrirModulo('Operaciones y Bodegas');
     expect(breadcrumb()).toEqual(['Operaciones y Bodegas', 'Resumen del día']);
-    await user.click(document.querySelector('[data-tab-id="ventas"]')!);
-    expect(breadcrumb()).toEqual(['Operaciones y Bodegas', 'Ventas']);
+    await user.click(document.querySelector('[data-tab-id="despacho"]')!);
+    expect(breadcrumb()).toEqual(['Operaciones y Bodegas', 'Despacho y ruta']);
   });
 });

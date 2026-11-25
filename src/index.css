@@ -48,6 +48,7 @@
     --text-nav-active: #FFFFFF;
     --text-link: #496192;
     --text-on-action: #FFFFFF;
+    --focus-ring: #496192;
     --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-display: 'TASA Orbiter', 'Plus Jakarta Sans', sans-serif;
     --surface-white-keyons: #F4F4F4;
@@ -72,10 +73,15 @@
     --shadow-card: 0 2px 6px rgba(16, 18, 42, 0.06), 0 1px 2px rgba(16, 18, 42, 0.03);
 
     /* Radius */
-    --radius-sm: 3px;
-    --radius-md: 12px;
-    --radius-lg: 18px;
-    --radius-xl: 30px;
+    --r-micro: 3px;
+    --r-control: 12px;
+    --r-component: 18px;
+    --r-card: 30px;
+    --r-block: 50px;
+    --radius-sm: var(--r-micro);
+    --radius-md: var(--r-control);
+    --radius-lg: var(--r-component);
+    --radius-xl: var(--r-card);
     --radius-pill: 999px;
     --space-1: 4px;
     --space-2: 8px;
@@ -92,13 +98,14 @@
   .dark {
     --brand-primary: #729BDD;
     --brand-primary-light: #8DADE4;
-    --brand-primary-dark: #5E80B9;
+    /* Azul claro para texto e indicadores sobre superficies oscuras. */
+    --brand-primary-dark: #8DADE4;
     --brand-action: #496192;
     --brand-action-hover: #3E527D;
     --brand-primary-soft: rgba(114, 155, 221, 0.2);
     --brand-secondary: #729BDD;
     --brand-secondary-light: #8DADE4;
-    --brand-secondary-dark: #5E80B9;
+    --brand-secondary-dark: #8DADE4;
     --brand-secondary-soft: rgba(114, 155, 221, 0.2);
     --brand-danger: #CE635D;
     --brand-accent: #729BDD;
@@ -128,6 +135,7 @@
     --text-on-sidebar: #F4F4F4;
     --text-nav-active: #FFFFFF;
     --text-on-action: #FFFFFF;
+    --focus-ring: #8DADE4;
     --text-link: #8DADE4;
     --surface-white-keyons: #F4F4F4;
 
@@ -215,7 +223,7 @@ textarea::placeholder {
 
   /* Focus ring */
   *:focus-visible {
-    outline: 2px solid var(--brand-primary);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
 }
@@ -402,6 +410,27 @@ textarea::placeholder {
 
   button.rounded-xl,
   button.rounded-2xl { border-radius: var(--radius-pill); }
+
+  /* Recepción móvil: radio de tarjeta para superficies; radio de control para acciones. */
+  .bodega-movil .rounded-2xl {
+    border-radius: var(--r-component) !important;
+  }
+
+  .bodega-movil button.rounded-lg,
+  .bodega-movil button.rounded-xl {
+    border-radius: var(--r-control) !important;
+  }
+
+  .bodega-movil :is(button, input, select, summary):focus-visible {
+    outline: 3px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  .bodega-movil .bodega-detalle-abierto { display: none; }
+  .bodega-movil details[open] .bodega-detalle-cerrado { display: none; }
+  .bodega-movil details[open] .bodega-detalle-abierto { display: inline; }
+  .bodega-movil .bodega-detalle-flecha { transition: transform 160ms ease; }
+  .bodega-movil details[open] .bodega-detalle-flecha { transform: rotate(90deg); }
 
   .card-surface,
   .card-elevated { border-radius: var(--radius-lg); }
@@ -854,9 +883,9 @@ svg[style*="color: var(--brand-primary)"] { color: var(--text-link) !important; 
 .route-pos-header-layout { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .route-pos-assignment { min-width: 0; }
 .route-pos-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.route-pos-status { flex: none; max-width: 45%; overflow: hidden; padding: 5px 9px; border-radius: 999px; background: var(--status-success-soft); color: var(--status-success); font-size: 10px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
-.route-pos-metrics { display: grid; min-width: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
-.route-pos-metric { overflow: hidden; padding: 9px !important; }
+.route-pos-status { flex: none; max-width: 45%; overflow: hidden; padding: 4px 8px; border-radius: 999px; background: var(--status-success-soft); color: var(--status-success); font-size: 10px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.route-pos-metrics { display: grid; min-width: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.route-pos-metric { overflow: hidden; padding: 8px !important; }
 .route-pos-metric p { overflow-wrap: anywhere; }
 .route-pos-layout { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .route-pos-main, .route-pos-sidebar { min-width: 0; }
@@ -894,10 +923,46 @@ svg[style*="color: var(--brand-primary)"] { color: var(--text-link) !important; 
   width: min(100%, 480px);
   margin-inline: auto;
   border-inline: 1px solid var(--border-default);
+  /* Texto auxiliar accesible también sobre las superficies grises de campo. */
+  --text-muted: #5F6170;
 }
+.dark .app-shell--seller { --text-muted: #C1C3CC; }
+.dark .app-shell--seller {
+  /* Mantiene contraste legible para el azul de marca sobre fondos oscuros. */
+  --brand-primary-dark: #8DADE4;
+  --brand-secondary-dark: #8DADE4;
+}
+.app-shell--seller :is(h1, h2, h3) {
+  font-family: var(--font-display);
+}
+.app-shell--seller [style*="color: var(--brand-primary)"],
+.app-shell--seller [style*="color: var(--brand-primary-dark)"],
+.app-shell--seller [style*="color: var(--brand-secondary)"] {
+  color: var(--text-link) !important;
+}
+.app-shell--seller button.rounded-lg,
+.app-shell--seller button.rounded-xl,
+.app-shell--seller button.rounded-2xl {
+  border-radius: var(--r-control) !important;
+}
+.app-shell--seller .seller-card-frame {
+  border-radius: var(--r-card) !important;
+}
+.app-shell--seller button[aria-label] { min-inline-size: 44px; min-block-size: 44px; }
 .app-shell--seller .seller-visible-menu-toggle { display: inline-flex !important; }
 .app-shell--seller .seller-hide-module-search { display: none !important; }
 .app-shell--seller .seller-main-content { padding-bottom: calc(5.25rem + env(safe-area-inset-bottom)) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell--seller *,
+  .app-shell--seller *::before,
+  .app-shell--seller *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 @media (min-width: 1024px) {
   .app-shell--seller .desktop-sidebar { display: none !important; }

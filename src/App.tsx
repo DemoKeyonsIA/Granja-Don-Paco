@@ -414,7 +414,16 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
               key={item.id}
               data-modulo-id={item.id}
               onClick={() => {
-                setActiveTab(item.id as any);
+                const moduloId = item.id as ModuleId;
+                if (activeTab === moduloId) {
+                  // Al tocar otra vez el módulo activo, vuelve a su vista inicial.
+                  // Esto permite salir de una pantalla alcanzada por búsqueda sin
+                  // tener que cambiar primero a otro módulo.
+                  subTabManual.current = false;
+                  setSubTab(subTabPorDefecto(moduloId, userRoles));
+                } else {
+                  setActiveTab(moduloId);
+                }
                 if (isMobile) setIsMenuOpen(false);
               }}
               className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-150 text-[13px] font-semibold"
@@ -692,9 +701,9 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
           {activeTab === 'operaciones' && esRolMovil(userRoles) && (() => {
             const subTabs = subTabsOperacionesMovil(userRoles);
             const effectiveSub = subTabMovilEfectivo(userRoles, subTab);
-            const tabsVisibles = userRoles.includes('Comercial')
-              ? subTabs.filter(tab => tab.id !== 'facturar-movil')
-              : subTabs;
+            // Comercial usa la navegación inferior como ruta primaria. Repetir
+            // Venta / Mi ruta arriba ocupaba pantalla y duplicaba destinos.
+            const tabsVisibles = userRoles.includes('Comercial') ? [] : subTabs;
             return (
               <div className="space-y-6">
                 {effectiveSub !== 'facturar-movil' && tabsVisibles.length > 1 && renderFilaTabs(tabsVisibles, 'primario')}

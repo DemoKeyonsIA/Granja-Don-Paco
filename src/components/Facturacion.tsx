@@ -9,6 +9,7 @@ import { Spinner } from './Spinner';
 import { sessionHeaders } from '../lib/session';
 import { factorPara } from '../lib/kilos';
 import AccionFijaMovil from './AccionFijaMovil';
+import { rolesEfectivos } from '../nav/modulos';
 
 // El valor de compatibilidad en BD sigue siendo `'Tiquete'`.
 const NOMBRE_NOTA_VENTA = 'Tiquete electrónico';
@@ -37,7 +38,7 @@ interface RutaDia {
 }
 
 export default function Facturacion({ currentUser, onNavigateToRoute, onCorrectRouteInvoice, onNavigateToBodega }: FacturacionProps) {
-  const esVendedor = (currentUser.roles?.length ? currentUser.roles : [currentUser.role]).includes('Comercial');
+  const esVendedor = rolesEfectivos(currentUser.role, currentUser.roles).includes('Comercial');
   const [inventario, setInventario] = useState<InventarioItem[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [facturas, setFacturas] = useState<Factura[]>([]);
@@ -501,7 +502,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onCorrectR
     }
   };
   const getEstadoFiscalVisible = (estado: string) => estadoIntegracion?.modo === 'simulacion'
-    && ['Enviado', 'Aceptado', 'Rechazado'].includes(estado) ? `${estado} · demo` : estado;
+    && ['Enviado', 'Aceptado', 'Rechazado'].includes(estado) ? `${estado} · simulado` : estado;
 
   const guiaActiva = rutasDia.find(r => !r.consolidada) || rutasDia[0];
   const stockUbicacion = guiaActiva?.camionNombre || 'Bodega Central';
@@ -629,7 +630,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onCorrectR
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-6xl overflow-x-hidden p-3 pb-36 md:space-y-6 md:p-6 md:pb-20 space-y-5 animate-in fade-in">
-      <Breadcrumb items={[
+      <Breadcrumb items={esVendedor ? [{ label: 'Facturas' }] : [
         { label: 'Finanzas' },
         { label: 'Documentos' }
       ]} />
@@ -824,7 +825,7 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onCorrectR
                 const expandido = facturaExpandidaId === doc.id;
                 const fecha = new Date(doc.fecha);
                 const detalleProforma = doc.tipo === 'Proforma' ? (doc.data.detalles || []).map((detalle: any) => `${detalle.producto} · ${Number(detalle.cantidad || 0).toFixed(2)} kg`).join(' / ') : '';
-                return <article key={doc.id} className="rounded-xl border p-3" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
+                return <article key={doc.id} className="rounded-2xl border p-3" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
                   <button type="button" aria-expanded={expandido} onClick={() => alternarFacturaExpandida(doc.id)} className="flex min-h-12 w-full items-center justify-between gap-2 text-left">
                     <span className="min-w-0"><span className="block truncate text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{doc.consecutivo}</span><span className="mt-1 block truncate text-xs" style={{ color: 'var(--text-secondary)' }}>{doc.cliente} · {Number.isNaN(fecha.getTime()) ? 'Fecha sin registrar' : fecha.toLocaleDateString('es-CR')}{doc.tipo === 'Factura' && (doc.data as any).guiaId ? ' · Entrega de ruta' : ''}</span></span>
                     <span className="shrink-0 text-right"><span className="block text-sm font-extrabold" style={{ color: 'var(--text-primary)' }}>{formatoCRC(doc.total)}</span><span className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold" style={doc.estado === 'Pagada' || doc.estado === 'Vigente' ? { background: 'var(--status-success-soft)', color: 'var(--status-success)' } : doc.estado === 'Pendiente' ? { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' } : { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>{doc.tipo === 'Proforma' ? 'Proforma' : doc.estado}</span></span>
@@ -833,12 +834,16 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onCorrectR
                   {expandido && <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--border-default)' }}>
                     {doc.tipo === 'Factura' ? <>
                       <p className="mb-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{doc.data.condicion_pago === 'Credito' ? 'Crédito' : 'Contado'}{doc.data.metodo_pago ? ` · ${doc.data.metodo_pago}` : ''}</p>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        <button type="button" onClick={() => abrirFactura(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><FileText className="mr-1 inline h-4 w-4" />Ver factura</button>
-                        <button type="button" onClick={() => abrirFactura(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Send className="mr-1 inline h-4 w-4" />Reenviar</button>
-                        <button type="button" onClick={() => imprimirFacturaDesdeLista(doc.data)} className="min-h-10 rounded-lg px-3 text-xs font-bold" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}><Printer className="mr-1 inline h-4 w-4" />Imprimir</button>
-                        {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && <button type="button" onClick={() => abrirAnulacion(doc.data)} className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--status-danger-soft)', borderColor: 'var(--status-danger)', color: 'var(--text-primary)' }}><XCircle className="mr-1 inline h-4 w-4" />{doc.data.guiaId ? 'Anular (no entregada)' : 'Anular y corregir'}</button>}
-                        {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && doc.data.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.(doc.data) : onNavigateToBodega?.()} title="Use esta opción cuando el cliente sí recibió el producto y lo devolvió físicamente." className="min-h-10 rounded-lg border px-3 text-xs font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><ArrowLeft className="mr-1 inline h-4 w-4" />{esVendedor ? 'Producto devuelto' : 'Devolución en Bodega'}</button>}
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <button type="button" onClick={() => abrirFactura(doc.data)} className="min-h-11 flex-1 rounded-lg px-3 text-sm font-bold" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}><FileText className="mr-1 inline h-4 w-4" />Ver / reenviar</button>
+                        <details className="min-w-0 flex-1 rounded-lg border" style={{ borderColor: 'var(--border-default)' }}>
+                          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center rounded-lg px-3 text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Más acciones</summary>
+                          <div className="grid gap-2 border-t p-2" style={{ borderColor: 'var(--border-default)' }}>
+                            <button type="button" onClick={() => imprimirFacturaDesdeLista(doc.data)} className="min-h-11 rounded-lg border px-3 text-sm font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Printer className="mr-1 inline h-4 w-4" />Imprimir</button>
+                            {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && <button type="button" onClick={() => abrirAnulacion(doc.data)} className="min-h-11 rounded-lg border px-3 text-sm font-bold" style={{ background: 'var(--status-danger-soft)', borderColor: 'var(--status-danger)', color: 'var(--text-primary)' }}><XCircle className="mr-1 inline h-4 w-4" />{doc.data.guiaId ? 'Anular venta no entregada' : 'Anular y corregir'}</button>}
+                            {String(doc.data.estado) !== 'Anulada' && String(doc.data.estado) !== 'NotaCredito' && doc.data.guiaId && <button type="button" onClick={() => esVendedor ? onNavigateToRoute?.(doc.data) : onNavigateToBodega?.()} title="Use esta opción cuando el cliente sí recibió el producto y lo devolvió físicamente." className="min-h-11 rounded-lg border px-3 text-sm font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><ArrowLeft className="mr-1 inline h-4 w-4" />{esVendedor ? 'Producto devuelto' : 'Devolución en Bodega'}</button>}
+                          </div>
+                        </details>
                       </div>
                     </> : <>
                       <p className="mb-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{detalleProforma || 'Cotización comercial'}</p>
@@ -1124,20 +1129,20 @@ export default function Facturacion({ currentUser, onNavigateToRoute, onCorrectR
               <div className="invoice-paper-topline" />
               <header className="invoice-paper-header">
                 <div className="invoice-issuer-brand"><img src="/granja-don-paco-logo.png" alt="Granja Don Paco" /><div><strong>Granja Don Paco</strong><span>Siempre frescos</span>{documentoFiscalFactura?.emisorNombre && <small>{documentoFiscalFactura.emisorNombre}</small>}{cedulaEmisorVisible && <small>Cédula: {cedulaEmisorVisible}</small>}</div></div>
-                <div className="invoice-document-number"><span>{documentoFiscalFactura?.tipoDocumento === 'Tiquete' ? 'TIQUETE · DEMO' : 'FACTURA · DEMO'}</span><strong id="detalle-factura-titulo">{facturaSeleccionada.consecutivo}</strong><small>Emitida {new Date(facturaSeleccionada.fecha).toLocaleString('es-CR')}</small><em className={`invoice-status invoice-status-${String(facturaSeleccionada.estado || 'Pendiente').toLowerCase()}`}>{facturaSeleccionada.estado || 'Pendiente'}</em></div>
+                <div className="invoice-document-number"><span>{documentoFiscalFactura?.tipoDocumento === 'Tiquete' ? 'TIQUETE ELECTRÓNICO' : 'FACTURA ELECTRÓNICA'}</span><strong id="detalle-factura-titulo">{facturaSeleccionada.consecutivo}</strong><small>Emitida {new Date(facturaSeleccionada.fecha).toLocaleString('es-CR')}</small><em className={`invoice-status invoice-status-${String(facturaSeleccionada.estado || 'Pendiente').toLowerCase()}`}>{facturaSeleccionada.estado || 'Pendiente'}</em></div>
                 <button type="button" className="invoice-close no-print" onClick={() => setFacturaSeleccionada(null)} aria-label="Cerrar detalle"><X className="w-5 h-5" /></button>
               </header>
-              <div className="invoice-paper-meta"><span>Representación de demostración</span><span>{documentoFiscalFactura ? `Estado: ${getEstadoFiscalVisible(documentoFiscalFactura.estado)}` : 'Pendiente de documento demo'}</span></div>
-              <p className="invoice-demo-notice">DEMO · Esta impresión no es un comprobante electrónico válido ni ha sido aceptada por Hacienda.</p>
+              <div className="invoice-paper-meta"><span>Representación impresa</span><span>{documentoFiscalFactura ? `Estado: ${getEstadoFiscalVisible(documentoFiscalFactura.estado)}` : 'Documento pendiente'}</span></div>
+              <p className="invoice-demo-notice">Simulación sin validez fiscal. No se envió a Hacienda.</p>
               <div className="invoice-parties">
                 <section><h4>EMISOR</h4><strong>{documentoFiscalFactura?.emisorNombre || 'Granja Don Paco'}</strong>{cedulaEmisorVisible && <span>Cédula: {cedulaEmisorVisible}</span>}{documentoFiscalFactura?.emisorCorreo && <span>{documentoFiscalFactura.emisorCorreo}</span>}</section>
                 <section><h4>FACTURAR A</h4><strong>{clienteFactura?.nombre || 'Consumidor Final'}</strong>{clienteFactura?.documento_id && <span>{clienteFactura.tipo_documento || 'Identificación'}: {clienteFactura.documento_id}</span>}{clienteFactura?.telefono && <span>Tel. {clienteFactura.telefono}</span>}{clienteFactura?.email && <span>{clienteFactura.email}</span>}{clienteFactura?.direccion && <span>{clienteFactura.direccion}{[clienteFactura.distrito, clienteFactura.canton, clienteFactura.provincia].filter(Boolean).length ? ` · ${[clienteFactura.distrito, clienteFactura.canton, clienteFactura.provincia].filter(Boolean).join(', ')}` : ''}</span>}</section>
               </div>
-              {documentoFiscalFactura && <div className="invoice-fiscal-identifiers"><span><b>TIPO DE DOCUMENTO</b>{documentoFiscalFactura.tipoDocumento === 'Tiquete' ? 'Tiquete · demo' : 'Factura · demo'}</span><span><b>CONSECUTIVO DE DEMOSTRACIÓN</b>{consecutivoFiscalValido ? documentoFiscalFactura.consecutivo : 'No disponible'}</span><span className="invoice-key"><b>CLAVE DE DEMOSTRACIÓN</b>{claveFiscalValida ? documentoFiscalFactura.clave : 'No disponible'}</span></div>}
+              {documentoFiscalFactura && <div className="invoice-fiscal-identifiers"><span><b>TIPO DE DOCUMENTO</b>{documentoFiscalFactura.tipoDocumento === 'Tiquete' ? 'Tiquete electrónico' : 'Factura electrónica'}</span><span><b>CONSECUTIVO DE PRUEBA</b>{consecutivoFiscalValido ? documentoFiscalFactura.consecutivo : 'No disponible'}</span><span className="invoice-key"><b>CLAVE DE PRUEBA</b>{claveFiscalValida ? documentoFiscalFactura.clave : 'No disponible'}</span></div>}
               <div className="invoice-payment-strip"><span><b>CONDICIÓN</b>{facturaSeleccionada.condicion_pago === 'Credito' ? 'Crédito' : 'Contado'}</span><span><b>MEDIO DE PAGO</b>{facturaSeleccionada.metodo_pago || 'Crédito'}</span><span><b>FECHA</b>{new Date(facturaSeleccionada.fecha).toLocaleDateString('es-CR')}</span></div>
               <div className="invoice-lines-wrap"><table className="invoice-lines"><thead><tr><th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>PRECIO / KG</th><th className="align-right">TOTAL</th></tr></thead><tbody>{(Array.isArray(facturaSeleccionada.detalles) ? facturaSeleccionada.detalles : []).map((d, i) => <tr key={`${d.producto}-${i}`}><td>{Number(d.cantidad).toLocaleString('es-CR', { maximumFractionDigits: 2 })} kg</td><td><strong>{d.producto}</strong></td><td>{formatoCRC(d.precio_unitario)}</td><td className="align-right">{formatoCRC(d.subtotal)}</td></tr>)}</tbody></table>{(!Array.isArray(facturaSeleccionada.detalles) || facturaSeleccionada.detalles.length === 0) && <p className="invoice-empty-lines">No hay líneas de producto registradas en esta factura.</p>}</div>
               <div className="invoice-bottom-grid"><div className="invoice-received"><span>RECIBIDO CONFORME</span><i /><small>Nombre y firma del cliente</small></div><div className="invoice-totals"><div><span>Subtotal</span><b>{formatoCRC(facturaSeleccionada.subtotal)}</b></div>{facturaSeleccionada.descuento > 0 && <div><span>Descuento</span><b>− {formatoCRC(facturaSeleccionada.descuento)}</b></div>}{Number(documentoFiscalFactura?.impuestos || 0) > 0 && <div><span>Impuestos</span><b>{formatoCRC(Number(documentoFiscalFactura?.impuestos))}</b></div>}<div className="invoice-grand-total"><span>TOTAL</span><strong>{formatoCRC(facturaSeleccionada.total)}</strong></div>{facturaSeleccionada.saldoPendiente != null && facturaSeleccionada.saldoPendiente > 0 && <div className="invoice-balance"><span>Saldo pendiente</span><b>{formatoCRC(facturaSeleccionada.saldoPendiente)}</b></div>}</div></div>
-              <footer className="invoice-paper-footer"><span>Gracias por su compra</span><small>Representación de demostración · Formato de referencia basado en comprobantes electrónicos 4.4</small></footer>
+              <footer className="invoice-paper-footer"><span>Gracias por su compra</span><small>Formato de referencia</small></footer>
             </div>
             <label className="no-print mx-4 mb-3 block text-xs font-bold" style={{ color: 'var(--text-secondary)' }}>
               Correo para reenviar

@@ -177,6 +177,10 @@ export default function Office({ currentUser, initialEspacio = 'correo' }: Props
   );
 
   const cargar = useCallback(async () => {
+    if (espacios.length === 0) {
+      setCargando(false);
+      return;
+    }
     try {
       setError(null);
       try { await sembrarOfficeInicial(); } catch {}
@@ -206,7 +210,7 @@ export default function Office({ currentUser, initialEspacio = 'correo' }: Props
     } finally {
       setCargando(false);
     }
-  }, [apiFetch, cuentaSel, vista, conAdjuntos, carpetaSel, q]);
+  }, [apiFetch, cuentaSel, vista, conAdjuntos, carpetaSel, q, espacios]);
 
   // Sembrar la bandeja de ejemplo es una sola vez por montaje. Antes colgaba de
   // `espacio`, con lo que cambiar de espacio volvía a disparar el `GET` (y los
@@ -332,6 +336,10 @@ export default function Office({ currentUser, initialEspacio = 'correo' }: Props
     if (espacio === 'documentos') return VISTAS.slice(0, 1);
     return VISTAS;
   }, [espacio]);
+
+  if (espacios.length === 0) {
+    return <div className="gcrm p-6" role="alert">No tienes permiso para acceder a Dirección.</div>;
+  }
 
   const filaEspacios = (
     <div data-testid="office-espacios" className="flex items-center gap-2 border-b" style={{ borderColor: 'var(--border-default)' }}>

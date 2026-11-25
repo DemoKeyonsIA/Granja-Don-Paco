@@ -421,6 +421,8 @@ export type EspacioOffice = (typeof ESPACIOS_OFFICE)[number]['id'];
 /** Sub-tabs visibles de un módulo para un conjunto de roles. */
 export const subTabsDe = (id: ModuleId, roles: Role[]): SubTabDef[] => {
   roles = rolesNormalizados(roles);
+  const modulo = moduloPorId(id);
+  if (!modulo || !modulo.roles.some(rol => roles.includes(rol))) return [];
   if (id === 'operaciones' && esRolMovil(roles)) return [];
   const defs = SUBTABS_POR_MODULO[id] ?? [];
   return defs.filter(t => !t.roles || t.roles.some(r => roles.includes(r)));

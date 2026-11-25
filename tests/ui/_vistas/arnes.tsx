@@ -318,16 +318,27 @@ export async function abrirModulo(nombre: string) {
   const aside = document.querySelector('aside');
   if (!aside) throw new Error('No hay sidebar: la app no montó el shell');
   const candidatos = within(aside).getAllByRole('button');
-  const boton = candidatos.find(b => (b.textContent ?? '').includes(nombre));
-  if (!boton) {
-    throw new Error(
-      `El sidebar no tiene el módulo "${nombre}". Botones: ${candidatos
-        .map(b => (b.textContent ?? '').trim())
-        .filter(Boolean)
-        .join(' | ')}`,
-    );
+  // Admin ve el módulo renombrado como "Gastos"; Socio aún lo ve como
+  // "Finanzas". El vendedor usa su acceso dedicado "Facturas" en la barra móvil.
+  const boton = candidatos.find(b => (b.textContent ?? '').includes(nombre))
+    ?? (nombre === 'Finanzas' ? candidatos.find(b => (b.textContent ?? '').includes('Gastos')) : undefined);
+  if (boton) {
+    await user.click(boton);
+    return;
   }
-  await user.click(boton);
+  if (nombre === 'Finanzas') {
+    const facturas = Array.from(document.querySelectorAll('button')).find(b => (b.textContent ?? '').trim() === 'Facturas');
+    if (facturas) {
+      await user.click(facturas);
+      return;
+    }
+  }
+  throw new Error(
+    `El sidebar no tiene el módulo "${nombre}". Botones: ${candidatos
+      .map(b => (b.textContent ?? '').trim())
+      .filter(Boolean)
+      .join(' | ')}`,
+  );
 }
 
 /**

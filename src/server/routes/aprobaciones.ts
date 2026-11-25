@@ -15,7 +15,10 @@ export function registrarRutasAprobaciones(app: any, db: any, deps: { requirePer
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
 
-  app.post("/api/aprobaciones", requirePermission(['ventas', 'aprobaciones'], 'create'), async (req, res) => {
+  // Las solicitudes de vendedores se crean mediante endpoints de dominio con
+  // validaciones específicas (por ejemplo, /api/clientes/solicitudes). No se
+  // les permite insertar solicitudes genéricas de cualquier módulo.
+  app.post("/api/aprobaciones", requirePermission('aprobaciones', 'create'), async (req, res) => {
     try {
       const { tipo, modulo, referenciaId, descripcion, datos } = req.body;
       const solicitudUsuario = String((req as any).usuario?.id || '');

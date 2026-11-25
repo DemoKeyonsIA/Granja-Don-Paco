@@ -71,7 +71,7 @@ describe('E2E — MÓDULO CLIENTES CRM: cartera enriquecida, análisis por perio
   it('C2 — Ventas directas: algunes facturas pagadas, créditos en distintos estados de envejecimiento', async () => {
     // a (campeón): 6 facturas pagadas recientes + 1 a crédito al día
     for (let i = 0; i < 6; i++) {
-      const res = await request(app).post('/api/ventas').set('x-user-id', 'u-ven').send({
+      const res = await requestAs(app, 'u-adm').post('/api/ventas').send({
         factura: { clienteId: a.id, fecha: D(i), condicion_pago: 'Contado', estado: 'Pagada', subtotal: 64000, descuento: 0, total: 64000, vendedorId: 'u-ven', metodo_pago: 'Efectivo' },
         detalles: [{ producto: 'Huevos - Grande', cantidad: 4, precio_unitario: 16000, subtotal: 64000 }]
       });
@@ -80,7 +80,7 @@ describe('E2E — MÓDULO CLIENTES CRM: cartera enriquecida, análisis por perio
 
     // b: 3 a crédito pendientes, la más vieja hace 12 días (atraso leve)
     for (let i = 0; i < 3; i++) {
-      const res = await request(app).post('/api/ventas').set('x-user-id', 'u-ven').send({
+      const res = await requestAs(app, 'u-adm').post('/api/ventas').send({
         factura: { clienteId: b.id, fecha: D(12 - i), condicion_pago: 'Credito', estado: i === 0 ? 'Pendiente' : 'Pagada', subtotal: 64000, descuento: 0, total: 64000, vendedorId: 'u-ven', metodo_pago: 'Efectivo' },
         detalles: [{ producto: 'Huevos - Grande', cantidad: 4, precio_unitario: 16000, subtotal: 64000 }]
       });
@@ -88,7 +88,7 @@ describe('E2E — MÓDULO CLIENTES CRM: cartera enriquecida, análisis por perio
     }
 
     // c: solo 1 factura a crédito vieja (hace 42 días → crónico) con uso de línea alto
-    const vc = await request(app).post('/api/ventas').set('x-user-id', 'u-ven').send({
+    const vc = await requestAs(app, 'u-adm').post('/api/ventas').send({
       factura: { clienteId: c.id, fecha: D(42), condicion_pago: 'Credito', estado: 'Pendiente', subtotal: 320000, descuento: 0, total: 320000, vendedorId: 'u-ven', metodo_pago: 'Efectivo' },
       detalles: [{ producto: 'Huevos - Grande', cantidad: 20, precio_unitario: 16000, subtotal: 320000 }]
     });
@@ -168,7 +168,9 @@ describe('E2E — MÓDULO CLIENTES CRM: cartera enriquecida, análisis por perio
     expect(res.body.kpis.pedidos30d).toBe(4); // 3 facturas + 1 compra en ruta no consolidada
     expect(res.body.kpis.ticketProm).toBe(60000);
     expect(res.body.kpis.venta12m).toBe(240000); // no suma otra vez el tiquete ya facturado
-    expect(res.body.mix.find((x: any) => x.producto === 'Huevos - Grande').unidades).toBe(15);
+    const mixHuevos = res.body.mix.find((x: any) => x.producto === 'Huevos - Grande');
+    expect(mixHuevos.kilos).toBe(15); // tres ventas de 4 kg y un tiquete histórico de 3 kg
+    expect(mixHuevos.pesoPendiente).toBe(false);
 
     const c360 = await adminRequest().get(`/api/clientes/${c.id}/360`);
     expect(c360.status).toBe(200);

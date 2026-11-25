@@ -1,6 +1,8 @@
 import { and, eq, inArray, notInArray } from 'drizzle-orm';
 import * as schema from '../../../db/schema';
 import { resumenDineroVentasRuta } from '../../../lib/finanzasRuta';
+import { rolesParaUsuario } from '../../../lib/role-permissions';
+import { clientesVisiblesDelVendedor } from '../../clientes-scope';
 
 type GuiaDetalleHelpers = {
   estadoLogicoGuia: (guia: any) => string;
@@ -34,10 +36,13 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
     try {
       const guia = await db.query.guias_despacho.findFirst({ where: eq(schema.guias_despacho.id, req.params.id) });
       if (!guia) return res.status(404).json({ error: 'Guía no encontrada' });
-      const roles = [req.usuario?.role, ...(req.usuario?.roles || [])].filter(Boolean);
-      if (!roles.includes('Admin')) {
+      const roles = rolesParaUsuario(req.usuario?.role, req.usuario?.roles);
+      const esComercial = roles.includes('Comercial');
+      if (esComercial || !roles.includes('Admin')) {
         const camion = guia.camionId ? await db.query.camiones.findFirst({ where: eq(schema.camiones.id, guia.camionId) }) : null;
-        if (!camion || (camion.camioneroId || camion.vendedor_id) !== req.usuario?.id) return res.status(403).json({ error: 'Solo puede consultar las guías de su camión asignado.' });
+        const asignada = String(guia.vendedorId || '') === String(req.usuario?.id || '')
+          || [camion?.camioneroId, camion?.vendedor_id].some(id => String(id || '') === String(req.usuario?.id || ''));
+        if (!asignada) return res.status(403).json({ error: 'Solo puede consultar las guías asignadas a su usuario.' });
       }
       const [detalles, etiquetasData, camionesData, facturasData, rutasData, clientesData, cierreCaja] = await Promise.all([
         db.query.guias_despacho_detalle.findMany({ where: eq(schema.guias_despacho_detalle.guiaId, guia.id) }),
@@ -96,8 +101,17 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
           ? clientesData.filter((c: any) => c.ruta === camion.ruta_defecto)
           : clientesData);
       clientesRuta = clientesRuta.filter((c: any) => c.estado !== 'Inactivo');
-      if (clientesRuta.length === 0) clientesRuta = clientesData.filter((c: any) => c.estado !== 'Inactivo');
-      const ordenVisita = guia.rutaOrdenJson ? JSON.parse(guia.rutaOrdenJson) : [];
+      let idsVisiblesVendedor: Set<string> | null = null;
+      if (esComercial) {
+        const visibles = await clientesVisiblesDelVendedor(db, String(req.usuario?.id || ''));
+        idsVisiblesVendedor = new Set(visibles.map((cliente: any) => String(cliente.id)));
+        clientesRuta = clientesRuta.filter((cliente: any) => idsVisiblesVendedor?.has(String(cliente.id)) ?? false);
+      }
+      if (clientesRuta.length === 0 && !esComercial) clientesRuta = clientesData.filter((c: any) => c.estado !== 'Inactivo');
+      const ordenCrudo = guia.rutaOrdenJson ? JSON.parse(guia.rutaOrdenJson) : [];
+      const ordenVisita = esComercial
+        ? ordenCrudo.filter((item: any) => idsVisiblesVendedor?.has(String(item.clienteId || '')))
+        : ordenCrudo;
       const ordenVisitaCompleta = (ordenVisita || []).map((o: any) => {
         const cliente = clientesRuta.find((c: any) => c.id === o.clienteId);
         return cliente ? {
@@ -246,15 +260,18 @@ export function registrarRutasGuias(app: any, db: any, helpers: GuiaDetalleHelpe
 
   app.get('/api/logistica/guias-activas', requirePermission(['ventas', 'inventario_bodega'], 'view'), async (req: any, res: any) => {
     try {
-      const roles = [req.usuario?.role, ...(req.usuario?.roles || [])].filter(Boolean);
+      const roles = rolesParaUsuario(req.usuario?.role, req.usuario?.roles);
       const camionesData = await db.query.camiones.findMany();
       const administrador = roles.includes('Admin');
-      const camionesAsignados: string[] | null = administrador ? null : camionesData.filter((c: any) => (c.camioneroId || c.vendedor_id) === req.usuario?.id).map((c: any) => String(c.id));
-      if (camionesAsignados !== null && camionesAsignados.length === 0) return res.json([]);
-      const condicion = camionesAsignados === null
-        ? notInArray(schema.guias_despacho.estado, ['Cerrada', 'Anulada'])
-        : and(notInArray(schema.guias_despacho.estado, ['Cerrada', 'Anulada']), inArray(schema.guias_despacho.camionId, camionesAsignados));
-      const activas = await db.query.guias_despacho.findMany({ where: condicion });
+      const esComercial = roles.includes('Comercial');
+      const camionesAsignados: string[] | null = administrador ? null : camionesData.filter((c: any) =>
+        [c.camioneroId, c.camionero_id, c.vendedor_id].some(id => String(id || '') === String(req.usuario?.id || ''))
+      ).map((c: any) => String(c.id));
+      const abiertas = await db.query.guias_despacho.findMany({ where: notInArray(schema.guias_despacho.estado, ['Cerrada', 'Anulada']) });
+      const activas = administrador ? abiertas : abiertas.filter((guia: any) =>
+        (camionesAsignados || []).includes(String(guia.camionId || ''))
+        || (esComercial && String(guia.vendedorId || '') === String(req.usuario?.id || ''))
+      );
       if (activas.length === 0) return res.json([]);
       const guiaIds = activas.map((g: any) => g.id);
       const detallesData = await db.query.guias_despacho_detalle.findMany({ where: inArray(schema.guias_despacho_detalle.guiaId, guiaIds) });

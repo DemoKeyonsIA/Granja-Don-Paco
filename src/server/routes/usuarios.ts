@@ -19,7 +19,7 @@ export function registrarRutasUsuarios(app: any, db: any, hashPassword: (passwor
         roles: schema.users.roles,
         activo: schema.users.activo,
       }).from(schema.users);
-      res.json(data);
+      res.json(data.map((usuario: any) => ({ ...usuario, activo: Boolean(usuario.activo) })));
     } catch (error: any) { res.status(500).json({ error: error.message }); }
   });
 

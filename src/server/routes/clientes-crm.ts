@@ -170,7 +170,7 @@ export function registrarRutasCrmClientes(app: any, db: any, mapaPagadoPorFactur
       const respuestaVendedor = tieneRol(usuario, 'Comercial') && !tieneRol(usuario, 'Admin');
       res.json({
         total: cartera.length,
-        clientes: respuestaVendedor ? cartera.map((f: any) => ({ id: f.id, nombre: f.nombre })) : cartera,
+        clientes: respuestaVendedor ? cartera.map((f: any) => ({ id: f.id, nombre: f.nombre, pedidos90d: Number(f.pedidos90d || 0) })) : cartera,
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

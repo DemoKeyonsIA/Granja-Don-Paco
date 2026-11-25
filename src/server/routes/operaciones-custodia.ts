@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import * as schema from '../../db/schema';
 import { clasificarDiferencia, OPCIONES_DIFERENCIA_RECEPCION } from '../../lib/opcionesRecepcion';
 
@@ -164,6 +164,140 @@ export function registrarRutasOperaciones(
       res.json(data);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Vista compacta de recepción para el teléfono del bodeguero. Solo entrega
+  // traslados pendientes y las recepciones recientes; evita descargar todo el
+  // kardex, usuarios, etiquetas y movimientos que esta pantalla no necesita.
+  app.get('/api/operaciones/recepciones/movil', requirePermission('recepciones', 'view'), async (req, res) => {
+    try {
+      const tamanoPaginaRecientes = 40;
+      const offsetSolicitado = Number(req.query?.offset);
+      const offsetRecientes = Number.isFinite(offsetSolicitado)
+        ? Math.min(100000, Math.max(0, Math.floor(offsetSolicitado)))
+        : 0;
+      const pendientesIniciales = await db.query.traslados.findMany({
+        where: inArray(traslados.estado, ['Pendiente', 'EnTransito']),
+        orderBy: desc(traslados.fechaSalida),
+      });
+      const paginaRecibos = await db.query.recepciones.findMany({
+        orderBy: [desc(recepciones.fechaRecepcion), desc(recepciones.id)],
+        limit: tamanoPaginaRecientes + 1,
+        offset: offsetRecientes,
+      });
+      const hayMasRecientes = paginaRecibos.length > tamanoPaginaRecientes;
+      const recibosRecientes = paginaRecibos.slice(0, tamanoPaginaRecientes);
+      const cargaIdsActivas: string[] = Array.from(new Set<string>(pendientesIniciales.map((t: any) => String(t.cargaId || t.id)).filter(Boolean)));
+      const trasladosRelacionados = cargaIdsActivas.length
+        ? await db.query.traslados.findMany({ where: inArray(traslados.cargaId, cargaIdsActivas) })
+        : [];
+      const trasladosRecientes = recibosRecientes.length
+        ? await db.query.traslados.findMany({ where: inArray(traslados.id, recibosRecientes.map((r: any) => String(r.trasladoId)).filter(Boolean)) })
+        : [];
+      const trasladosPorId = new Map<string, any>();
+      [...pendientesIniciales, ...trasladosRelacionados, ...trasladosRecientes].forEach((t: any) => trasladosPorId.set(String(t.id), t));
+      const trasladosContexto = Array.from(trasladosPorId.values());
+      const idsTraslado = trasladosContexto.map((t: any) => String(t.id));
+      const [movimientos, todasRecepciones, granjasContexto] = idsTraslado.length
+        ? await Promise.all([
+            db.query.movimientosInventario.findMany({
+              where: and(
+                inArray(movimientosInventario.referencia_id, idsTraslado),
+                inArray(movimientosInventario.tipo, ['Traslado', 'Corrección Unidad Traslado']),
+              ),
+            }),
+            db.query.recepciones.findMany({ where: inArray(recepciones.trasladoId, idsTraslado) }),
+            (() => {
+              const granjaIds = Array.from(new Set(trasladosContexto.map((t: any) => String(t.granjaOrigenId || '')).filter(Boolean)));
+              return granjaIds.length ? db.query.granjas.findMany({ where: inArray(schema.granjas.id, granjaIds) }) : Promise.resolve([]);
+            })(),
+          ])
+        : [[], [], []];
+
+      const movimientoOriginal = new Map<string, any>();
+      const correccionPorTraslado = new Map<string, any>();
+      (movimientos as any[]).forEach(m => {
+        if (!m.referencia_id) return;
+        if (m.tipo === 'Traslado') movimientoOriginal.set(String(m.referencia_id), m);
+        if (m.tipo === 'Corrección Unidad Traslado') correccionPorTraslado.set(String(m.referencia_id), m);
+      });
+      const recepcionPorTraslado = new Map<string, any>((todasRecepciones as any[])
+        .filter(r => r.trasladoId)
+        .map(r => [String(r.trasladoId), r]));
+      const nombreGranja = new Map<string, string>((granjasContexto as any[]).map(g => [String(g.id), String(g.nombre)]));
+      const aItem = (t: any) => {
+        const id = String(t.id);
+        const original = movimientoOriginal.get(id);
+        const correccion = correccionPorTraslado.get(id);
+        const movimiento = correccion || original;
+        const recibida = recepcionPorTraslado.get(id);
+        const unidad = String(movimiento?.unidad || 'cartones');
+        const cantidad = Number(movimiento?.cantidad || 0);
+        const cantidadRecibida = recibida
+          ? Number(unidad === 'kg' ? recibida.cantidadKgRecibida ?? recibida.cantidadRecibida : recibida.cantidadRecibida)
+          : null;
+        return {
+          ...t,
+          producto: String(original?.producto || movimiento?.producto || 'Producto'),
+          cantidad,
+          unidad,
+          nombreGranja: nombreGranja.get(String(t.granjaOrigenId || '')) || 'Granja',
+          recibida: Boolean(recibida),
+          recepcionId: recibida?.id || null,
+          cantidadRecibida,
+          diferencia: recibida ? Number(unidad === 'kg' ? recibida.diferenciaKg ?? 0 : recibida.diferencia ?? 0) : null,
+          motivoDiferencia: recibida?.motivoDiferencia || null,
+          fechaRecepcion: recibida?.fechaRecepcion || null,
+          responsableRecepcion: recibida?.responsableRecepcion || null,
+        };
+      };
+
+      const agruparCargas = (items: any[]) => {
+        const grupos = new Map<string, any>();
+        for (const item of items) {
+          const cargaId = String(item.cargaId || item.id);
+          if (!grupos.has(cargaId)) grupos.set(cargaId, {
+            cargaId,
+            granjaId: item.granjaOrigenId,
+            nombreGranja: item.nombreGranja,
+            vehiculo: item.vehiculo || '',
+            fechaSalida: item.fechaSalida,
+            responsableEntrega: item.responsableEntrega || '',
+            items: [],
+          });
+          grupos.get(cargaId).items.push(item);
+        }
+        return Array.from(grupos.values()).map(carga => ({
+          ...carga,
+          items: carga.items.sort((a: any, b: any) => String(a.producto).localeCompare(String(b.producto), 'es')),
+        }));
+      };
+
+      const itemsPendientes = trasladosContexto
+        .filter((t: any) => cargaIdsActivas.includes(String(t.cargaId || t.id)))
+        .filter((t: any) => ['Pendiente', 'EnTransito', 'Recibido', 'RecibidoConDiferencia'].includes(String(t.estado)))
+        .map(aItem);
+      const recibosContexto = (recibosRecientes as any[]).map(recibo => {
+        const traslado = trasladosPorId.get(String(recibo.trasladoId));
+        if (!traslado) return null;
+        return aItem(traslado);
+      }).filter(Boolean);
+      const fechaMasReciente = (carga: any) => Math.max(0, ...carga.items.map((item: any) => {
+        const fecha = new Date(item.fechaRecepcion || '').getTime();
+        return Number.isFinite(fecha) ? fecha : 0;
+      }));
+      return res.json({
+        pendientes: agruparCargas(itemsPendientes).filter(c => c.items.some((i: any) => !i.recibida)),
+        recientes: agruparCargas(recibosContexto).map(c => ({
+          ...c,
+          items: c.items.filter((i: any) => i.recibida),
+        })).filter(c => c.items.length > 0).sort((a: any, b: any) => fechaMasReciente(b) - fechaMasReciente(a)),
+        hayMasRecientes,
+        siguienteOffset: offsetRecientes + recibosRecientes.length,
+      });
+    } catch (error: any) {
+      return httpError(res, error);
     }
   });
 
@@ -546,6 +680,9 @@ export function registrarRutasOperaciones(
           duplicada: true,
           recepcionId: recepcionPrevia.id,
           cantidadRecibida: recepcionPrevia.cantidadRecibida,
+          cantidadKgRecibida: recepcionPrevia.cantidadKgRecibida,
+          fechaRecepcion: recepcionPrevia.fechaRecepcion,
+          responsableRecepcion: recepcionPrevia.responsableRecepcion,
           message: 'Esta recepción ya estaba registrada; no se volvió a sumar inventario.'
         });
       }
@@ -582,10 +719,11 @@ export function registrarRutasOperaciones(
 
         // 1. Create Recepcion
         const recepcionId = crypto.randomUUID();
+        const fechaRecepcion = new Date().toISOString();
         await tx.insert(recepciones).values({
           id: recepcionId,
           trasladoId: trasladoId,
-          fechaRecepcion: new Date().toISOString(),
+          fechaRecepcion,
           cantidadEsperada: esKg ? 0 : Number(cantidadEsperada),
           cantidadRecibida: esKg ? 0 : Number(cantidadRecibida),
           diferencia,
@@ -602,7 +740,7 @@ export function registrarRutasOperaciones(
         await tx.update(traslados)
           .set({ 
             estado: diferenciaFisica === 0 ? 'Recibido' : 'RecibidoConDiferencia',
-            fechaLlegada: new Date().toISOString()
+            fechaLlegada: fechaRecepcion
           })
           .where(eq(traslados.id, trasladoId));
 
@@ -712,7 +850,7 @@ export function registrarRutasOperaciones(
             observaciones: `Recibida de granja (traslado ${trasladoId}) por ${recepcionResponsable}`,
           });
         }
-        return { duplicada: false as const, conflicto: false as const, recepcionId };
+        return { duplicada: false as const, conflicto: false as const, recepcionId, fechaRecepcion };
       });
 
       if (resultadoRecepcion.duplicada) {
@@ -722,6 +860,9 @@ export function registrarRutasOperaciones(
           duplicada: true,
           recepcionId: resultadoRecepcion.recepcion.id,
           cantidadRecibida: resultadoRecepcion.recepcion.cantidadRecibida,
+          cantidadKgRecibida: resultadoRecepcion.recepcion.cantidadKgRecibida,
+          fechaRecepcion: resultadoRecepcion.recepcion.fechaRecepcion,
+          responsableRecepcion: resultadoRecepcion.recepcion.responsableRecepcion,
           message: 'Esta recepción ya estaba registrada; no se volvió a sumar inventario.'
         });
       }
@@ -730,6 +871,8 @@ export function registrarRutasOperaciones(
         success: true,
         duplicada: false,
         recepcionId: resultadoRecepcion.recepcionId,
+        fechaRecepcion: resultadoRecepcion.fechaRecepcion,
+        responsableRecepcion: recepcionResponsable,
         message: 'Recepción registrada y bodega actualizada',
         tipoDiferencia,
         esPosibleRobo: tipoDiferencia === 'alerta',

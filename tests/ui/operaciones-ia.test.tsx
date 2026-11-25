@@ -183,7 +183,10 @@ describe('Resumen del día', () => {
 
     await waitFor(() => expect(screen.getByText(/503/)).toBeTruthy());
     await userEvent.setup().click(screen.getByRole('button', { name: 'Reintentar' }));
-    await waitFor(() => expect(fetchMock.mock.calls.length).toBe(2));
+    await waitFor(() => {
+      const llamadasResumen = fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/dashboard/enterprise'));
+      expect(llamadasResumen).toHaveLength(2);
+    });
   });
 
   it('pide el endpoint una sola vez al montar', async () => {
@@ -219,7 +222,7 @@ describe('BodegaAdmin dirigido por el shell', () => {
 
   it('la vista la elige el shell, no el componente', async () => {
     const { container } = renderBodega('existencias');
-    await waitFor(() => expect(screen.getByText('Stock total')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Kilos disponibles en bodega')).toBeTruthy());
     expect(container.textContent).toContain('Huevos - Grande');
   });
 
@@ -228,13 +231,13 @@ describe('BodegaAdmin dirigido por el shell', () => {
     // volviera a dibujar, aparecerían dos filas que dicen lo mismo pero solo una
     // mueve el breadcrumb.
     const { container } = renderBodega('existencias');
-    await waitFor(() => expect(screen.getByText('Stock total')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Kilos disponibles en bodega')).toBeTruthy());
     const botones = Array.from(container.querySelectorAll('button')).map(b => b.textContent?.trim() ?? '');
     expect(botones).not.toContain('Existencias');
     expect(botones).not.toContain('Control');
   });
 
-  it('el botón "Registrar en Desperdicios" pide la vista de Control', async () => {
+  it('el botón "Registrar merma" pide la vista de Control', async () => {
     const stockVencido = {
       ...STOCK_BODEGA,
       kpis: { ...STOCK_BODEGA.kpis, vencidos: 40 },
@@ -257,7 +260,7 @@ describe('BodegaAdmin dirigido por el shell', () => {
       />,
     );
 
-    const boton = await screen.findByRole('button', { name: /Registrar en Desperdicios/ });
+    const boton = await screen.findByRole('button', { name: /Registrar merma/ });
     await userEvent.setup().click(boton);
     // No cambia sola: avisa al shell, que es quien sabe qué fila marcar.
     expect(onVista).toHaveBeenCalledWith('control');

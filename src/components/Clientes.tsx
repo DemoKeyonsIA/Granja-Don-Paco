@@ -3,6 +3,7 @@ import { Search, Download, Plus, Check, X, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { Cliente, User } from '../types';
+import { rolesEfectivos } from '../nav/modulos';
 import Cliente360 from './Cliente360';
 import { sessionHeaders } from '../lib/session';
 import './gcrm.css';
@@ -72,11 +73,10 @@ function diasTranscurridos(fechaISO: string, ref?: number) {
 }
 
 export default function Clientes({ currentUser }: ClientesProps) {
-  const rolesActuales = currentUser.roles?.length ? currentUser.roles : [currentUser.role];
+  const rolesActuales = rolesEfectivos(currentUser.role, currentUser.roles);
   const esAdmin = rolesActuales.includes('Admin');
-  const esVendedor = rolesActuales.includes('Comercial') && !esAdmin;
-  const canViewAnalysis = currentUser.role === 'Admin' || currentUser.role === 'Socio'
-    || (currentUser.roles || []).some(role => role === 'Admin' || role === 'Socio');
+  const esVendedor = rolesActuales.includes('Comercial');
+  const canViewAnalysis = rolesActuales.includes('Admin') || rolesActuales.includes('Socio');
   const [view, setView] = useState<'cartera' | 'analisis'>(canViewAnalysis ? 'analisis' : 'cartera');
   const [aTab, setATab] = useState<'hoy' | 'seg' | 'reglas' | 'politica'>('hoy');
 
@@ -110,6 +110,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
   const [rutas, setRutas] = useState<any[]>([]);
   const [solicitudesCliente, setSolicitudesCliente] = useState<any[]>([]);
   const [drawerCliente, setDrawerCliente] = useState<Cliente | null>(null);
+  const rutaAsignadaVendedor = esVendedor && rutas.length === 1 ? rutas[0] : null;
 
   const rutasSelect = useMemo(() => {
     const existentes = new Set((rutas as any[]).map(r => r.nombre));
@@ -179,10 +180,18 @@ export default function Clientes({ currentUser }: ClientesProps) {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCliente.nombre) return;
+    if (esVendedor && !rutaAsignadaVendedor) {
+      toast.error(rutas.length > 1
+        ? 'Tu cuenta debe tener una sola ruta asignada para solicitar un cliente.'
+        : 'No tienes una ruta asignada. Solicita a Administración que te asigne una antes de pedir el alta.');
+      return;
+    }
     try {
       const res = await fetch(esVendedor ? '/api/clientes/solicitudes' : '/api/clientes', {
         method: 'POST', headers: headersUsuario(true),
-        body: JSON.stringify(newCliente)
+        body: JSON.stringify(esVendedor
+          ? { ...newCliente, ruta: rutaAsignadaVendedor.nombre }
+          : newCliente)
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || (esVendedor ? 'No se pudo enviar la solicitud' : 'Error al crear cliente'));
@@ -318,13 +327,13 @@ export default function Clientes({ currentUser }: ClientesProps) {
           {view === 'cartera' && (
             <div style={{ display: 'flex', gap: 8 }}>
               {!esVendedor && <button className="btn" onClick={exportCSV}><Download className="w-4 h-4" /> Exportar</button>}
-              {(canEdit || esVendedor) && (
+              {canEdit && (
                 <button
                   className="btn brand"
                   onClick={() => { setIsAdding(!isAdding); setEditingId(null); resetForm(); }}
                 >
                   {isAdding ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                  {isAdding ? 'Cancelar' : esVendedor ? 'Solicitar alta' : 'Nuevo Cliente'}
+                  {isAdding ? 'Cancelar' : 'Nuevo Cliente'}
                 </button>
               )}
             </div>
@@ -359,7 +368,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
               </section>
             )}
 
-            {isAdding && (canEdit || esVendedor) && (
+            {isAdding && canEdit && (
               <div className="modal-fixed">
                 <form className="modal" onSubmit={editingId ? handleUpdate : handleAdd}>
                   <div className="modal-head"><div><h2>{editingId ? 'Editar Cliente' : esVendedor ? 'Solicitar alta de cliente' : 'Registrar Nuevo Cliente'}</h2>{esVendedor && <p className="text-sm text-neutral-500">Administración revisará los datos antes de agregarlo a su ruta.</p>}</div><button type="button" className="btn ico" onClick={() => { setIsAdding(false); setEditingId(null); }}><X className="w-4 h-4" /></button></div>
@@ -375,12 +384,31 @@ export default function Clientes({ currentUser }: ClientesProps) {
                       <div className="field"><label>Actividad económica (opcional)</label><input type="text" value={newCliente.actividad_economica || ''} onChange={e => setNewCliente({ ...newCliente, actividad_economica: e.target.value })} placeholder="Código informado por el cliente" /></div>
                       <div className="field"><label>Teléfono</label><input type="text" value={newCliente.telefono} onChange={e => setNewCliente({ ...newCliente, telefono: e.target.value })} placeholder="8888-8888" /></div>
                       <div className="field"><label>Email</label><input type="email" value={newCliente.email} onChange={e => setNewCliente({ ...newCliente, email: e.target.value })} placeholder="correo@ejemplo.com" /></div>
-                      <div className="field"><label>Ruta {esVendedor && <span className="req">*</span>}</label>
-                        <select required={esVendedor} value={newCliente.ruta || ''} onChange={e => setNewCliente({ ...newCliente, ruta: e.target.value })}>
-                          {!esVendedor && <option value="">Sin ruta asignada</option>}
-                          {rutasSelect.map((r: any) => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
-                        </select>
-                      </div>
+                      {esVendedor ? (
+                        <div className="field">
+                          <label htmlFor="solicitud-ruta-asignada">Ruta asignada</label>
+                          <input
+                            id="solicitud-ruta-asignada"
+                            type="text"
+                            readOnly
+                            aria-readonly="true"
+                            value={rutaAsignadaVendedor?.nombre || ''}
+                            placeholder={rutas.length > 1 ? 'Requiere revisión de Administración' : 'Sin ruta asignada'}
+                          />
+                          {!rutaAsignadaVendedor && <p className="text-xs" role="status" style={{ color: 'var(--status-danger)' }}>
+                            {rutas.length > 1
+                              ? 'Hay más de una ruta asignada. Administración debe dejar una activa.'
+                              : 'Administración debe asignarte una ruta antes de solicitar el alta.'}
+                          </p>}
+                        </div>
+                      ) : (
+                        <div className="field"><label>Ruta</label>
+                          <select value={newCliente.ruta || ''} onChange={e => setNewCliente({ ...newCliente, ruta: e.target.value })}>
+                            <option value="">Sin ruta asignada</option>
+                            {rutasSelect.map((r: any) => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
+                          </select>
+                        </div>
+                      )}
                       <div className="field full"><label>Dirección</label><input type="text" value={newCliente.direccion} onChange={e => setNewCliente({ ...newCliente, direccion: e.target.value })} placeholder="Dirección completa" /></div>
                       <div className="field"><label>Provincia</label>
                         <select value={newCliente.provincia || ''} onChange={e => setNewCliente({ ...newCliente, provincia: e.target.value })}>
@@ -402,7 +430,7 @@ export default function Clientes({ currentUser }: ClientesProps) {
                   </div>
                   <div className="modal-foot">
                     <button type="button" className="btn" onClick={() => { setIsAdding(false); setEditingId(null); }}>Cancelar</button>
-                    <button type="submit" className="btn brand"><Check className="w-4 h-4" /> {editingId ? 'Guardar Cambios' : esVendedor ? 'Enviar a aprobación' : 'Guardar Cliente'}</button>
+                    <button type="submit" disabled={esVendedor && !rutaAsignadaVendedor} className="btn brand"><Check className="w-4 h-4" /> {editingId ? 'Guardar Cambios' : esVendedor ? 'Enviar a aprobación' : 'Guardar Cliente'}</button>
                   </div>
                 </form>
               </div>

@@ -16,12 +16,14 @@ export const ROLE_PERMISSIONS: Record<string, RolePermissions> = {
     // El vendedor solo trabaja con su ruta asignada, sus clientes y documentos.
     // `ventas` también limita inventario y clientes al contexto del vendedor en
     // los endpoints que lo soportan; no se concede inventario general ni gastos.
-    view: ['rutas_propias', 'clientes_propios', 'ventas_propias', 'inventario_camion', 'facturacion', 'clientes', 'ventas', 'cargas_asignadas', 'catalogo'],
-    create: ['ventas', 'facturacion', 'notas_credito'],
+    view: ['rutas_propias', 'clientes_propios', 'ventas_propias', 'inventario_camion', 'facturacion', 'clientes', 'ventas', 'cargas_asignadas', 'catalogo', 'gastos_ruta'],
+    create: ['ventas', 'facturacion', 'notas_credito', 'gastos_ruta'],
     approve: ['carga'],
   },
   Despachador: { view: ['bodega', 'etiquetas', 'pesos', 'inventario_bodega', 'catalogo', 'rutas', 'produccion', 'granjas_admin', 'cargas_asignadas', 'traslados'], create: ['etiquetas', 'pesos', 'carga_camion', 'rutas', 'produccion', 'traslados'], approve: [] },
-  Bodeguero: { view: ['inventario_bodega', 'recepciones', 'etiquetas', 'pesos', 'desperdicios', 'tablero_operativo', 'catalogo', 'rutas', 'granjas_admin'], create: ['recepciones', 'desperdicios', 'inventario_bodega', 'pesos'], approve: [] },
+  // Bodega confirma recepciones y retornos físicos. El permiso de inventario se
+  // limita a las operaciones de bodega; no concede despacho, rutas ni catálogo.
+  Bodeguero: { view: ['recepciones', 'etiquetas', 'inventario_bodega'], create: ['recepciones', 'inventario_bodega'], approve: [] },
 };
 
 const ROLE_ALIASES: Record<string, string> = {

@@ -217,9 +217,9 @@ describe('vistas de Finanzas', () => {
     expect(textoVisible()).toMatch(/500\s?000/);
   });
 
-  it('Documentos: lista ventas, rutas y físicos', async () => {
+  it('Documentos: abre la consulta de facturas para Administración', async () => {
     await recorrer({
-      vista: 'Finanzas/Documentos', rol: 'Comercial', modulo: 'Finanzas',
+      vista: 'Finanzas/Documentos', rol: 'Admin', modulo: 'Finanzas',
       pasos: [{ tab: 'documentos', testid: 'documentos-ventas' }],
     });
   });
@@ -305,50 +305,47 @@ describe('vistas de Operaciones y Bodegas', () => {
     });
   });
 
-  it('Ventas: la caja de la ruta', async () => {
+  it('Historial: consulta las ventas en ruta desde Operaciones', async () => {
     await recorrer({
-      vista: 'Operaciones/Ventas', rol: 'Admin', modulo: 'Operaciones',
-      pasos: [{ tab: 'ventas', debeContener: /tiquete|venta|caja|guía/i }],
+      vista: 'Operaciones/Despacho/Historial', rol: 'Admin', modulo: 'Operaciones',
+      pasos: [{ tab: 'despacho' }, { tab: 'despacho-historico-ventas', debeContener: /venta|historial|ruta/i }],
     });
   });
 });
 
 describe('el módulo Logística como pasos de Despacho y Ventas', () => {
-  it('Auditoría de ruta: vive dentro de la pantalla de Despacho (G2)', async () => {
-    // La consolidación G2 le quitó a Ventas el paso `ventas-trazabilidad`: la
-    // auditoría es lectura de las guías que crea Despacho, así que su panel de
-    // stock y merma ahora se ve en el cuerpo del grupo Despacho.
+  it('Preparación: la creación y alistamiento de guías vive en Despacho', async () => {
     await recorrer({
-      vista: 'Operaciones/Despacho/Auditoría', rol: 'Admin', modulo: 'Operaciones',
-      pasos: [{ tab: 'despacho' }, { tab: 'despacho-guias', debeContener: /Auditoría de ruta|Merma|Stock actual|Carga en guías/i }],
+      vista: 'Operaciones/Despacho/Preparación', rol: 'Admin', modulo: 'Operaciones',
+      pasos: [{ tab: 'despacho' }, { tab: 'despacho-preparar', debeContener: /guía|guia|camión|despacho/i }],
     });
   });
 
-  it('Tablero de Rutas: el tablero vivo de las ventas', async () => {
+  it('Rutas en vivo: muestra el seguimiento operativo', async () => {
     await recorrer({
-      vista: 'Operaciones/Ventas/Tablero', rol: 'Admin', modulo: 'Operaciones',
-      pasos: [{ tab: 'ventas' }, { tab: 'ventas-tablero', debeContener: /tablero|ruta|vivo/i }],
+      vista: 'Operaciones/Despacho/EnRuta', rol: 'Admin', modulo: 'Operaciones',
+      pasos: [{ tab: 'despacho' }, { tab: 'despacho-en-ruta', debeContener: /tablero|ruta|vivo|entrega/i }],
     });
   });
 
-  it('Etiquetas QR: la etiqueta generada del fixture', async () => {
+  it('Historial de ventas: lista las ventas por ruta', async () => {
     await recorrer({
-      vista: 'Operaciones/Despacho/Etiquetas', rol: 'Admin', modulo: 'Operaciones',
-      pasos: [{ tab: 'despacho' }, { tab: 'despacho-etiquetas', debeContener: /etiqueta|ETQ-/i }],
+      vista: 'Operaciones/Despacho/Historial', rol: 'Admin', modulo: 'Operaciones',
+      pasos: [{ tab: 'despacho' }, { tab: 'despacho-historico-ventas', debeContener: /venta|historial|cliente/i }],
     });
   });
 
-  it('Control Pesos: el pesaje registrado', async () => {
+  it('Bodega: control y trazabilidad', async () => {
     await recorrer({
-      vista: 'Operaciones/Despacho/Pesos', rol: 'Admin', modulo: 'Operaciones',
-      pasos: [{ tab: 'despacho' }, { tab: 'despacho-pesos', debeContener: /peso|pesaje|bascula|báscula/i }],
+      vista: 'Operaciones/Bodega/Control', rol: 'Admin', modulo: 'Operaciones',
+      pasos: [{ tab: 'bodega' }, { tab: 'control', debeContener: /control|trazabilidad|movimiento|pendiente/i }],
     });
   });
 
-  it('Precios: la lista de la ruta Norte', async () => {
+  it('Precios: configuración de negociación en Admin', async () => {
     await recorrer({
-      vista: 'Operaciones/Ventas/Precios', rol: 'Admin', modulo: 'Operaciones',
-      pasos: [{ tab: 'ventas' }, { tab: 'ventas-precios', debeContener: /precio|lista/i }],
+      vista: 'Admin/Precios de negociación', rol: 'Admin', modulo: 'Admin',
+      pasos: [{ tab: 'precios-negociacion', debeContener: /precio|negociación|lista/i }],
     });
   });
 });
@@ -455,10 +452,10 @@ describe('el camino móvil de Operaciones', () => {
     });
   });
 
-  it('Camionero: la banda Mi Ruta permite confirmar cargas asignadas', async () => {
+  it('Vendedor: Mi Ruta es una vista móvil sin una banda de tabs', async () => {
     await recorrer({
       vista: 'Movil/Camionero', rol: 'Camionero', modulo: 'Mi Ruta',
-      pasos: [{ tab: 'cargas-comercial' }, { debeContener: /cargas asignadas|confirmar|rechazar/i }],
+      pasos: [{ debeContener: /Ruta asignada|Sin guía activa|Antes de salir|Confirmar carga/i }],
     });
   });
 
@@ -493,10 +490,12 @@ describe('matriz de acceso por rol', () => {
     { rol: 'Socio', modulo: 'admin' },
     { rol: 'Socio', modulo: 'operaciones' },
     { rol: 'Comercial', modulo: 'admin' },
+    { rol: 'Comercial', modulo: 'finanzas' },
     { rol: 'Bodeguero', modulo: 'finanzas' },
     { rol: 'Bodeguero', modulo: 'clientes' },
     { rol: 'Despachador', modulo: 'finanzas' },
     { rol: 'Despachador', modulo: 'clientes' },
+    { rol: 'Camionero', modulo: 'finanzas' },
   ];
 
   for (const { rol, modulo } of sinAcceso) {
@@ -519,13 +518,11 @@ describe('matriz de acceso por rol', () => {
     { rol: 'Socio', modulo: 'finanzas' },
     { rol: 'Socio', modulo: 'office' },
     { rol: 'Socio', modulo: 'clientes' },
-    { rol: 'Comercial', modulo: 'finanzas' },
     { rol: 'Comercial', modulo: 'operaciones' },
     { rol: 'Comercial', modulo: 'clientes' },
     { rol: 'Bodeguero', modulo: 'operaciones' },
     { rol: 'Despachador', modulo: 'operaciones' },
     { rol: 'Camionero', modulo: 'operaciones' },
-    { rol: 'Camionero', modulo: 'finanzas' },
     { rol: 'Camionero', modulo: 'clientes' },
   ];
 

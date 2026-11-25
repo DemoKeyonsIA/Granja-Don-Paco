@@ -533,7 +533,7 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
     expect(d.utilidadNeta).toBe(2 * PRECIO_KG * 30 - 50000);
   });
 
-  it('F4 — Nota de crédito directa sobre una factura: genera documento NC', async () => {
+  it('F4 — Una venta de ruta requiere devolución física; no admite nota de crédito directa', async () => {
     const facturas = (await requestAs(app, 'u-log').get('/api/facturas')).body;
     const facEfvo = facturas.find((f: any) => f.clienteId === cEfvo.id && f.estado === 'Pagada' && f.estado !== 'NotaCredito');
     expect(facEfvo).toBeDefined();
@@ -542,14 +542,11 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
       .set('x-user-id', 'u-jef').send({
       facturaIdOriginal: facEfvo.id, motivo: 'Devolución parcial por huevo quebrado', monto: 64000
     });
-    expect(res.status).toBe(201);
-    expect(res.body.success).toBe(true);
-    expect(res.body.consecutivo).toMatch(/^NC-/);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('devolución física');
 
     const docs = (await requestAs(app, 'u-log').get('/api/facturacion/documentos')).body;
-    const nc = docs.find((d: any) => d.tipoDocumento === 'NotaCredito' && d.notasCreditoId === facEfvo.id);
-    expect(nc).toBeDefined();
-    expect(nc.total).toBe(64000);
+    expect(docs.some((d: any) => d.tipoDocumento === 'NotaCredito' && d.notasCreditoId === facEfvo.id)).toBe(false);
   });
 
   it('GOLDEN — Snapshot final de dashboards con valores exactos y guard anti-desperdicio en 0', async () => {
@@ -564,14 +561,15 @@ describe('E2E — TODOS LOS PROCESOS: custodia + mantenimiento de galerones + va
 
     // Dashboard empresarial: snapshot inmutable tras el flujo completo
     const d = (await requestAs(app, 'u-log').get('/api/dashboard/enterprise')).body;
-    // Se netean tanto la devolución de ruta como la NC parcial de la factura contado.
-    expect(d.ingresosHoy).toBe(2 * PRECIO_KG * 30 - 64000);           // devengado del día
+    // Solo se netea la devolución física aceptada; el test anterior confirma
+    // que una venta de ruta no admite NC directa sin validar el retorno.
+    expect(d.ingresosHoy).toBe(2 * PRECIO_KG * 30);           // devengado del día
     expect(d.gastosHoy).toBe(50000);
-    expect(d.utilidadNeta).toBe(2 * PRECIO_KG * 30 - 64000 - 50000);
+    expect(d.utilidadNeta).toBe(2 * PRECIO_KG * 30 - 50000);
     expect(d.cartonesProducidos).toBe(120);
     expect(d.stockBodegaCentral).toBe(38);
     expect(d.totalAvesVivas).toBe(4500);
-    expect(d.facturasEmitidas).toBe(5);                            // 3 facturas de venta + NC devolución + NC directa
+    expect(d.facturasEmitidas).toBe(4);                            // 3 facturas de venta + NC de devolución física
     expect(d.clientesActivos).toBe(2);
     expect(d.rutasActivas).toBe(1);
     expect(d.cuentasPorCobrar).toBe(0);

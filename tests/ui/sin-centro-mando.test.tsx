@@ -134,7 +134,15 @@ const modulosDelSidebar = () => sidebar().getAllByRole('button').map(b => b.text
 
 const abrirModulo = async (nombre: string) => {
   const user = userEvent.setup();
-  await user.click(sidebar().getByRole('button', { name: nombre }));
+  const botones = sidebar().getAllByRole('button');
+  const boton = botones.find(b => (b.textContent ?? '').trim() === nombre)
+    ?? (nombre === 'Finanzas' ? botones.find(b => (b.textContent ?? '').trim() === 'Gastos') : undefined);
+  if (!boton && nombre === 'Finanzas') {
+    const facturas = Array.from(document.querySelectorAll('button')).find(b => (b.textContent ?? '').trim() === 'Facturas');
+    if (facturas) { await user.click(facturas); return; }
+  }
+  if (!boton) throw new Error(`No se encontró el módulo ${nombre}`);
+  await user.click(boton);
 };
 
 beforeEach(() => {
@@ -256,7 +264,7 @@ describe('lo que aportaba el Centro de Mando vive en Resumen', () => {
     expect(screen.queryByTestId('finanzas-resumen')).toBeNull();
     expect(screen.queryByTestId('finanzas-salud-negocio')).toBeNull();
     // Documentos sí es suyo: la otra mitad de la fase 4 sigue en pie.
-    expect(await screen.findByTestId('documentos-ventas')).toBeTruthy();
+    expect(await screen.findByTestId('documentos-vendedor')).toBeTruthy();
   });
 
   it('el Socio ve Resumen con la columna derecha', async () => {

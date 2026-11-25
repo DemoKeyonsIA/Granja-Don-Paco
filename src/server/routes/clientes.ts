@@ -31,11 +31,16 @@ export function registrarRutasClientes(app: any, db: any, requirePermission: (..
       const usuario = (req as any).usuario;
       if (!tieneRol(usuario, 'Comercial') || tieneRol(usuario, 'Admin')) return res.status(403).json({ error: 'Solo un vendedor puede solicitar un alta desde ruta.' });
       const nombre = String(req.body?.nombre || '').trim();
-      const rutaNombre = String(req.body?.ruta || '').trim();
-      if (!nombre || !rutaNombre) return res.status(400).json({ error: 'Indique el nombre del cliente y la ruta asignada.' });
+      if (!nombre) return res.status(400).json({ error: 'Indique el nombre del cliente.' });
       const rutas = await rutasAsignadasDelVendedor(db, String(usuario.id));
-      const ruta = rutas.find((r: any) => String(r.nombre).trim().toLocaleLowerCase() === rutaNombre.toLocaleLowerCase());
-      if (!ruta) return res.status(403).json({ error: 'Solo puede solicitar clientes para una ruta que tiene asignada.' });
+      if (rutas.length !== 1) return res.status(409).json({
+        error: rutas.length === 0
+          ? 'No tiene una ruta asignada. Administración debe asignarle una antes de solicitar un cliente.'
+          : 'Tiene más de una ruta asignada. Administración debe dejar una sola ruta activa antes de solicitar un cliente.',
+      });
+      // La ruta siempre se obtiene de la asignación administrativa; nunca se
+      // acepta la ruta enviada por el navegador como fuente de autorización.
+      const ruta = rutas[0];
       const documento = String(req.body?.documento_id || '').trim();
       const actividadEconomica = String(req.body?.actividad_economica || '').trim();
       if (actividadEconomica && !/^\d{1,20}$/.test(actividadEconomica)) return res.status(400).json({ error: 'La actividad económica debe ser un código numérico; confirme el valor con el cliente.' });

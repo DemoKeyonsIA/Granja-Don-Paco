@@ -135,6 +135,21 @@ const LECTURAS_EXIGEN_SESION: string[] = [
   '/api/auth/me', '/api/precios/lookup',
   '/api/office/resumen', '/api/office/cuentas', '/api/office/mensajes',
   '/api/office/arbol', '/api/office/documentos', '/api/office/vinculaciones',
+  // Rutas agregadas para alimento, contabilidad y operación de ruta.
+  '/api/alimento/f3-integridad', '/api/alimento/conteos', '/api/alimento/transferencias',
+  '/api/catalogo/cabys', '/api/clientes/solicitudes',
+  '/api/contabilidad/cuentas/:id/historial', '/api/contabilidad/notas-estados',
+  '/api/contabilidad/politicas', '/api/contabilidad/politicas/:id/historial',
+  '/api/contabilidad/mapeos', '/api/contabilidad/base', '/api/contabilidad/cobertura',
+  '/api/contabilidad/conciliacion-f7', '/api/contabilidad/exportar-anexos',
+  '/api/contabilidad/conciliacion-inventario-fisico', '/api/contabilidad/cobertura/detalle',
+  '/api/contabilidad/exportar', '/api/contabilidad/libro-mayor',
+  '/api/contabilidad/resultado-periodo', '/api/contabilidad/paquete-estados',
+  '/api/etiquetas/trazabilidad/buscar', '/api/proformas',
+  '/api/configuracion-fiscal/emisor', '/api/configuracion-fiscal/estado-maestros',
+  '/api/facturacion/estado-integracion', '/api/gastos/guia/:id',
+  '/api/logistica/ventas-ruta/historico', '/api/operaciones/recepciones/borradores',
+  '/api/operaciones/recepciones/movil',
 ];
 
 /** Escrituras que validan el cuerpo y responden 400. */
@@ -169,6 +184,16 @@ const ESCRITURAS_EXIGEN_SESION: string[] = [
   '/api/office/vinculaciones', '/api/office/vinculaciones/probar',
   '/api/operaciones/inventario/granja/conciliar-kg',
   '/api/inventario-insumos', '/api/inventario-insumos/*/calibrar',
+  '/api/alimento/conteos', '/api/alimento/transferencias', '/api/clientes/solicitudes',
+  '/api/productos-catalogo/:id/aprobar-fiscal',
+  '/api/contabilidad/conteos-inventario', '/api/contabilidad/notas-estados',
+  '/api/contabilidad/notas-estados/:id/aprobar', '/api/contabilidad/cuentas',
+  '/api/contabilidad/cuentas/:id/aprobar', '/api/contabilidad/periodos',
+  '/api/contabilidad/periodos/:id/cerrar', '/api/contabilidad/asientos',
+  '/api/contabilidad/asientos/:id/contabilizar', '/api/contabilidad/asientos/:id/reversar',
+  '/api/proformas', '/api/proformas/:id/convertir', '/api/proformas/:id/anular',
+  '/api/configuracion-fiscal/emisor/revisar', '/api/operaciones/recepciones/borradores',
+  '/api/operaciones/remisiones/:id/corregir-peso-kg', '/api/precios/recomendacion-ruta',
 ];
 
 /**
@@ -203,6 +228,14 @@ const CON_PARAMETRO: Array<{ metodo: string; patron: string; esperado: number; n
 
   { metodo: 'PATCH', patron: '/api/incidentes/:id', esperado: 404 },
   { metodo: 'PATCH', patron: '/api/precios/listas/:id/vigencia', esperado: 404 },
+  { metodo: 'PATCH', patron: '/api/contabilidad/cuentas/:id/clasificacion-flujo', esperado: 401 },
+  { metodo: 'PATCH', patron: '/api/contabilidad/notas-estados/:id', esperado: 401 },
+  { metodo: 'PUT', patron: '/api/contabilidad/politicas/:id', esperado: 401 },
+  { metodo: 'PUT', patron: '/api/contabilidad/mapeos/:id', esperado: 401 },
+  { metodo: 'PUT', patron: '/api/configuracion-fiscal/emisor', esperado: 401 },
+  { metodo: 'PUT', patron: '/api/gastos/:id/revision', esperado: 401 },
+  { metodo: 'PATCH', patron: '/api/office/documentos/:id/carpeta', esperado: 401 },
+  { metodo: 'PATCH', patron: '/api/precios/detalle/:id/rango', esperado: 401 },
 
   { metodo: 'DELETE', patron: '/api/galerones/:id', esperado: 404 },
   { metodo: 'DELETE', patron: '/api/lotes/:id', esperado: 404 },
@@ -223,6 +256,8 @@ const CON_PARAMETRO: Array<{ metodo: string; patron: string; esperado: number; n
   { metodo: 'DELETE', patron: '/api/office/cuentas/:id', esperado: 401 },
   { metodo: 'DELETE', patron: '/api/office/vinculaciones/:id', esperado: 401 },
   { metodo: 'GET', patron: '/api/office/mensajes/:threadId', esperado: 401 },
+  { metodo: 'DELETE', patron: '/api/contabilidad/asientos/:id', esperado: 401 },
+  { metodo: 'DELETE', patron: '/api/operaciones/recepciones/borradores/:id', esperado: 401 },
 ];
 
 /** Rutas que dependen de Gemini y por eso el smoke no las puede sondear. */

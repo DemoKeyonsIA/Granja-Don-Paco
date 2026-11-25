@@ -3,6 +3,7 @@ import * as schema from "../../db/schema";
 import { saldoDe, round2, fechaVencimientoDe } from "../../lib/cobranza";
 import { siguienteConsecutivo, getClienteConsumidorFinal } from "../services/consecutivos";
 import { clienteDisponibleParaUsuario } from '../clientes-scope';
+import { rolesParaUsuario } from '../../lib/role-permissions';
 
 export function registrarRutasComerciales(app: any, db: any, deps: { requirePermission: any; ApiError: any; getPrecioParaProducto: any; logAudit: any; recordEvent: any }) {
   const { facturas, detallesFactura, inventario, clientes, guias_despacho, camiones, etiquetas, pagos } = schema;
@@ -21,6 +22,8 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
       let pagosIniciales: Array<{ metodo: string; monto: number }> = [];
       const usuario = (req as any).usuario; // resuelto por requirePermission (Bearer o x-user-id → BD)
       const usuarioId = (usuario && usuario.id) || 'system';
+      const rolesUsuario = rolesParaUsuario(usuario?.role, usuario?.roles);
+      const esComercial = rolesUsuario.includes('Comercial');
       
       if (!factura || !Array.isArray(detalles)) {
         return res.status(400).json({ error: "Datos de factura y detalles inválidos" });
@@ -88,6 +91,23 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
       }
       if (factura.clienteId && !esConsumidorFinal && !await clienteDisponibleParaUsuario(db, usuario, String(factura.clienteId))) {
         return res.status(403).json({ error: 'Este cliente no pertenece a las rutas que tiene asignadas.' });
+      }
+
+      // Las ventas de Comercial solo pueden nacer en su única guía activa.
+      // Validarlo aquí evita aceptar un guiaId ajeno, cerrado o inventado desde
+      // un cliente HTTP modificado, aunque la interfaz oculte esas opciones.
+      if (esComercial) {
+        if (!factura.guiaId) return res.status(409).json({ error: 'Asocie la venta a su ruta activa antes de emitirla.' });
+        const guiaActiva = await db.query.guias_despacho.findFirst({ where: eq(guias_despacho.id, String(factura.guiaId)) });
+        if (!guiaActiva || guiaActiva.estado !== 'EnRuta' || guiaActiva.finDiaFecha) {
+          return res.status(409).json({ error: 'La ruta asignada ya no está activa. Actualice la pantalla y consulte a Administración.' });
+        }
+        const camionGuia = guiaActiva.camionId
+          ? await db.query.camiones.findFirst({ where: eq(camiones.id, String(guiaActiva.camionId)) })
+          : null;
+        const guiaAsignada = String(guiaActiva.vendedorId || '') === String(usuarioId)
+          || [camionGuia?.camioneroId, camionGuia?.vendedor_id].some(id => String(id || '') === String(usuarioId));
+        if (!guiaAsignada) return res.status(403).json({ error: 'Esta ruta no está asignada a su usuario.' });
       }
 
       // F2: resolve truck from guía despacho (or camion_id) — bug antiguo usaba 'Camión Ruta 1' hardcodeado
@@ -335,9 +355,12 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
 
   app.get("/api/facturas", requirePermission(['facturacion', 'dashboard'], 'view'), async (req, res) => {
     try {
-      const data = await db.query.facturas.findMany({
-        
-      });
+      const usuario = (req as any).usuario;
+      const rolesUsuario = rolesParaUsuario(usuario?.role, usuario?.roles);
+      const todas = await db.query.facturas.findMany();
+      const data = rolesUsuario.includes('Comercial')
+        ? todas.filter((factura: any) => String(factura.vendedorId || '') === String(usuario?.id || ''))
+        : todas;
       const facturaIds = data.map((factura: any) => factura.id);
       const [pagos, detalles] = await Promise.all([
         db.query.pagos.findMany(),
@@ -404,6 +427,8 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
           if (!mismoIntento) return res.status(409).json({ error: "Idempotency-Key ya fue usada para otro pago" });
           const facturaExistente = await db.query.facturas.findFirst({ where: eq(facturas.id, facturaId) });
           if (!facturaExistente) return res.status(404).json({ error: "Factura no encontrada" });
+          const rolesUsuario = rolesParaUsuario((req as any).usuario?.role, (req as any).usuario?.roles);
+          if (rolesUsuario.includes('Comercial') && String(facturaExistente.vendedorId || '') !== String(usuarioId)) return res.status(403).json({ error: 'No tiene permiso para registrar pagos en esta factura.' });
           const pagadoActual = await totalPagado(facturaId);
           return res.json({
             ok: true, repetido: true,
@@ -415,6 +440,8 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
 
       const factura = await db.query.facturas.findFirst({ where: eq(facturas.id, facturaId) });
       if (!factura) return res.status(404).json({ error: "Factura no encontrada" });
+      const rolesUsuario = rolesParaUsuario((req as any).usuario?.role, (req as any).usuario?.roles);
+      if (rolesUsuario.includes('Comercial') && String(factura.vendedorId || '') !== String(usuarioId)) return res.status(403).json({ error: 'No tiene permiso para registrar pagos en esta factura.' });
       if (factura.estado === 'Anulada') {
         // Una factura anulada no debe dinero; aceptarle un pago la reviviría
         // como "Pagada" y devolvería una cartera que nunca existió.
@@ -516,6 +543,10 @@ export function registrarRutasComerciales(app: any, db: any, deps: { requirePerm
       const { id } = req.params;
       const factura = await db.query.facturas.findFirst({ where: eq(facturas.id, id) });
       if (!factura) return res.status(404).json({ error: "Factura no encontrada" });
+      const usuario = (req as any).usuario;
+      if (rolesParaUsuario(usuario?.role, usuario?.roles).includes('Comercial') && String(factura.vendedorId || '') !== String(usuario?.id || '')) {
+        return res.status(403).json({ error: 'No tiene permiso para consultar pagos de esta factura.' });
+      }
 
       const lista = await db.query.pagos.findMany({ where: eq(pagos.facturaId, id) });
       const pagado = lista.reduce((a: number, p: any) => a + Number(p.monto || 0), 0);

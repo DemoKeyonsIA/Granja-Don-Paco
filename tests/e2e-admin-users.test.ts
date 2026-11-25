@@ -36,7 +36,8 @@ describe('E2E — Admin Usuarios (CRUD con roles múltiples y estado)', () => {
     });
     expectApi(res, 201);
     const u = (await testDb.select().from(schema.users)).find((x: any) => x.id === res.body.id);
-    expect(u?.roles).toBe('Despachador,Bodeguero');
+    expect(u?.role).toBe('Comercial');
+    expect(u?.roles).toBe('');
   });
 
   it('rechaza email duplicado', async () => {
@@ -48,7 +49,8 @@ describe('E2E — Admin Usuarios (CRUD con roles múltiples y estado)', () => {
     const res = await adminRequest().get('/api/users');
     expectApi(res, 200);
     const juan = res.body.find((u: any) => u.email === 'juan@granja.com');
-    expect(juan?.roles).toBe('Despachador,Bodeguero');
+    expect(juan?.role).toBe('Comercial');
+    expect(juan?.roles).toBe('');
     expect(juan?.activo).toBe(true);
   });
 
@@ -60,7 +62,7 @@ describe('E2E — Admin Usuarios (CRUD con roles múltiples y estado)', () => {
     expectApi(res, 200);
     const after = (await testDb.select().from(schema.users)).find((x: any) => x.id === u!.id);
     expect(after?.role).toBe('Despachador');
-    expect(after?.roles).toBe('Camionero');
+    expect(after?.roles).toBe('Comercial');
     expect(after?.activo).toBe(false);
   });
 

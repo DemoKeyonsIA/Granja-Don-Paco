@@ -1,16 +1,36 @@
 import { and, eq } from 'drizzle-orm';
 import * as schema from '../../db/schema';
 import { siguienteConsecutivo, getClienteConsumidorFinal } from '../services/consecutivos';
+import { clienteDisponibleParaUsuario } from '../clientes-scope';
+import { rolesParaUsuario } from '../../lib/role-permissions';
 
 /** Registra documentos en modo de prueba; no sustituye el conector fiscal oficial. */
 export function registrarRutasFacturacion(app: any, db: any, requirePermission: (...args: any[]) => any, _testMode: boolean, logAudit: (...args: any[]) => Promise<void>) {
   const { facturas, detallesFactura, facturas_electronicas, productosCatalogo, clientes, guias_despacho, ventas_ruta, ventas_ruta_kg, camiones, inventario, etiquetas, retornos_camion, movimientosInventario, pagos, movimientos_insumos, inventario_insumos } = schema;
+  const rolesDe = (req: any) => rolesParaUsuario(req.usuario?.role, req.usuario?.roles);
+  const esAdmin = (req: any) => rolesDe(req).includes('Admin');
+  const esComercial = (req: any) => rolesDe(req).includes('Comercial');
+  const guiaAsignadaA = async (guiaId: string, usuarioId: string) => {
+    const guia = await db.query.guias_despacho.findFirst({ where: eq(guias_despacho.id, guiaId) });
+    if (!guia) return null;
+    const camion = guia.camionId ? await db.query.camiones.findFirst({ where: eq(camiones.id, String(guia.camionId)) }) : null;
+    const asignada = String(guia.vendedorId || '') === usuarioId
+      || [camion?.camioneroId, camion?.vendedor_id].some(id => String(id || '') === usuarioId);
+    return asignada ? guia : null;
+  };
+  const facturaAccesible = async (facturaId: string, req: any) => {
+    const factura = await db.query.facturas.findFirst({ where: eq(facturas.id, facturaId) });
+    if (!factura) return { factura: null, permitido: false };
+    const usuarioId = String(req.usuario?.id || '');
+    const permitido = !esComercial(req) || esAdmin(req) || String(factura.vendedorId || '') === usuarioId;
+    return { factura, permitido };
+  };
   app.get('/api/proformas', requirePermission(['facturacion', 'ventas'], 'view'), async (req: any, res: any) => {
     try {
       const usuarioId = String(req.usuario?.id || '');
-      const roles = Array.isArray(req.usuario?.roles) ? req.usuario.roles : String(req.usuario?.roles || req.usuario?.role || '').split(',');
+      const roles = rolesDe(req);
       const todas = await db.query.proformas.findMany();
-      const rows = roles.includes('Admin') ? todas : todas.filter((proforma: any) => proforma.vendedorId === usuarioId);
+      const rows = roles.includes('Admin') ? todas : esComercial(req) ? todas.filter((proforma: any) => String(proforma.vendedorId || '') === usuarioId) : todas;
       res.json(rows.map((p: any) => ({ ...p, detalles: JSON.parse(p.detallesJson || '[]') })).sort((a: any, b: any) => String(b.fecha).localeCompare(String(a.fecha))));
     } catch (error: any) { res.status(500).json({ error: error.message || 'No se pudieron cargar las proformas.' }); }
   });
@@ -18,12 +38,14 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
     try {
       const { clienteId, detalles, descuento = 0, notas = '', venceEn = null, guiaId = null } = req.body || {};
       const usuarioId = String(req.usuario?.id || '');
+      if (esComercial(req) && !guiaId) return res.status(403).json({ error: 'La proforma debe pertenecer a su ruta asignada.' });
       const lineas = Array.isArray(detalles) ? detalles.filter((d: any) => Number(d.cantidad) > 0) : [];
       if (!usuarioId || !lineas.length) return res.status(400).json({ error: 'Agregue al menos un producto.' });
       if (clienteId && !await db.query.clientes.findFirst({ where: eq(clientes.id, String(clienteId)) })) return res.status(400).json({ error: 'El cliente seleccionado no existe.' });
+      if (clienteId && !await clienteDisponibleParaUsuario(db, req.usuario, String(clienteId))) return res.status(403).json({ error: 'Este cliente no está asignado a sus rutas.' });
       if (guiaId) {
         const guia = await db.query.guias_despacho.findFirst({ where: eq(guias_despacho.id, String(guiaId)) });
-        if (!guia || guia.vendedorId !== usuarioId || guia.estado !== 'EnRuta') return res.status(403).json({ error: 'La proforma debe asociarse a la ruta activa asignada al vendedor.' });
+        if (!guia || (esComercial(req) && !await guiaAsignadaA(String(guiaId), usuarioId)) || guia.estado !== 'EnRuta' || guia.finDiaFecha) return res.status(403).json({ error: 'La proforma debe asociarse a la ruta activa asignada al vendedor.' });
       }
       if (lineas.some((d: any) => !String(d.producto || '').trim() || !Number.isFinite(Number(d.precio_unitario)) || Number(d.precio_unitario) < 0)) return res.status(400).json({ error: 'Revise productos, cantidades y precios.' });
       const catalogoActivo = await db.query.productosCatalogo.findMany();
@@ -45,10 +67,11 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
       const facturaId = String(req.body?.facturaId || '');
       const proforma = await db.query.proformas.findFirst({ where: eq(schema.proformas.id, String(req.params.id)) });
       if (!proforma) return res.status(404).json({ error: 'Proforma no encontrada.' });
-      const roles = Array.isArray(req.usuario?.roles) ? req.usuario.roles : String(req.usuario?.roles || req.usuario?.role || '').split(',');
-      if (!roles.includes('Admin') && proforma.vendedorId !== String(req.usuario?.id || '')) return res.status(403).json({ error: 'No tiene permiso para convertir esta proforma.' });
+      const roles = rolesDe(req);
+      if (!roles.includes('Admin') && esComercial(req) && String(proforma.vendedorId || '') !== String(req.usuario?.id || '')) return res.status(403).json({ error: 'No tiene permiso para convertir esta proforma.' });
       const factura = await db.query.facturas.findFirst({ where: eq(facturas.id, facturaId) });
       if (!factura) return res.status(400).json({ error: 'La factura vinculada no existe.' });
+      if (esComercial(req) && String(factura.vendedorId || '') !== String(req.usuario?.id || '')) return res.status(403).json({ error: 'Solo puede vincular una factura propia.' });
       if (proforma.clienteId && factura.clienteId !== proforma.clienteId) return res.status(400).json({ error: 'La factura debe corresponder al cliente de la proforma.' });
       if (proforma.guiaId && factura.guiaId !== proforma.guiaId) return res.status(400).json({ error: 'La venta debe realizarse desde la ruta asignada a esta proforma.' });
       await db.update(schema.proformas).set({ estado: 'Convertida', facturaId }).where(eq(schema.proformas.id, proforma.id));
@@ -58,10 +81,10 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
   app.post('/api/proformas/:id/anular', requirePermission(['facturacion', 'ventas'], 'create'), async (req: any, res: any) => {
     try {
       const usuarioId = String(req.usuario?.id || '');
-      const roles = Array.isArray(req.usuario?.roles) ? req.usuario.roles : String(req.usuario?.roles || req.usuario?.role || '').split(',');
+      const roles = rolesDe(req);
       const proforma = await db.query.proformas.findFirst({ where: eq(schema.proformas.id, String(req.params.id)) });
       if (!proforma) return res.status(404).json({ error: 'Proforma no encontrada.' });
-      if (!roles.includes('Admin') && proforma.vendedorId !== usuarioId) return res.status(403).json({ error: 'No tiene permiso para anular esta proforma.' });
+      if (!roles.includes('Admin') && esComercial(req) && String(proforma.vendedorId || '') !== usuarioId) return res.status(403).json({ error: 'No tiene permiso para anular esta proforma.' });
       if (proforma.estado !== 'Vigente' || proforma.facturaId) return res.status(409).json({ error: 'Solo se pueden anular proformas vigentes que no se hayan convertido en venta.' });
       await db.update(schema.proformas).set({ estado: 'Anulada' }).where(eq(schema.proformas.id, proforma.id));
       await logAudit(usuarioId, 'AnularProformaNoFiscal', 'Proforma', proforma.id, { estado: proforma.estado }, { estado: 'Anulada', consecutivo: proforma.consecutivo, motivo: String(req.body?.motivo || 'Anulada desde Mi Ruta').slice(0, 300) });
@@ -167,6 +190,9 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
 
       if (!facturaOriginal) {
         return res.status(404).json({ error: "Factura original no encontrada" });
+      }
+      if (esComercial(req) && String(facturaOriginal.vendedorId || '') !== String(req.usuario?.id || '')) {
+        return res.status(403).json({ error: 'No tiene permiso para emitir un documento para esta factura.' });
       }
       const perfilEmisor = await db.query.configuracionFiscalEmisor.findFirst({ where: eq(schema.configuracionFiscalEmisor.id, 'emisor') });
       const emisorNombreFinal = String(perfilEmisor?.razonSocial || emisorNombre || 'DEMO · Granja Don Paco').trim();
@@ -331,6 +357,7 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
       });
 
       if (!doc) return res.status(404).json({ error: "Documento fiscal no encontrado" });
+      if (!(await facturaAccesible(String(doc.facturaId), req)).permitido) return res.status(403).json({ error: 'No tiene permiso para modificar este documento.' });
 
       if (doc.xmlGenerado) {
         return res.json({ success: true, simulado: true, repetido: true, xml: doc.xmlGenerado, estado: doc.estado });
@@ -395,6 +422,7 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
       });
 
       if (!doc) return res.status(404).json({ error: "Documento fiscal no encontrado" });
+      if (!(await facturaAccesible(String(doc.facturaId), req)).permitido) return res.status(403).json({ error: 'No tiene permiso para modificar este documento.' });
 
       if (!doc.xmlGenerado) {
         return res.status(400).json({ error: "Debe generar el XML primero" });
@@ -439,6 +467,7 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
       });
 
       if (!doc) return res.status(404).json({ error: "Documento fiscal no encontrado" });
+      if (!(await facturaAccesible(String(doc.facturaId), req)).permitido) return res.status(403).json({ error: 'No tiene permiso para consultar este documento.' });
 
       if (['Aceptado', 'Rechazado'].includes(doc.estado) && doc.respuestaHacienda) {
         let respuestaGuardada: any = null;
@@ -494,8 +523,8 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
         return res.status(404).json({ error: "Factura original no encontrada" });
       }
       const usuarioId = String(req.usuario?.id || '');
-      const rolesUsuario = Array.isArray(req.usuario?.roles) ? req.usuario.roles : String(req.usuario?.roles || req.usuario?.role || '').split(',').map((r: string) => r.trim());
-      if (!rolesUsuario.includes('Admin') && String(facturaOriginal.vendedorId || '') !== usuarioId) return res.status(403).json({ error: 'No tiene permiso para corregir esta factura.' });
+      const rolesUsuario = rolesDe(req);
+      if (rolesUsuario.includes('Comercial') && !rolesUsuario.includes('Admin') && String(facturaOriginal.vendedorId || '') !== usuarioId) return res.status(403).json({ error: 'No tiene permiso para corregir esta factura.' });
       if (facturaOriginal.guiaId && !sinEntrega) return res.status(409).json({ error: 'Si el cliente recibió el producto y lo devolvió, registre la devolución física desde Mi Ruta y espere la confirmación de Bodega.' });
       if (sinEntrega && !facturaOriginal.guiaId) return res.status(400).json({ error: 'La corrección sin entrega solo aplica a ventas en ruta.' });
       if (['Anulada', 'NotaCredito'].includes(String(facturaOriginal.estado))) return res.status(409).json({ error: 'Esta factura ya está anulada o corresponde a una nota de crédito.' });
@@ -664,7 +693,12 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
   // Listar documentos electrónicos
   app.get("/api/facturacion/documentos", requirePermission(['facturacion', 'dashboard'], 'view'), async (req, res) => {
     try {
-      const data = await db.query.facturas_electronicas.findMany();
+      let data = await db.query.facturas_electronicas.findMany();
+      if (esComercial(req)) {
+        const facturasPropias = await db.query.facturas.findMany();
+        const idsPropios = new Set(facturasPropias.filter((factura: any) => String(factura.vendedorId || '') === String(req.usuario?.id || '')).map((factura: any) => String(factura.id)));
+        data = data.filter((documento: any) => idsPropios.has(String(documento.facturaId)));
+      }
       res.json(data);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -684,6 +718,7 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
       // Validaciones (lectura) fuera de la transacción
       const guia = await db.query.guias_despacho.findFirst({ where: eq(guias_despacho.id, guiaId) });
       if (!guia) return res.status(404).json({ error: "Guía no encontrada" });
+      if (esComercial(req) && !await guiaAsignadaA(String(guiaId), String(usuarioId))) return res.status(403).json({ error: 'Solo puede consolidar documentos de su ruta asignada.' });
       if (guia.estado !== 'Cerrada' && guia.estado !== 'CerradaConDiferencia') {
         return res.status(409).json({ error: `La guía debe estar cerrada (cuadre completado). Estado actual: ${guia.estado}` });
       }
@@ -900,9 +935,16 @@ export function registrarRutasFacturacion(app: any, db: any, requirePermission: 
         db.query.facturas.findMany()
       ]);
       const ventas = [...ventasLegacy, ...ventasKg.map((v: any) => ({ ...v, cartones: Number(v.cantidadKg), unidad: 'kg' }))];
+      const usuarioId = String(req.usuario?.id || '');
       const hoy = new Date().toISOString().slice(0, 10);
       const rutas = guias
-        .filter((g: any) => !!g.finDiaFecha && String(g.finDiaFecha).slice(0, 10) === hoy)
+        .filter((g: any) => {
+          if (!g.finDiaFecha || String(g.finDiaFecha).slice(0, 10) !== hoy) return false;
+          if (!esComercial(req)) return true;
+          const camion = camionesData.find((c: any) => String(c.id) === String(g.camionId));
+          return String(g.vendedorId || '') === usuarioId
+            || [camion?.camioneroId, camion?.vendedor_id].some(id => String(id || '') === usuarioId);
+        })
         .map((g: any) => {
           const gv = ventas.filter((v: any) => v.guiaId === g.id);
           const camion = camionesData.find((c: any) => c.id === g.camionId);

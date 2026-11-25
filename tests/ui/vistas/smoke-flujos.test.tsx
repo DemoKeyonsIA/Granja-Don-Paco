@@ -198,139 +198,26 @@ describe('abrir y cerrar vistas no habla', () => {
   });
 });
 
-/**
- * El alta de venta es un wizard de tres pasos, no un formulario. Los pasos 1 y 2
- * tienen guarda propia en la vista, y esa guarda es la forma más barata de
- * comprobar que un aviso de validación sale exactamente una vez: son Toast puros,
- * sin red, así que el test no depende de ningún endpoint.
- */
-describe('las guardas del wizard de venta avisan una vez y no se repiten', () => {
-  async function abrirWizard() {
+describe('emisión de ventas desde la ruta asignada', () => {
+  it('Documentos queda como consulta; la emisión no se inicia desde Finanzas', async () => {
     montarComo(App, 'Admin');
     await asentar();
-    await abrir('Finanzas', 'documentos');
-    await hacerClicEn(boton('Nueva Venta'));
-    await asentar();
-    limpiarToasts();
-  }
+    await abrir('Gastos', 'documentos');
 
-  it('pedir el paso 2 sin productos avisa una vez y no avanza', async () => {
-    await abrirWizard();
-    await hacerClicEn(boton('Siguiente', 'Continuar', 'Next'));
-
-    expect(
-      toastsDe('error'),
-      'una guarda de validación debe decir por qué no se puede seguir, una sola vez',
-    ).toHaveLength(1);
-    expect(toastsDe('success')).toEqual([]);
-    expect(toastsDuplicados()).toEqual([]);
-    // Y no hablo con el servidor: una guarda local no es una escritura.
+    const botones = Array.from(document.querySelectorAll('button')).map(textoDe);
+    expect(botones.some(t => /nueva venta|registrar venta|confirmar y cobrar/i.test(t))).toBe(false);
     expect(escrituras()).toEqual([]);
   });
 
-  it('avisa de cada guarda con su propio motivo, sin encadenar dos', async () => {
-    await abrirWizard();
-    await hacerClicEn(boton('Siguiente', 'Continuar', 'Next'));
-    const primerMotivo = toastsDe('error')[0];
-    limpiarToasts();
-    await hacerClicEn(boton('Siguiente', 'Continuar', 'Next'));
-    expect(
-      toastsDe('error'),
-      'reintentar sin corregir debe volver a decir lo mismo, no acumular mensajes',
-    ).toEqual([primerMotivo]);
-  });
-});
-
-describe('una escritura rechazada avisa del error y no dice que salió bien', () => {
-  const error = (mensaje: string) =>
-    ({
-      ok: false, status: 400, statusText: 'Bad Request',
-      json: async () => ({ error: mensaje }),
-    }) as unknown as Response;
-
-  it('si el servidor rechaza la venta, el aviso es de error y no de éxito', async () => {
-    instalarRed({
-      escribir: url => (url === '/api/ventas' ? error('El cliente no tiene crédito disponible') : null),
-    });
-
-    montarComo(App, 'Admin');
+  it('la venta solo se puede iniciar desde la experiencia asignada a la ruta', async () => {
+    montarComo(App, 'Comercial');
     await asentar();
-    await abrir('Finanzas', 'documentos');
-    await hacerClicEn(boton('Nueva Venta'));
-    await asentar();
-    limpiarToasts();
-
-    // El tipo de documento se elige en el paso 1 y solo ahí, así que va primero.
-    // Nota de venta evita depender de que el catálogo de clientes tenga un elemento
-    // seleccionable, que es lo que haría frágil el flujo.
-    await hacerClicEn(boton('Nota de venta'));
+    await abrirModulo('Mi Ruta');
     await asentar();
 
-    // Se escanea un producto de demostración, que es el camino que el propio
-    // componente ofrece para rellenar el carrito sin teclear veinte campos.
-    await hacerClicEn(boton('Escanear (demo)'));
-    await asentar();
-
-    await hacerClicEn(boton('Siguiente'));
-    await asentar();
-    await hacerClicEn(boton('Siguiente'));
-    await asentar();
-    limpiarToasts();
-
-    await hacerClicEn(boton('Confirmar y Cobrar'));
-    await asentar();
-
-    expect(
-      escrituras().filter(r => r === '/api/ventas'),
-      'el flujo no llegó a mandar la venta, así que no hay nada que afirmar sobre el aviso',
-    ).not.toEqual([]);
-
-    afirmarAvisoUnico({ vista: 'Finanzas/Documentos', ruta: '/api/ventas', tipo: 'error' });
-  });
-
-  it('una venta sin documento fiscal no dice que se generó', async () => {
-    // El backend guarda la factura y después pide el documento fiscal. Si el
-    // segundo paso falla, la venta quedó pero sin respaldo, y el aviso tiene que
-    // decirlo: antes se anunciaba el éxito igual, y el vendedor creía haber
-    // facturado algo que el fisco nunca vio.
-    instalarRed({
-      escribir: url =>
-        url === '/api/facturacion/crear-documento'
-          ? error('El proveedor documentista no respondió')
-          : null,
-    });
-
-    montarComo(App, 'Admin');
-    await asentar();
-    await abrir('Finanzas', 'documentos');
-    await hacerClicEn(boton('Nueva Venta'));
-    await asentar();
-    // El tipo de documento se elige en el paso 1 y solo ahí. Tiquete evita
-    // depender de que el catálogo de clientes tenga un elemento seleccionable.
-    await hacerClicEn(boton('Nota de venta'));
-    await asentar();
-    await hacerClicEn(boton('Escanear (demo)'));
-    await asentar();
-    await hacerClicEn(boton('Siguiente'));
-    await asentar();
-    await hacerClicEn(boton('Siguiente'));
-    await asentar();
-    limpiarToasts();
-
-    await hacerClicEn(boton('Confirmar y Cobrar'));
-    await asentar();
-
-    const successes = toastsDe('success');
-    expect(
-      successes,
-      'no debe anunciarse una factura con documento fiscal que nunca se emitió',
-    ).toEqual([]);
-    expect(
-      toastsDe('error'),
-      'tiene que decir que la factura quedó pero el documento no',
-    ).toHaveLength(1);
-    expect(toastsDe('error')[0]).toMatch(/documento fiscal/i);
-    expect(toastsDuplicados()).toEqual([]);
+    expect(escrituras()).toEqual([]);
+    expect(toastsDe('success')).toEqual([]);
+    expect(toastsDe('error')).toEqual([]);
   });
 });
 

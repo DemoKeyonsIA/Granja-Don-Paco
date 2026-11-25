@@ -150,7 +150,7 @@ export function registrarRutasGastos(app: any, db: any, requirePermission: any) 
     } catch (error: any) { res.status(500).json({ error: error.message || 'No se pudo registrar la entrada de inventario.' }); }
   });
 
-  app.get("/api/gastos", requirePermission(['finanzas', 'gastos_ruta'], 'view'), async (req, res) => {
+  app.get("/api/gastos", requirePermission('finanzas', 'view'), async (req, res) => {
     try {
       const [data, usuarios, guias, revisiones, rutasData] = await Promise.all([
         db.query.gastos.findMany(), db.query.users.findMany(), db.query.guias_despacho.findMany(), db.query.aprobaciones.findMany(), db.query.rutas.findMany(),
@@ -172,7 +172,7 @@ export function registrarRutasGastos(app: any, db: any, requirePermission: any) 
     }
   });
 
-  app.get('/api/gastos/guia/:guiaId', requirePermission(['gastos_ruta', 'finanzas'], 'create'), async (req, res) => {
+  app.get('/api/gastos/guia/:guiaId', requirePermission('gastos_ruta', 'view'), async (req, res) => {
     try {
       const guia = await db.query.guias_despacho.findFirst({ where: eq(guias_despacho.id, req.params.guiaId) });
       if (!guia) return res.status(404).json({ error: 'Guía no encontrada.' });

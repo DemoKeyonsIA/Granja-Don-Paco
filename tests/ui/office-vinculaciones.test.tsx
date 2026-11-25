@@ -181,7 +181,7 @@ describe('la fila de espacios de Office', () => {
     }
   });
 
-  it.each(['Admin', 'Socio', 'Comercial'] as const)('%s ve Correo y Documentos, y nada más', async (rol) => {
+  it.each(['Admin', 'Socio'] as const)('%s ve Correo y Documentos, y nada más', async (rol) => {
     mockFetch();
     await renderOffice(rol);
     expect(idsEspacios()).toEqual(['correo', 'documentos']);
@@ -189,13 +189,21 @@ describe('la fila de espacios de Office', () => {
     expect(document.body.textContent).not.toContain('Vinculaciones');
   });
 
-  it('un Comercial con Admin como segundo rol tampoco la ve en Office', async () => {
-    // Los roles efectivos deciden qué módulos existen, no qué pantalla hay dentro
-    // de Office. Office es la bandeja para todos; las reglas se administran en el
-    // módulo Admin, que sí filtra por rol.
+  it('Comercial no ve el módulo Dirección ni carga recursos de Office', async () => {
+    mockFetch();
+    await renderOffice('Comercial');
+    expect(idsEspacios()).toEqual([]);
+    expect(espaciosVisibles()).toEqual([]);
+    const llamadas = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([url]) => String(url));
+    expect(llamadas.filter(url => url.startsWith('/api/office/'))).toEqual([]);
+  });
+
+  it('el rol principal Comercial no obtiene Dirección por un segundo rol Admin', async () => {
     mockFetch();
     await renderOffice('Comercial', ['Comercial', 'Admin']);
-    expect(idsEspacios()).toEqual(['correo', 'documentos']);
+    expect(idsEspacios()).toEqual([]);
+    const llamadas = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([url]) => String(url));
+    expect(llamadas.filter(url => url.startsWith('/api/office/'))).toEqual([]);
   });
 
   it('la fila usa los labels de la configuración, no unos escritos en el componente', async () => {

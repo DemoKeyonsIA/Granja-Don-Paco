@@ -161,8 +161,16 @@ const renderComo = (role: Role, roles?: Role[]) => {
 
 const abrirModulo = async (nombre: string) => {
   const user = userEvent.setup();
-  const botones = within(document.querySelector('aside')!).getAllByRole('button', { name: nombre });
-  await user.click(botones[0]);
+  const aside = within(document.querySelector('aside')!);
+  const botones = aside.getAllByRole('button');
+  const boton = botones.find(b => (b.textContent ?? '').trim() === nombre)
+    ?? (nombre === 'Finanzas' ? botones.find(b => (b.textContent ?? '').trim() === 'Gastos') : undefined);
+  if (!boton && nombre === 'Finanzas') {
+    const facturas = Array.from(document.querySelectorAll('button')).find(b => (b.textContent ?? '').trim() === 'Facturas');
+    if (facturas) { await user.click(facturas); return; }
+  }
+  if (!boton) throw new Error(`No se encontró el módulo ${nombre}`);
+  await user.click(boton);
   await waitFor(() => expect(screen.queryByTestId('module-loading')).toBeNull());
 };
 
@@ -219,10 +227,10 @@ afterEach(() => {
 });
 
 describe('matriz de tabs por rol', () => {
-  it('Admin ve los cuatro, con Resumen activo', async () => {
+  it('Admin ve las cinco vistas, con Resumen activo', async () => {
     renderComo('Admin');
     await abrirModulo('Finanzas');
-    expect(tabs('primario').map(t => t.id)).toEqual(['resumen', 'documentos', 'cobranza', 'analitica']);
+    expect(tabs('primario').map(t => t.id)).toEqual(['resumen', 'documentos', 'gastos-ruta', 'cobranza', 'analitica']);
     expect(tabActiva()).toBe('resumen');
   });
 
@@ -233,17 +241,18 @@ describe('matriz de tabs por rol', () => {
     expect(tabActiva()).toBe('resumen');
   });
 
-  it('Comercial ve solo Documentos y aterriza ahí, sin acceso a Analítica', async () => {
+  it('Comercial abre Facturas desde su navegación móvil, sin acceso a Finanzas', async () => {
     renderComo('Comercial');
-    await abrirModulo('Finanzas');
-    expect(tabs('primario').map(t => t.id)).toEqual(['documentos']);
-    expect(tabActiva()).toBe('documentos');
+    const user = userEvent.setup();
+    await user.click(within(document.querySelector('aside')!).getByRole('button', { name: 'Facturas' }));
+    expect(tabs('primario')).toEqual([]);
+    expect(await screen.findByTestId('documentos-vendedor')).toBeTruthy();
   });
 
   it('las etiquetas son del boceto, no las del código viejo', async () => {
     renderComo('Admin');
     await abrirModulo('Finanzas');
-    expect(tabs('primario').map(t => t.etiqueta)).toEqual(['Resumen', 'Documentos', 'Cobranza', 'Analítica']);
+    expect(tabs('primario').map(t => t.etiqueta)).toEqual(['Resumen', 'Documentos', 'Gastos de ruta', 'Cobranza', 'Analítica']);
     // "Flujo de Caja" y "Cuentas por Cobrar" eran tabs; ahora uno es un reporte
     // y el otro una etiqueta corta.
     expect(tabs('primario').map(t => t.etiqueta)).not.toContain('Flujo de Caja');
@@ -254,10 +263,10 @@ describe('el tab resaltado siempre corresponde al contenido renderizado', () => 
   // Este es el bug 2 del plan, verificado para cada tab y cada rol que lo ve.
   const casos: { rol: Role; tab: string; contenido: () => boolean; descripcion: string }[] = [
     { rol: 'Admin', tab: 'resumen', contenido: () => !!screen.queryByTestId('finanzas-resumen'), descripcion: 'Resumen' },
-    { rol: 'Admin', tab: 'documentos', contenido: () => !!screen.queryByText('Nueva Venta'), descripcion: 'Documentos' },
+    { rol: 'Admin', tab: 'documentos', contenido: () => !!screen.queryByTestId('documentos-ventas'), descripcion: 'Documentos' },
     { rol: 'Admin', tab: 'cobranza', contenido: () => !!screen.queryByTestId('stub-modulo'), descripcion: 'Cobranza' },
     { rol: 'Socio', tab: 'resumen', contenido: () => !!screen.queryByTestId('finanzas-resumen'), descripcion: 'Resumen de Socio' },
-    { rol: 'Socio', tab: 'analitica', contenido: () => screen.queryByText('Reportes') !== null, descripcion: 'Analítica de Socio' },
+    { rol: 'Socio', tab: 'analitica', contenido: () => screen.queryByRole('heading', { name: 'Financiero' }) !== null, descripcion: 'Analítica de Socio' },
   ];
 
   for (const c of casos) {
@@ -337,7 +346,7 @@ describe('Resumen', () => {
     renderComo('Admin');
     await abrirModulo('Finanzas');
     const bandeja = screen.getByTestId('finanzas-requiere-atencion');
-    expect(bandeja.textContent).toContain('Requiere atención');
+    expect(bandeja.textContent).toContain('Detalle de asuntos');
     expect(bandeja.textContent).toContain('Cartera con más de 60 días');
     // ₡600.000 es el bucket d60 de la respuesta.
     expect(bandeja.textContent).toContain(crc(600_000));
@@ -407,24 +416,26 @@ describe('Resumen', () => {
 });
 
 describe('Documentos', () => {
-  it('muestra las tres listas apiladas, sin tab interno', async () => {
-    renderComo('Comercial');
+  it('Admin consulta facturas, rutas y documentos físicos en la misma vista', async () => {
+    renderComo('Admin');
     await abrirModulo('Finanzas');
+    await irATab('documentos');
     expect(screen.getByTestId('documentos-ventas')).toBeTruthy();
     expect(screen.getByTestId('documentos-rutas')).toBeTruthy();
     expect(screen.getByTestId('documentos-fisicos')).toBeTruthy();
   });
 
-  it('no tiene una segunda fila de tabs dentro del tab', async () => {
-    renderComo('Comercial');
+  it('Documentos no agrega una segunda fila de navegación financiera', async () => {
+    renderComo('Admin');
     await abrirModulo('Finanzas');
-    // Una sola banda de tabs: la de Finanzas. Las listas son secciones.
+    await irATab('documentos');
     expect(document.querySelectorAll('[data-testid="nav-tabs"]').length).toBe(1);
   });
 
-  it('el encabezado dice Documentos, no Facturación y Ventas', async () => {
-    renderComo('Comercial');
+  it('el encabezado financiero de documentos dice Documentos', async () => {
+    renderComo('Admin');
     await abrirModulo('Finanzas');
+    await irATab('documentos');
     expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Documentos');
   });
 });
@@ -472,27 +483,29 @@ describe('Analítica', () => {
   it('Comercial no puede abrir Analítica ni ver reportes financieros', async () => {
     renderComo('Comercial');
     await abrirModulo('Finanzas');
-    expect(tabs('primario').map(t => t.id)).toEqual(['documentos']);
+    expect(tabs('primario')).toEqual([]);
     expect(tabs('secundario')).toHaveLength(0);
+    const user = userEvent.setup();
+    await user.click(within(document.querySelector('aside')!).getByRole('button', { name: 'Facturas' }));
     expect(screen.queryByText('Reportes')).toBeNull();
+    expect(screen.getByTestId('documentos-vendedor')).toBeTruthy();
   });
 });
 
 describe('Registro de gastos como acción del + Nuevo', () => {
-  it('ya no es un tab de Finanzas', async () => {
+  it('Gastos de ruta es una vista financiera separada de la captura de gasto', async () => {
     renderComo('Admin');
     await abrirModulo('Finanzas');
     const etiquetas = tabs('primario').map(t => t.etiqueta);
+    expect(etiquetas).toContain('Gastos de ruta');
     expect(etiquetas).not.toContain('Registro de Gastos');
-    expect(idsDeTabs().some(id => id.includes('gasto'))).toBe(false);
   });
 
-  it('el menú + Nuevo ofrece Gasto a un Admin y abre el formulario', async () => {
+  it('Registrar gasto abre el formulario para Administración', async () => {
     const user = userEvent.setup();
     renderComo('Admin');
     await abrirModulo('Finanzas');
-    await user.click(screen.getByRole('button', { name: /Nuevo/ }));
-    await user.click(screen.getByRole('button', { name: /Gasto/ }));
+    await user.click(screen.getByRole('button', { name: 'Registrar gasto' }));
     const dialogo = screen.getByRole('dialog');
     expect(dialogo.textContent).toContain('Registrar gasto');
     expect(screen.getByLabelText('Categoría')).toBeTruthy();
@@ -504,22 +517,22 @@ describe('Registro de gastos como acción del + Nuevo', () => {
     const user = userEvent.setup();
     renderComo('Admin');
     await abrirModulo('Finanzas');
-    await user.click(screen.getByRole('button', { name: /Nuevo/ }));
-    await user.click(screen.getByRole('button', { name: /Gasto/ }));
-    const enviar = screen.getByRole('button', { name: /Registrar/ }) as HTMLButtonElement;
+    await user.click(screen.getByRole('button', { name: 'Registrar gasto' }));
+    const dialogo = screen.getByRole('dialog');
+    const enviar = within(dialogo).getByRole('button', { name: /^Registrar$/ }) as HTMLButtonElement;
     expect(enviar.disabled).toBe(true);
     await user.type(screen.getByLabelText('Monto (₡)'), '15000');
     await user.type(screen.getByLabelText('Descripción'), 'Peaje ruta 27');
     // Falta la categoría: sigue deshabilitado.
-    expect((screen.getByRole('button', { name: /Registrar/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(dialogo).getByRole('button', { name: /^Registrar$/ }) as HTMLButtonElement).disabled).toBe(true);
     await user.selectOptions(screen.getByLabelText('Categoría'), 'Viáticos');
-    expect((screen.getByRole('button', { name: /Registrar/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect((within(dialogo).getByRole('button', { name: /^Registrar$/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('un Socio no ve la acción: el gasto baja utilidad y no la mueve', async () => {
     renderComo('Socio');
     await abrirModulo('Finanzas');
-    expect(screen.queryByRole('button', { name: /Nuevo/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Registrar gasto' })).toBeNull();
   });
 });
 

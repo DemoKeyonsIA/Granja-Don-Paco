@@ -4,6 +4,7 @@ import { User } from '../types';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { sessionHeaders } from '../lib/session';
+import { rolesEfectivos } from '../nav/modulos';
 
 interface CajaRutaProps {
   currentUser: User;
@@ -25,7 +26,7 @@ const METODOS_PAGO_RUTA = ['Efectivo', 'Transferencia', 'SINPE', 'Tarjeta', 'Che
 type SugerenciaVenta = { producto: string; kilos: number; precio: number; pedidosAnalizados: number; precioMinimo: number; precioMaximo: number; metodo: string };
 
 export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId, onReturnHandled, correctionFactura, onCorrectionHandled, onClose, initialOpenClosure = false }: CajaRutaProps) {
-  const rolesUsuario = currentUser.roles?.length ? currentUser.roles : [currentUser.role];
+  const rolesUsuario = rolesEfectivos(currentUser.role, currentUser.roles);
   const puedeElegirGuia = rolesUsuario.some((role) => role === 'Admin' || role === 'Despachador');
   const esVendedorRuta = rolesUsuario.includes('Comercial') && !rolesUsuario.includes('Admin');
   const [guias, setGuias] = useState<any[]>([]);
@@ -93,7 +94,10 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
         setGuiaId(initialGuideId);
       } else if (g.length > 0) {
         const camionesAsignados = c.filter((cam: any) => cam.camioneroId === currentUser.id || cam.camionero_id === currentUser.id || cam.vendedor_id === currentUser.id);
-        const guiasVisibles = puedeElegirGuia ? g : g.filter((gg: any) => camionesAsignados.some((cam: any) => cam.id === gg.camionId));
+        const guiasVisibles = puedeElegirGuia ? g : g.filter((gg: any) =>
+          String(gg.vendedorId || '') === String(currentUser.id)
+          || camionesAsignados.some((cam: any) => String(cam.id) === String(gg.camionId))
+        );
         const prioridadEstado: Record<string, number> = { EnRuta: 0, Cargada: 1, Preparada: 2 };
         const elegida = guiasVisibles.slice().sort((a: any, b: any) => (prioridadEstado[a.estado] ?? 3) - (prioridadEstado[b.estado] ?? 3))[0];
         if (elegida) setGuiaId(elegida.id);
@@ -560,7 +564,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
   return (
     <div className={`route-pos-root space-y-4 pb-4${guia && !cajaCerrada && clienteId && producto ? ' route-pos-has-action' : ''}`}>
       {/* Cabecera: guía activa */}
-      <div className="min-w-0 rounded-2xl p-3 sm:p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+      <div className="seller-card-frame min-w-0 rounded-2xl p-3 sm:p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
         {onClose && <div className="mb-2 flex items-start justify-end gap-3">
           {onClose && <button type="button" onClick={onClose} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ color: 'var(--text-secondary)', borderColor: 'var(--border-default)' }} aria-label="Cerrar registro de venta"><X className="h-5 w-5" /></button>}
         </div>}
@@ -579,7 +583,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
                   <button type="button" onClick={() => { setVentaWizardAbierto(false); resetPos(); setPasoVenta(1); }} aria-label="Cancelar factura" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}><X className="h-5 w-5" /></button>
                 ) : (
                   <div className="relative shrink-0">
-                    <button type="button" aria-label="Crear" aria-haspopup="menu" aria-expanded={menuNuevaAccionAbierto} onClick={() => setMenuNuevaAccionAbierto(open => !open)} className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}><Plus className="h-5 w-5" /></button>
+                    <button type="button" aria-label="Crear factura o solicitar cliente" aria-haspopup="menu" aria-expanded={menuNuevaAccionAbierto} onClick={() => setMenuNuevaAccionAbierto(open => !open)} className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}><Plus className="h-5 w-5" /></button>
                     {menuNuevaAccionAbierto && <>
                       <button type="button" aria-label="Cerrar menú" className="fixed inset-0 z-20 cursor-default" onClick={() => setMenuNuevaAccionAbierto(false)} />
                       <div role="menu" className="absolute right-0 top-full z-30 mt-2 w-60 rounded-xl border p-1.5 shadow-xl" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}>
@@ -633,7 +637,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
       </div>
 
       {guia?.estado === 'EnRuta' && !cajaCerrada && !ventaWizardAbierto && (
-        <section className="rounded-2xl p-4 sm:p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }} aria-labelledby="clientes-pendientes-ruta">
+        <section className="seller-card-frame rounded-2xl p-4 sm:p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }} aria-labelledby="clientes-pendientes-ruta">
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>
               <h2 id="clientes-pendientes-ruta" className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>Entregas pendientes</h2>
@@ -679,7 +683,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
         <section className={`route-ticket-print-overlay${previewTiqueteAbierto ? ' route-ticket-preview-screen' : ''}`} aria-label="Tiquete de ruta para impresión">
           {previewTiqueteAbierto && <button type="button" className="route-ticket-preview-close no-print" onClick={() => setPreviewTiqueteAbierto(false)} aria-label="Cerrar vista previa"><X className="h-5 w-5" /></button>}
           <article className="route-ticket-paper">
-            <header className="route-ticket-header"><img src="/granja-don-paco-logo.png" alt="Granja Don Paco" /><div><span>GRANJA DON PACO</span><strong>{tiquete.demo ? 'VISTA PREVIA DE RUTA' : tiquete.tipoDocumento === 'Factura' ? 'FACTURA ELECTRÓNICA · DEMO' : tiquete.tipoDocumento === 'Tiquete' ? 'TIQUETE ELECTRÓNICO · DEMO' : 'COMPROBANTE DE RUTA'}</strong><small>{tiquete.facturaConsecutivo ? `Factura ${tiquete.facturaConsecutivo}` : 'Control de venta y entrega'}</small></div><div className="route-ticket-number"><small>{tiquete.demo ? 'MUESTRA' : 'N.º DOCUMENTO'}</small><strong>{tiquete.demo ? 'VISTA PREVIA' : tiquete.documentoFiscalConsecutivo || tiquete.tiqueteConsecutivo}</strong></div></header>
+            <header className="route-ticket-header"><img src="/granja-don-paco-logo.png" alt="Granja Don Paco" /><div><span>GRANJA DON PACO</span><strong>{tiquete.demo ? 'VISTA PREVIA DE RUTA' : tiquete.tipoDocumento === 'Factura' ? 'FACTURA ELECTRÓNICA' : tiquete.tipoDocumento === 'Tiquete' ? 'TIQUETE ELECTRÓNICO' : 'COMPROBANTE DE RUTA'}</strong><small>{tiquete.facturaConsecutivo ? `Factura ${tiquete.facturaConsecutivo}` : 'Control de venta y entrega'}</small></div><div className="route-ticket-number"><small>{tiquete.demo ? 'MUESTRA' : 'N.º DOCUMENTO'}</small><strong>{tiquete.demo ? 'VISTA PREVIA' : tiquete.documentoFiscalConsecutivo || tiquete.tiqueteConsecutivo}</strong></div></header>
             <p className="route-ticket-demo">{tiquete.demo ? 'VISTA PREVIA · NO REGISTRA UNA VENTA NI ES UN COMPROBANTE FISCAL' : tiquete.tipoDocumento === 'Factura' || tiquete.tipoDocumento === 'Tiquete' ? 'SIMULACIÓN · NO ES UN COMPROBANTE ELECTRÓNICO VÁLIDO NI SE HA ENVIADO A HACIENDA' : 'COMPROBANTE INTERNO DE RUTA · NO SUSTITUYE EL COMPROBANTE ELECTRÓNICO'}</p>
             <div className="route-ticket-meta"><span><b>FECHA Y HORA</b>{fmtFechaHora(tiquete.fechaHora)}</span><span><b>CONDICIÓN</b>{Number(tiquete.saldoCredito || 0) > 0 ? 'Crédito con abono' : 'Contado'}</span><span><b>RECIBIDO</b>{(tiquete.mediosPago || []).map((p: any) => `${p.metodo}: ${fmtCRC(Number(p.monto))}`).join(' · ') || 'Pendiente de pago'}</span></div>
             <section className="route-ticket-customer"><h3>CLIENTE</h3><strong>{tiquete.cliente?.nombre || 'Cliente'}</strong><div>{tiquete.cliente?.documentoId ? `Cédula: ${tiquete.cliente.documentoId}` : ''}{tiquete.cliente?.telefono ? ` · Tel.: ${tiquete.cliente.telefono}` : ''}</div><div>{[tiquete.cliente?.direccion, tiquete.cliente?.distrito, tiquete.cliente?.canton, tiquete.cliente?.provincia].filter(Boolean).join(', ')}</div></section>
@@ -711,7 +715,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
       )}
 
       {!guia ? (
-        <div className="rounded-2xl p-10 text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+        <div className="seller-card-frame rounded-2xl p-10 text-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
           <Truck className="w-10 h-10 mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
           <p className="font-semibold" style={{ color: 'var(--text-secondary)' }}>Sin guía activa. El despachador debe crear una guía para vender en ruta.</p>
           <button type="button" onClick={() => previsualizarTiquete(true)} className="mt-4 min-h-11 rounded-xl border px-4 py-2 text-sm font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}>
@@ -719,7 +723,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
           </button>
         </div>
       ) : guia.estado === 'Cargada' ? (
-        <section className="mx-auto w-full max-w-xl rounded-2xl p-5 sm:p-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+        <section className="seller-card-frame mx-auto w-full max-w-xl rounded-2xl p-5 sm:p-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
           <div className="mb-5 flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}><Truck className="h-6 w-6" /></span><div><p className="text-xl font-extrabold" style={{ color: 'var(--text-primary)' }}>Antes de salir</p><p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Confirme que recibió la carga asignada.</p></div></div>
           <div className="mb-5 space-y-3 rounded-xl p-4" style={{ background: 'var(--bg-muted)' }}>
             <div className="flex justify-between gap-3"><span style={{ color: 'var(--text-secondary)' }}>Ruta</span><strong className="text-right" style={{ color: 'var(--text-primary)' }}>{nombreRutaAsignada}</strong></div>
@@ -731,7 +735,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
           <p className="mt-3 text-center text-xs" style={{ color: 'var(--text-muted)' }}>Al confirmar, quedará registrada la hora y podrá iniciar ventas.</p>
         </section>
       ) : guia.estado !== 'EnRuta' ? (
-        <section className="rounded-2xl p-5" style={{ background: 'var(--status-warning-soft)', color: 'var(--text-primary)' }}><strong>La ruta aún no está lista para iniciar.</strong><p className="mt-1 text-sm">Pida al administrador de despacho que complete y asigne la guía.</p></section>
+        <section className="seller-card-frame rounded-2xl p-5" style={{ background: 'var(--status-warning-soft)', color: 'var(--text-primary)' }}><strong>La ruta aún no está lista para iniciar.</strong><p className="mt-1 text-sm">Pida al administrador de despacho que complete y asigne la guía.</p></section>
       ) : (
       <div className="route-pos-layout">
           {/* Columna izquierda: cliente + producto */}
@@ -747,12 +751,12 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
                   <div className="mt-2 grid grid-cols-5 gap-1" aria-hidden="true">{pasosVisibles.map((item, index) => <span key={item.paso} className="h-1.5 rounded-full" style={{ background: index <= pasoActivo ? 'var(--brand-action)' : 'var(--bg-muted)' }} />)}</div>
                 </div>;
               })()}
-              {pasoVenta === 1 && <section className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+              {pasoVenta === 1 && <section className="seller-card-frame rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
                 <p className="mb-3 text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>1 · Tipo de documento</p>
                 <button type="button" onClick={() => setSelectorDocumentoAbierto(true)} aria-haspopup="dialog" className="flex min-h-12 w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-bold" style={{ background: 'var(--bg-muted)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><span>{tipoDocumentoRuta === 'Factura' ? 'Factura electrónica' : tipoDocumentoRuta === 'Tiquete' ? 'Tiquete electrónico' : 'Proforma'}</span><span aria-hidden="true">⌄</span></button>
                 {clientePreseleccionadoDesdeEntrega && clienteId && <p className="mt-3 rounded-xl px-3 py-2.5 text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary-dark)' }}>Entrega para: <strong>{clienteSeleccionado?.nombre || clienteSeleccionado?.clienteNombre || 'Cliente seleccionado'}</strong></p>}
               </section>}
-              {pasoVenta === 2 && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+              {pasoVenta === 2 && <div className="seller-card-frame rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
                 <p className="mb-3 flex items-center gap-2 text-base font-extrabold" style={{ color: 'var(--text-primary)' }}><UserIcon className="h-4 w-4" /> 2 · Elija el cliente</p>
                 <div className="route-pos-choice-grid">
                   {clientesPorEntregar.map((c: any) => <button key={c.clienteId} onClick={() => { setClienteId(c.clienteId); setClientePreseleccionadoDesdeEntrega(false); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setProformaOrigenIdRuta(null); setPasoVenta(3); }} aria-pressed={clienteId === c.clienteId} className={cn('min-h-14 rounded-xl px-4 py-3 text-left text-base font-bold transition-all border focus-visible:ring-2', clienteId === c.clienteId && 'ring-2')} style={clienteId === c.clienteId ? { background: 'var(--brand-action)', color: 'var(--text-on-action)', borderColor: 'var(--brand-primary)' } : { background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}>{c.nombre}{c.ventanaIni && <span className="block text-[10px] font-medium opacity-80">{c.ventanaIni}–{c.ventanaFin}</span>}</button>)}
@@ -761,7 +765,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
               </div>}
             </>}
             {/* Selección de producto */}
-            {ventaWizardAbierto && pasoVenta === 3 && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+            {ventaWizardAbierto && pasoVenta === 3 && <div className="seller-card-frame rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-base font-extrabold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                 <span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>3</span>
                 <PackageOpen className="w-4 h-4" /> Elija el producto
@@ -803,7 +807,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
             </div>}
 
             {/* Cantidad y precio */}
-            {ventaWizardAbierto && pasoVenta === 4 && <div className="rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+            {ventaWizardAbierto && pasoVenta === 4 && <div className="seller-card-frame rounded-2xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-base font-extrabold mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                 <span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>4</span>
                 <PackageOpen className="w-4 h-4" /> Cantidad y precio
@@ -880,7 +884,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
             </div>}
 
             {/* Cobro + accion */}
-            {ventaWizardAbierto && pasoVenta === 5 && <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
+            {ventaWizardAbierto && pasoVenta === 5 && <div className="seller-card-frame rounded-2xl p-4 space-y-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
               <p className="text-base font-extrabold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}><span className="flex h-7 w-7 items-center justify-center rounded-full text-sm" style={{ background: 'var(--brand-primary-soft)', color: 'var(--brand-primary)' }}>5</span>Pago y factura</p>
               {tipoDocumentoRuta !== 'Proforma' ? <>
               <p className="text-base font-extrabold" style={{ color: 'var(--text-primary)' }}>¿Cuánto recibe ahora?</p>

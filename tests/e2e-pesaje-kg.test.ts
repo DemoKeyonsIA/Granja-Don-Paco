@@ -29,6 +29,7 @@ beforeAll(async () => {
     await client.execute({ sql: 'INSERT INTO users (id,name,email,role) VALUES (?,?,?,?)', args: [id, nombre, `${id}@demo.test`, rol] });
   }
   await client.execute({ sql: "INSERT INTO clientes (id,nombre,condicion_pago,estado) VALUES ('kg-cliente','Cliente Kg','Contado','Activo')" });
+  await client.execute({ sql: "INSERT INTO rutas (id,nombre,vendedor_asignado,cliente_ids,estado) VALUES ('kg-ruta','Ruta Kg','kg-comercial','[\"kg-cliente\"]','Activa')" });
   await client.execute({ sql: "INSERT INTO productos_catalogo (id,nombre,descripcion,unidad,precio_base,categoria,estado,fecha_creacion) VALUES ('kg-prod','Huevo Kg','Huevo vendido por peso','kg',1000,'Huevos','Activo',?)", args: [ahora] });
   await client.execute({ sql: "INSERT INTO listas_precios (id,nombre,tipo,estado,fecha_inicio) VALUES ('kg-lista','General Kg','Global','Activa','2026-01-01')" });
   await client.execute({ sql: "INSERT INTO precios_detalle (id,lista_id,producto,precio_unitario,precio_minimo,precio_maximo,descuento_maximo,unidad) VALUES ('kg-precio','kg-lista','Huevo Kg',1000,900,1100,0,'kg')" });
@@ -55,10 +56,11 @@ describe('E2E — custodia medida en kg', () => {
 
     await bodega().post('/api/bodega/ingresar-etiquetas').send({ codigos: ['ETQ-KG-001'], usuarioId: 'kg-bodega' }).expect(200);
     const guiaResp = await admin().post('/api/logistica/guias').send({
-      camionId: 'kg-camion', etiquetasIds: ['kg-etiqueta'], responsablesCarga: 'kg-bodega', responsableTransporte: 'Comercial',
+      camionId: 'kg-camion', rutaId: 'kg-ruta', etiquetasIds: ['kg-etiqueta'], responsablesCarga: 'kg-bodega', responsableTransporte: 'Comercial',
     }).expect(201);
     expect(guiaResp.body.totalKg).toBe(20);
     const guiaId = String((await client.execute({ sql: 'SELECT id FROM guias_despacho ORDER BY fecha DESC LIMIT 1' })).rows[0].id);
+    await comercial().post(`/api/logistica/guias/${guiaId}/marcar-en-ruta`).expect(200);
 
     const merma = await comercial().post('/api/logistica/merma').send({
       guiaId,

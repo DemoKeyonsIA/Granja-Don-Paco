@@ -8,6 +8,12 @@ import type { User } from '../../src/types';
 
 const USUARIO: User = { id: 'u1', name: 'Ana Bodega', email: 'ana@granja.test', role: 'Bodeguero', roles: ['Bodeguero'] };
 const respuesta = (data: unknown, ok = true) => ({ ok, status: ok ? 200 : 400, json: async () => data });
+const respuestaRecepciones = (pendientes: unknown[] = []) => respuesta({
+  pendientes,
+  recientes: [],
+  hayMasRecientes: false,
+  siguienteOffset: 0,
+});
 
 afterEach(() => {
   cleanup();
@@ -20,7 +26,7 @@ describe('operación móvil de Bodega', () => {
     let fallar = true;
     vi.stubGlobal('fetch', vi.fn(async () => {
       if (fallar) return respuesta({ error: 'Sin conexión' }, false);
-      return respuesta([]);
+      return respuestaRecepciones();
     }));
 
     const user = userEvent.setup();
@@ -30,7 +36,7 @@ describe('operación móvil de Bodega', () => {
 
     fallar = false;
     await user.click(screen.getByRole('button', { name: 'Intentar de nuevo' }));
-    expect(await screen.findByText(/Hola, Ana/i)).toBeTruthy();
+    expect(await screen.findByText('Todo recibido')).toBeTruthy();
   });
 
   it('permite registrar cero recibido cuando se indica el motivo y confirma el resultado', async () => {
@@ -38,6 +44,17 @@ describe('operación móvil de Bodega', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (init?.method === 'POST') return post();
+      if (url.includes('/api/operaciones/recepciones/movil')) return respuestaRecepciones([{
+        cargaId: 'c1', granjaId: 'g1', nombreGranja: 'Granja Norte', vehiculo: 'Camión 1',
+        fechaSalida: '2026-11-06T10:00:00Z', responsableEntrega: 'Luis',
+        items: [{
+          id: 't1', cargaId: 'c1', granjaOrigenId: 'g1', fechaSalida: '2026-11-06T10:00:00Z',
+          responsableEntrega: 'Luis', vehiculo: 'Camión 1', estado: 'EnTransito', producto: 'Huevos - Grande',
+          cantidad: 10, unidad: 'kg', nombreGranja: 'Granja Norte', recibida: false, recepcionId: null,
+          cantidadRecibida: null, diferencia: null, motivoDiferencia: null, fechaRecepcion: null,
+          responsableRecepcion: null,
+        }],
+      }]);
       if (url.includes('/api/operaciones/traslados')) return respuesta([{
         id: 't1', cargaId: 'c1', granjaOrigenId: 'g1', fechaSalida: '2026-11-06T10:00:00Z',
         responsableEntrega: 'Luis', vehiculo: 'Camión 1', estado: 'EnTransito',
@@ -51,8 +68,7 @@ describe('operación móvil de Bodega', () => {
 
     const user = userEvent.setup();
     render(<BodegaMovil currentUser={USUARIO} />);
-    await user.click(await screen.findByRole('button', { name: /Recibir carga/i }));
-    await user.click(await screen.findByRole('button', { name: /Camión 1/i }));
+    await user.click(await screen.findByRole('button', { name: /Granja Norte.*Camión 1/i }));
 
     const recibido = await screen.findByLabelText('Peso recibido (kg)');
     expect(screen.getByRole('region', { name: 'Confirmar recepción' })).toBeTruthy();
@@ -65,7 +81,7 @@ describe('operación móvil de Bodega', () => {
     expect((confirmar as HTMLButtonElement).disabled).toBe(false);
     await user.click(confirmar);
 
-    await waitFor(() => expect(screen.getByText('¡Carga recibida!')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Carga recibida' })).toBeTruthy());
     expect(post).toHaveBeenCalledTimes(1);
   });
 });

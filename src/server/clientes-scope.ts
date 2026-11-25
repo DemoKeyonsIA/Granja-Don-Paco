@@ -1,3 +1,5 @@
+import { rolesParaUsuario } from '../lib/role-permissions';
+
 /** Alcance por ruta para la cartera del rol Comercial. */
 const parseLista = (raw: unknown): string[] => {
   if (Array.isArray(raw)) return raw.map(String);
@@ -10,7 +12,7 @@ const parseLista = (raw: unknown): string[] => {
 };
 
 export const tieneRol = (user: any, role: string) =>
-  [user?.role, ...(user?.roles || [])].filter(Boolean).includes(role);
+  rolesParaUsuario(user?.role, user?.roles).includes(role);
 
 export async function rutasAsignadasDelVendedor(db: any, userId: string) {
   const rutas = await db.query.rutas.findMany();
