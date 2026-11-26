@@ -51,6 +51,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
   const [tiquete, setTiquete] = useState<any>(null);
   const [previewTiqueteAbierto, setPreviewTiqueteAbierto] = useState(false);
   const [documentoCreado, setDocumentoCreado] = useState<any>(null);
+  const [correoDocumentoDestino, setCorreoDocumentoDestino] = useState('');
   const [cierreRutaAbierto, setCierreRutaAbierto] = useState(initialOpenClosure);
   const [ventas, setVentas] = useState<any[]>([]);
   const [gastosRuta, setGastosRuta] = useState<any[]>([]);
@@ -243,6 +244,11 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
     return () => window.removeEventListener('keydown', onKey);
   }, [tiquete]);
 
+  useEffect(() => {
+    if (!documentoCreado) return;
+    setCorreoDocumentoDestino(String(documentoCreado.cliente?.email || documentoCreado.cliente?.correo || ''));
+  }, [documentoCreado]);
+
   const imprimirTiquete = () => {
     const limpiar = () => document.body.classList.remove('print-route-ticket-only');
     window.addEventListener('afterprint', limpiar, { once: true });
@@ -270,25 +276,32 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
     setPreviewTiqueteAbierto(true);
   };
 
-  const imprimirProformaRuta = (proforma: any, cliente: any) => {
+  const imprimirProformaRuta = (proforma: any, cliente: any, imprimir = false) => {
     const escapar = (valor: unknown) => String(valor ?? '').replace(/[&<>"']/g, (caracter) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[caracter] as string));
     const lineas = (proforma.detalles || []).map((linea: any) => `<tr><td>${escapar(linea.producto)}</td><td>${Number(linea.cantidad || 0).toLocaleString('es-CR')} kg</td><td>${fmtCRC(Number(linea.precio_unitario || 0))}</td><td>${fmtCRC(Number(linea.subtotal || 0))}</td></tr>`).join('');
     const ventana = window.open('', '_blank', 'width=820,height=900');
     if (!ventana) return toast.error('Permita las ventanas emergentes para ver la proforma.');
     ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapar(proforma.consecutivo)} · Proforma</title><style>body{font:15px Arial,sans-serif;color:#172033;max-width:760px;margin:32px auto;padding:24px}h1{margin-bottom:4px}.muted{color:#687386}.notice{margin:20px 0;padding:12px;background:#fff6dd;border:1px solid #e6c46b;border-radius:8px;font-weight:bold}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}td:nth-child(n+2),th:nth-child(n+2){text-align:right}.total{text-align:right;font-size:22px;font-weight:bold;margin-top:18px}</style></head><body><h1>Proforma / cotización</h1><p class="muted">${escapar(proforma.consecutivo)} · ${new Date(proforma.fecha).toLocaleString('es-CR')}</p><p>Cliente: <b>${escapar(cliente?.nombre || 'Cliente')}</b></p><div class="notice">Documento comercial no fiscal. No es factura ni comprobante electrónico.</div><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Precio / kg</th><th>Total</th></tr></thead><tbody>${lineas}</tbody></table><p>Subtotal: ${fmtCRC(Number(proforma.subtotal || 0))}</p><p>Descuento: ${fmtCRC(Number(proforma.descuento || 0))}</p><div class="total">Total cotizado: ${fmtCRC(Number(proforma.total || 0))}</div><p class="muted">Esta cotización no registra una venta, cobro ni salida de inventario.</p></body></html>`);
-    ventana.document.close(); ventana.focus(); ventana.print();
+    ventana.document.close(); ventana.focus();
+    if (imprimir) ventana.print();
   };
 
-  const prepararCorreoDocumento = (documento: any) => {
+  const prepararCorreoDocumento = (documento: any, correoDestino: string) => {
     const { tipo, data, cliente } = documento || {};
-    const correo = cliente?.email || cliente?.correo || '';
-    if (!correo) return toast.error('Este cliente no tiene correo registrado. Agréguelo en su perfil para preparar el envío.');
+    const correo = String(correoDestino || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return toast.error('Escriba un correo válido para el cliente.');
     const consecutivo = tipo === 'Proforma' ? data.consecutivo : (data.documentoFiscalConsecutivo || data.tiqueteConsecutivo || 'Documento de ruta');
     const nombreTipo = tipo === 'Proforma' ? 'Proforma' : tipo === 'Tiquete' ? 'Tiquete electrónico' : 'Factura electrónica';
     const productoDoc = data.producto || data.detalles?.map((linea: any) => `${linea.producto} · ${Number(linea.cantidad || 0).toFixed(2)} kg`).join(', ') || '';
     const asunto = `${nombreTipo} ${consecutivo} · Granja Don Paco`;
     const cuerpo = [`Hola ${cliente?.nombre || 'cliente'},`, '', `Te compartimos el detalle de ${nombreTipo.toLowerCase()} ${consecutivo}.`, productoDoc, `Total: ${fmtCRC(Number(data.total || 0))}`, '', tipo === 'Proforma' ? 'Esta proforma es una cotización comercial; no registra cobro ni salida de inventario.' : 'Este documento se encuentra en simulación y no ha sido enviado a Hacienda.', '', 'Granja Don Paco'].join('\n');
-    window.location.href = `mailto:${encodeURIComponent(correo)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+    const enlaceCorreo = document.createElement('a');
+    enlaceCorreo.href = `mailto:${encodeURIComponent(correo)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+    enlaceCorreo.target = '_blank';
+    enlaceCorreo.rel = 'noopener noreferrer';
+    document.body.appendChild(enlaceCorreo);
+    enlaceCorreo.click();
+    enlaceCorreo.remove();
   };
 
   const anularProformaRuta = async (proforma: any) => {
@@ -705,11 +718,13 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
               <button type="button" onClick={() => setDocumentoCreado(null)} aria-label="Cerrar" className="rounded-lg p-2" style={{ color: 'var(--text-secondary)' }}><X className="h-5 w-5" /></button>
             </div>
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <button type="button" onClick={() => { if (documentoCreado.tipo === 'Proforma') imprimirProformaRuta(documentoCreado.data, documentoCreado.cliente); else { setDocumentoCreado(null); setPreviewTiqueteAbierto(true); } }} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Eye className="h-4 w-4" />Ver documento</button>
-              <button type="button" onClick={() => { if (documentoCreado.tipo === 'Proforma') imprimirProformaRuta(documentoCreado.data, documentoCreado.cliente); else imprimirTiquete(); }} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Printer className="h-4 w-4" />Imprimir</button>
-              <button type="button" onClick={() => prepararCorreoDocumento(documentoCreado)} disabled={!documentoCreado.cliente?.email && !documentoCreado.cliente?.correo} className="flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50 sm:col-span-2" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}><Mail className="h-4 w-4" />Preparar correo para el cliente</button>
+              <button type="button" onClick={() => { if (documentoCreado.tipo === 'Proforma') imprimirProformaRuta(documentoCreado.data, documentoCreado.cliente); else setPreviewTiqueteAbierto(true); }} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Eye className="h-4 w-4" />Ver documento</button>
+              <button type="button" onClick={() => { if (documentoCreado.tipo === 'Proforma') imprimirProformaRuta(documentoCreado.data, documentoCreado.cliente, true); else imprimirTiquete(); }} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Printer className="h-4 w-4" />Imprimir</button>
+              <label className="text-xs font-semibold sm:col-span-2" style={{ color: 'var(--text-secondary)' }} htmlFor="correo-documento-ruta">Correo del cliente</label>
+              <input id="correo-documento-ruta" type="email" value={correoDocumentoDestino} onChange={event => setCorreoDocumentoDestino(event.target.value)} placeholder="cliente@correo.com" autoComplete="email" className="min-h-11 w-full rounded-xl border px-3 py-2 text-sm sm:col-span-2" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} />
+              <button type="button" onClick={() => prepararCorreoDocumento(documentoCreado, correoDocumentoDestino)} disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoDocumentoDestino.trim())} className="flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50 sm:col-span-2" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}><Mail className="h-4 w-4" />Enviar por correo</button>
             </div>
-            <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>{documentoCreado.cliente?.email || documentoCreado.cliente?.correo ? `Se abrirá el correo dirigido a ${documentoCreado.cliente.email || documentoCreado.cliente.correo}.` : 'El cliente no tiene correo registrado. Agréguelo en su perfil para habilitar el envío.'} El correo se abrirá como borrador en su aplicación de email.</p>
+            <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>Se abrirá un borrador en su aplicación de correo para revisarlo y enviarlo. Esta ventana seguirá abierta; el documento también puede imprimirse desde aquí.</p>
           </section>
         </div>
       )}
