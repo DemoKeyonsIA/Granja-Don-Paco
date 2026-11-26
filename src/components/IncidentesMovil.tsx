@@ -25,7 +25,7 @@ type Incidente = {
   fecha: string;
 };
 
-interface Props { currentUser: User; onBack?: () => void; }
+interface Props { currentUser: User; onBack?: () => void; startInForm?: boolean; }
 
 const CATEGORIAS = ['Mortalidad', 'Enfermedad', 'Fiebre / Baja postura', 'Problema de alimentación', 'Problema de iluminación', 'Temperatura / Clima', 'Fuga de agua', 'Falla de equipo', 'Daño en instalaciones', 'Avispa / Plaga / Predador', 'Otro'];
 const SEVERIDADES = ['Alta', 'Media', 'Baja'];
@@ -48,8 +48,8 @@ function IncStepper({ n }: { n: number }) {
   );
 }
 
-export default function IncidentesMovil({ currentUser, onBack }: Props) {
-  const [screen, setScreen] = useState<'inicio' | 'form' | 'resumen' | 'exito'>('inicio');
+export default function IncidentesMovil({ currentUser, onBack, startInForm = false }: Props) {
+  const [screen, setScreen] = useState<'inicio' | 'form' | 'resumen' | 'exito'>(() => startInForm ? 'form' : 'inicio');
   const [formStep, setFormStep] = useState<0 | 1 | 2 | 3 | 4 | 5>(0);
   const [granjas, setGranjas] = useState<Granja[]>([]);
   const [galerones, setGalerones] = useState<Galeron[]>([]);
@@ -255,9 +255,9 @@ export default function IncidentesMovil({ currentUser, onBack }: Props) {
     if (formStep === 0) {
       return (
         <div className="max-w-md mx-auto px-4 pt-4 pb-24 animate-in fade-in slide-in-from-bottom-4">
-          <button onClick={() => setScreen('inicio')} className="flex items-center gap-1 text-sm font-semibold mb-4"
+          <button onClick={() => onBack ? onBack() : setScreen('inicio')} className="flex items-center gap-1 text-sm font-semibold mb-4"
             style={{ color: 'var(--brand-primary)' }}>
-            <ChevronLeft className="w-4 h-4" /> Volver
+            <ChevronLeft className="w-4 h-4" /> {onBack ? 'Volver a opciones' : 'Volver'}
           </button>
           <IncStepper n={0} />
           <h2 className="text-xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
@@ -565,10 +565,10 @@ export default function IncidentesMovil({ currentUser, onBack }: Props) {
       <p className="text-sm mb-10" style={{ color: 'var(--text-muted)' }}>
         El {categoria.toLowerCase()} quedó registrado como <strong style={{ color: 'var(--text-primary)' }}>Reportado</strong>
       </p>
-      <button onClick={() => setScreen('inicio')}
+      <button onClick={() => onBack ? onBack() : setScreen('inicio')}
         className="w-full max-w-sm py-5 rounded-2xl text-lg font-black transition-all active:scale-[0.97]"
         style={{ background: 'var(--brand-primary)', color: 'var(--text-inverse)' }}>
-        Volver al inicio
+        {onBack ? 'Volver a opciones' : 'Volver al inicio'}
       </button>
     </div>
   );

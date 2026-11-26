@@ -711,7 +711,7 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
                 <Suspense fallback={<ModuleLoading />}><div className="max-w-md mx-auto">
                   {effectiveSub === 'carga' && <DespachoMovil currentUser={currentUser} onNavigateToRecepcion={() => setSubTab('alimento-recibido')} onNavigateToIncidencias={() => setSubTab('incidencias')} />}
                   {effectiveSub === 'alimento-recibido' && <RecepcionAlimentoMovil currentUser={currentUser} onBack={() => setSubTab('carga')} />}
-                  {effectiveSub === 'incidencias' && <IncidentesMovil currentUser={currentUser} onBack={() => setSubTab('carga')} />}
+                  {effectiveSub === 'incidencias' && <IncidentesMovil currentUser={currentUser} onBack={() => setSubTab('carga')} startInForm />}
                   {effectiveSub === 'confirmar' && <CamioneroMovil currentUser={currentUser} />}
                   {effectiveSub === 'recibir' && <BodegaMovil currentUser={currentUser} />}
                   {effectiveSub === 'venta-movil' && <CajaRuta currentUser={currentUser} initialGuideId={devolucionRutaObjetivo?.guiaId || correccionRutaObjetivo?.guiaId} returnInvoiceId={devolucionRutaObjetivo?.facturaId} correctionFactura={correccionRutaObjetivo} onReturnHandled={limpiarObjetivoDevolucion} onCorrectionHandled={limpiarObjetivoCorreccion} />}
