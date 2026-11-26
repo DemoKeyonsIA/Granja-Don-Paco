@@ -782,16 +782,16 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
                     aria-pressed={producto === i.producto}
                     className={cn('min-h-16 rounded-xl px-4 py-3 text-left text-base font-bold border transition-all', producto === i.producto && 'ring-2')}
                     style={producto === i.producto
-                      ? { background: 'var(--brand-action)', color: 'var(--text-on-action)', borderColor: 'var(--brand-primary)' }
+                      ? { background: 'var(--brand-primary-soft)', color: 'var(--text-primary)', borderColor: 'var(--brand-action)', borderWidth: 2 }
                       : { background: 'var(--bg-muted)', color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}
                   >
-                    {i.producto}
-                    <span className="block mt-1 text-sm font-medium opacity-90">{i.unidad === 'kg' ? `Quedan ${Number(i.cantidad).toFixed(2)} kg` : `Unidad de inventario incompatible: ${i.unidad || 'sin definir'}`}</span>
-                    <span className="block text-xs font-medium opacity-80">
+                    <span className="block leading-snug font-extrabold" style={{ color: 'var(--text-primary)' }}>{i.producto}</span>
+                    <span className="block mt-1 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{i.unidad === 'kg' ? `Quedan ${Number(i.cantidad).toFixed(2)} kg` : `Unidad de inventario incompatible: ${i.unidad || 'sin definir'}`}</span>
+                    <span className="block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
                       {!clienteId ? 'Elija cliente para ver precio' : cargandoPrecio ? 'Consultando precio…' : Number(preciosProductos[i.producto]?.precio) > 0
                         ? `${fmtCRC(Number(preciosProductos[i.producto].precio))} por kg · ${fmtCRC(Number(preciosProductos[i.producto].precioMinimo ?? preciosProductos[i.producto].precio))}–${fmtCRC(Number(preciosProductos[i.producto].precioMaximo ?? preciosProductos[i.producto].precio))}`
                         : preciosProductos[i.producto]?.error ? 'No se pudo consultar el precio' : 'Precio no configurado'}</span>
-                    {sugerenciasVenta[i.producto] && <span className="mt-1 block text-xs font-bold" style={{ color: producto === i.producto ? 'var(--text-on-action)' : 'var(--brand-primary)' }}>Sugerido: {sugerenciasVenta[i.producto].kilos > 0 ? `${sugerenciasVenta[i.producto].kilos.toFixed(2)} kg · ` : ''}{fmtCRC(sugerenciasVenta[i.producto].precio)}/kg</span>}
+                    {sugerenciasVenta[i.producto] && <span className="mt-1 block text-xs font-bold" style={{ color: 'var(--brand-primary)' }}>Sugerido: {sugerenciasVenta[i.producto].kilos > 0 ? `${sugerenciasVenta[i.producto].kilos.toFixed(2)} kg · ` : ''}{fmtCRC(sugerenciasVenta[i.producto].precio)}/kg</span>}
                   </button>
                 ))}
               </div>
