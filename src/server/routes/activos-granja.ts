@@ -1,6 +1,7 @@
 import { and, eq, gte, inArray, lte } from 'drizzle-orm';
 import * as schema from '../../db/schema';
 import { productoCatalogoPara } from '../../lib/kilos';
+import { rolesParaUsuario } from '../../lib/role-permissions';
 
 /** Registra salud avícola, alimento, mantenimiento de activos y desperdicio. */
 export function registrarRutasActivosGranja(app: any, db: any, requirePermission?: (...args: any[]) => any, logAudit?: (...args: any[]) => Promise<void>) {
@@ -61,6 +62,50 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
   });
 
   // ==================== ALIMENTO / SILOS ====================
+
+  // El encargado informa los sacos que recibió. Es un aviso para Administración:
+  // no crea ni modifica inventario, evitando duplicar la compra que ya registró Finanzas.
+  app.post('/api/alimento/recepciones', requirePermission ? requirePermission('produccion', 'create') : undefined, async (req: any, res: any) => {
+    try {
+      const usuario = req.usuario;
+      const roles = rolesParaUsuario(usuario?.role, usuario?.roles);
+      if (!roles.includes('Despachador') || roles.includes('Comercial')) return res.status(403).json({ error: 'Solo el encargado de galerón puede reportar una recepción de alimento.' });
+      const tipoAlimento = String(req.body?.tipoAlimento || '').trim();
+      const cantidadSacos = Number(req.body?.cantidadSacos);
+      const galeronId = String(req.body?.galeronId || '').trim();
+      const proveedor = String(req.body?.proveedor || '').trim();
+      const referencia = String(req.body?.referencia || '').trim();
+      const observaciones = String(req.body?.observaciones || '').trim();
+      if (!['Inicial', 'Crecimiento', 'Producción', 'Premix'].includes(tipoAlimento)) return res.status(400).json({ error: 'Seleccione un tipo de alimento válido.' });
+      if (!Number.isSafeInteger(cantidadSacos) || cantidadSacos <= 0) return res.status(400).json({ error: 'Indique la cantidad recibida en sacos completos.' });
+      if (!galeronId) return res.status(400).json({ error: 'Seleccione el galerón que recibió el alimento.' });
+      if (proveedor.length > 160 || referencia.length > 160 || observaciones.length > 500) return res.status(400).json({ error: 'Revise los datos: el proveedor y la referencia aceptan hasta 160 caracteres y la nota hasta 500.' });
+      const galeron = await db.query.galerones.findFirst({ where: eq(schema.galerones.id, galeronId) });
+      if (!galeron || galeron.estado === 'Archivado') return res.status(404).json({ error: 'El galerón seleccionado no está disponible.' });
+      const granja = await db.query.granjas.findFirst({ where: eq(schema.granjas.id, galeron.granjaId) });
+      const fecha = new Date().toISOString();
+      const id = crypto.randomUUID();
+      const datos = {
+        tipoAlimento, cantidadSacos, unidad: 'sacos', galeronId,
+        galeron: galeron.nombre, granja: granja?.nombre || null,
+        proveedor: proveedor || null, referencia: referencia || null,
+        observaciones: observaciones || null,
+        reportadoPorNombre: usuario?.name || usuario?.nombre || 'Encargado de galerón',
+        inventarioActualizado: false,
+      };
+      await db.insert(schema.aprobaciones).values({
+        id, tipo: 'RecepcionAlimento', modulo: 'Inventario de alimento', referenciaId: null,
+        solicitudUsuario: String(usuario.id),
+        descripcion: `Recepción reportada: ${cantidadSacos} sacos de alimento de ${tipoAlimento.toLowerCase()} en ${galeron.nombre}.`,
+        datos: JSON.stringify(datos), estado: 'Pendiente', fechaSolicitud: fecha,
+      });
+      await logAudit?.(String(usuario.id), 'ReportarRecepcion', 'RecepcionAlimento', id, null, datos, 'Recepción informada por encargado; pendiente de revisión administrativa.');
+      return res.status(201).json({ success: true, id, datos, message: 'Recepción enviada a Administración.' });
+    } catch (error: any) {
+      console.error('Error reportando recepción de alimento:', error);
+      return res.status(500).json({ error: 'No se pudo enviar la recepción a Administración.' });
+    }
+  });
 
   app.get("/api/alimento", requirePermission ? requirePermission(['produccion', 'inventario_bodega'], 'view') : undefined, async (req, res) => {
     try {

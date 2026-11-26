@@ -507,8 +507,8 @@ describe('sub-tab por defecto', () => {
 });
 
 describe('camino móvil de Operaciones', () => {
-  it('Despachador ve Carga e Incidencias', () => {
-    expect(ids(subTabsOperacionesMovil(['Despachador']))).toEqual(['carga', 'incidencias']);
+  it('Despachador ve Carga, Recepción de alimento e Incidencias', () => {
+    expect(ids(subTabsOperacionesMovil(['Despachador']))).toEqual(['carga', 'alimento-recibido', 'incidencias']);
   });
 
   it('Comercial (incluido Camionero legado) ve Venta, Facturar y Cargas', () => {

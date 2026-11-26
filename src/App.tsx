@@ -28,6 +28,7 @@ const Etiquetas = lazy(() => import("./components/Etiquetas"));
 const Pesos = lazy(() => import("./components/Pesos"));
 const SaludAvicola = lazy(() => import("./components/SaludAvicola"));
 const Alimento = lazy(() => import("./components/Alimento"));
+const RecepcionAlimentoMovil = lazy(() => import("./components/RecepcionAlimentoMovil"));
 const Mantenimiento = lazy(() => import("./components/Mantenimiento"));
 const Admin = lazy(() => import("./components/Admin"));
 const Office = lazy(() => import("./components/Office"));
@@ -709,6 +710,7 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
                 {effectiveSub !== 'facturar-movil' && tabsVisibles.length > 1 && renderFilaTabs(tabsVisibles, 'primario')}
                 <Suspense fallback={<ModuleLoading />}><div className="max-w-md mx-auto">
                   {effectiveSub === 'carga' && <DespachoMovil currentUser={currentUser} />}
+                  {effectiveSub === 'alimento-recibido' && <RecepcionAlimentoMovil currentUser={currentUser} />}
                   {effectiveSub === 'incidencias' && <IncidentesMovil currentUser={currentUser} />}
                   {effectiveSub === 'confirmar' && <CamioneroMovil currentUser={currentUser} />}
                   {effectiveSub === 'recibir' && <BodegaMovil currentUser={currentUser} />}

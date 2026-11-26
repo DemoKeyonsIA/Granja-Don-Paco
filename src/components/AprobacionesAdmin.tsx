@@ -27,6 +27,7 @@ const NOMBRE_TIPO: Record<string, string> = {
   PrecioFueraRango: 'Precio fuera del rango autorizado',
   DescuentoNoAutorizado: 'Descuento requiere aprobación',
   AltaClienteRuta: 'Alta de cliente solicitada por vendedor',
+  RecepcionAlimento: 'Sacos de alimento recibidos en galerón',
 };
 
 export default function AprobacionesAdmin({ currentUser }: { currentUser: User }) {
@@ -62,6 +63,10 @@ export default function AprobacionesAdmin({ currentUser }: { currentUser: User }
   }
 
   const resolver = async (item: Aprobacion, estado: 'Aprobado' | 'Rechazado') => {
+    if (item.tipo === 'RecepcionAlimento' && estado === 'Rechazado' && !motivos[item.id]?.trim()) {
+      toast.error('Indique la diferencia encontrada para informársela al encargado.');
+      return;
+    }
     const detalleConteo = item.tipo === 'DiferenciaConteoBodega' ? (() => { try { return JSON.parse(item.datos || '{}'); } catch { return {}; } })() : null;
     if (item.tipo === 'DiferenciaConteoBodega' && estado === 'Aprobado' && !detalleConteo?.segundoConteo) return;
     setActualizando(item.id);
@@ -72,7 +77,9 @@ export default function AprobacionesAdmin({ currentUser }: { currentUser: User }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'No se pudo resolver la aprobación');
-      toast.success(estado === 'Aprobado' ? item.tipo === 'AltaClienteRuta' ? 'Cliente aprobado y agregado a la ruta' : 'Solicitud aprobada' : item.tipo === 'DiferenciaConteoBodega' ? 'Bodega debe realizar otro conteo' : 'Solicitud rechazada');
+      toast.success(item.tipo === 'RecepcionAlimento'
+        ? estado === 'Aprobado' ? 'Recepción marcada como revisada' : 'Diferencia reportada a partir de la recepción'
+        : estado === 'Aprobado' ? item.tipo === 'AltaClienteRuta' ? 'Cliente aprobado y agregado a la ruta' : 'Solicitud aprobada' : item.tipo === 'DiferenciaConteoBodega' ? 'Bodega debe realizar otro conteo' : 'Solicitud rechazada');
       setMotivos(prev => { const next = { ...prev }; delete next[item.id]; return next; });
       await cargar();
     } catch (error) {
@@ -112,20 +119,22 @@ export default function AprobacionesAdmin({ currentUser }: { currentUser: User }
           {items.map(item => {
             const esConteoFisico = item.tipo === 'DiferenciaConteoBodega';
             const esAltaCliente = item.tipo === 'AltaClienteRuta';
+            const esRecepcionAlimento = item.tipo === 'RecepcionAlimento';
             const datosConteo = esConteoFisico ? (() => { try { return JSON.parse(item.datos || '{}'); } catch { return {}; } })() : null;
             const datosCliente = esAltaCliente ? (() => { try { return JSON.parse(item.datos || '{}'); } catch { return {}; } })() : null;
+            const datosAlimento = esRecepcionAlimento ? (() => { try { return JSON.parse(item.datos || '{}'); } catch { return {}; } })() : null;
             const requiereReconteo = esConteoFisico && !datosConteo?.segundoConteo;
             return (
               <article key={item.id} className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-neutral-500">{item.modulo} · {item.referenciaId || 'Sin referencia'}</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-neutral-500">{item.modulo} · {item.referenciaId || (esRecepcionAlimento ? 'Recepción reportada' : 'Sin referencia')}</p>
                     <h3 className="mt-1 text-base font-extrabold text-neutral-900 dark:text-white">{NOMBRE_TIPO[item.tipo] || item.tipo}</h3>
                     <p className="mt-2 text-sm leading-6 text-neutral-700 dark:text-neutral-200">{item.descripcion}</p>
                   </div>
                   <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-extrabold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">Pendiente</span>
                 </div>
-                <p className="mt-3 text-xs text-neutral-500">Reportado por {item.solicitudUsuario} · {new Date(item.fechaSolicitud).toLocaleString()}</p>
+                <p className="mt-3 text-xs text-neutral-500">Reportado por {datosAlimento?.reportadoPorNombre || item.solicitudUsuario} · {new Date(item.fechaSolicitud).toLocaleString()}</p>
 
                 {esAltaCliente && datosCliente && (
                   <div className="mt-4 grid gap-x-6 gap-y-2 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950 sm:grid-cols-2 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
@@ -135,6 +144,18 @@ export default function AprobacionesAdmin({ currentUser }: { currentUser: User }
                     <p><span className="font-semibold">Correo:</span> {datosCliente.email || 'No indicado'}</p>
                     <p className="sm:col-span-2"><span className="font-semibold">Ubicación:</span> {[datosCliente.direccion, datosCliente.distrito, datosCliente.canton, datosCliente.provincia].filter(Boolean).join(', ') || 'No indicada'}</p>
                     <p className="sm:col-span-2 text-xs">Al aprobar, el cliente se crea como contado y queda agregado a esta ruta.</p>
+                  </div>
+                )}
+
+                {esRecepcionAlimento && datosAlimento && (
+                  <div className="mt-4 grid gap-x-6 gap-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 sm:grid-cols-2 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+                    <p><span className="font-semibold">Cantidad recibida:</span> {datosAlimento.cantidadSacos} sacos</p>
+                    <p><span className="font-semibold">Tipo:</span> {datosAlimento.tipoAlimento || '—'}</p>
+                    <p><span className="font-semibold">Galerón:</span> {datosAlimento.galeron || '—'}{datosAlimento.granja ? ` · ${datosAlimento.granja}` : ''}</p>
+                    <p><span className="font-semibold">Proveedor:</span> {datosAlimento.proveedor || 'No indicado'}</p>
+                    <p><span className="font-semibold">Factura o referencia:</span> {datosAlimento.referencia || 'No indicada'}</p>
+                    {datosAlimento.observaciones && <p className="sm:col-span-2"><span className="font-semibold">Nota:</span> {datosAlimento.observaciones}</p>}
+                    <p className="sm:col-span-2 text-xs">Este reporte no modifica existencias. Revise la cantidad contra la compra antes de actualizar el inventario.</p>
                   </div>
                 )}
 
@@ -148,21 +169,21 @@ export default function AprobacionesAdmin({ currentUser }: { currentUser: User }
                 )}
 
                 <label className="mt-4 block text-xs font-bold text-neutral-600 dark:text-neutral-300" htmlFor={`motivo-${item.id}`}>
-                  {esConteoFisico ? 'Nota de resolución o motivo para pedir otra revisión' : 'Motivo (opcional)'}
+                  {esConteoFisico ? 'Nota de resolución o motivo para pedir otra revisión' : esRecepcionAlimento ? 'Nota para el encargado (obligatoria si reporta diferencia)' : 'Motivo (opcional)'}
                 </label>
                 <textarea id={`motivo-${item.id}`} rows={2} value={motivos[item.id] || ''}
                   onChange={e => setMotivos(prev => ({ ...prev, [item.id]: e.target.value }))}
                   className="mt-1 w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 dark:border-neutral-600 dark:bg-neutral-800 dark:text-white"
-                  placeholder="Escriba una nota clara para el equipo" />
+                  placeholder={esRecepcionAlimento ? 'Escriba la diferencia encontrada, si aplica' : 'Escriba una nota clara para el equipo'} />
                 <div className="mt-3 flex flex-wrap justify-end gap-2">
                   <button type="button" onClick={() => void resolver(item, 'Rechazado')} disabled={actualizando === item.id}
                     className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:bg-neutral-900 dark:text-red-300">
-                    <X className="h-4 w-4" /> {esConteoFisico ? 'Solicitar nuevo conteo' : 'Rechazar'}
+                    <X className="h-4 w-4" /> {esConteoFisico ? 'Solicitar nuevo conteo' : esRecepcionAlimento ? 'Reportar diferencia' : 'Rechazar'}
                   </button>
                   <button type="button" onClick={() => void resolver(item, 'Aprobado')} disabled={actualizando === item.id || requiereReconteo}
                     title={requiereReconteo ? 'Se requiere un segundo conteo realizado por otra persona' : undefined}
                     className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-extrabold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50">
-                    <Check className="h-4 w-4" /> {actualizando === item.id ? 'Guardando…' : 'Aprobar'}
+                    <Check className="h-4 w-4" /> {actualizando === item.id ? 'Guardando…' : esRecepcionAlimento ? 'Marcar revisado' : 'Aprobar'}
                   </button>
                 </div>
               </article>

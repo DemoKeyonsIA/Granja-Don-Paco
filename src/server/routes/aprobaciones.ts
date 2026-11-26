@@ -52,6 +52,7 @@ export function registrarRutasAprobaciones(app: any, db: any, deps: { requirePer
         aprobacionPrev = await tx.query.aprobaciones.findFirst({ where: eq(aprobaciones.id, id) });
         if (!aprobacionPrev) throw new ApiError(404, 'Aprobación no encontrada');
         if (aprobacionPrev.estado !== 'Pendiente') throw new ApiError(409, `La aprobación ya fue resuelta (${aprobacionPrev.estado})`);
+        if (aprobacionPrev.tipo === 'RecepcionAlimento' && estado === 'Rechazado' && !String(motivoRechazo || '').trim()) throw new ApiError(400, 'Indique qué diferencia encontró para informársela al encargado.');
         if (aprobacionPrev.tipo === 'DiferenciaConteoBodega' && estado === 'Rechazado') {
           updateData.estado = 'RecuentoRequerido';
           updateData.motivoRechazo = String(motivoRechazo || '').trim() || 'Administración solicitó un nuevo conteo independiente.';
