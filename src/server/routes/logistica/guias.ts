@@ -117,6 +117,7 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
         return cliente ? {
           ...o,
           nombre: o.nombre || cliente.nombre,
+          email: cliente.email || null,
           condicionPago: cliente.condicion_pago || 'Contado',
           limiteCredito: Number(cliente.limite_credito || 0),
           saldoPendiente: Number(cliente.saldo_pendiente || 0),
@@ -127,6 +128,7 @@ export function registrarRutaDetalleGuia(app: any, db: any, helpers: GuiaDetalle
         .map((c: any) => ({
           clienteId: c.id,
           nombre: c.nombre,
+          email: c.email || null,
           prioridad: c.prioridad || 'Normal',
           condicionPago: c.condicion_pago || 'Contado',
           limiteCredito: Number(c.limite_credito || 0),

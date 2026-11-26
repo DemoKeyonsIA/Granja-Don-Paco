@@ -51,7 +51,9 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
   const [tiquete, setTiquete] = useState<any>(null);
   const [previewTiqueteAbierto, setPreviewTiqueteAbierto] = useState(false);
   const [documentoCreado, setDocumentoCreado] = useState<any>(null);
-  const [correoDocumentoDestino, setCorreoDocumentoDestino] = useState('');
+  const [correoFacturaConfirmado, setCorreoFacturaConfirmado] = useState(false);
+  const [copiaCorreoAbierta, setCopiaCorreoAbierta] = useState(false);
+  const [correoCopiaDocumento, setCorreoCopiaDocumento] = useState('');
   const [cierreRutaAbierto, setCierreRutaAbierto] = useState(initialOpenClosure);
   const [ventas, setVentas] = useState<any[]>([]);
   const [gastosRuta, setGastosRuta] = useState<any[]>([]);
@@ -246,7 +248,8 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
 
   useEffect(() => {
     if (!documentoCreado) return;
-    setCorreoDocumentoDestino(String(documentoCreado.cliente?.email || documentoCreado.cliente?.correo || ''));
+    setCopiaCorreoAbierta(false);
+    setCorreoCopiaDocumento('');
   }, [documentoCreado]);
 
   const imprimirTiquete = () => {
@@ -286,15 +289,15 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
     if (imprimir) ventana.print();
   };
 
-  const prepararCorreoDocumento = (documento: any, correoDestino: string) => {
+  const prepararCorreoCopiaDocumento = (documento: any, correoDestino: string) => {
     const { tipo, data, cliente } = documento || {};
     const correo = String(correoDestino || '').trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return toast.error('Escriba un correo válido para el cliente.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return toast.error('Escriba un correo válido para enviar la copia.');
     const consecutivo = tipo === 'Proforma' ? data.consecutivo : (data.documentoFiscalConsecutivo || data.tiqueteConsecutivo || 'Documento de ruta');
     const nombreTipo = tipo === 'Proforma' ? 'Proforma' : tipo === 'Tiquete' ? 'Tiquete electrónico' : 'Factura electrónica';
     const productoDoc = data.producto || data.detalles?.map((linea: any) => `${linea.producto} · ${Number(linea.cantidad || 0).toFixed(2)} kg`).join(', ') || '';
     const asunto = `${nombreTipo} ${consecutivo} · Granja Don Paco`;
-    const cuerpo = [`Hola ${cliente?.nombre || 'cliente'},`, '', `Te compartimos el detalle de ${nombreTipo.toLowerCase()} ${consecutivo}.`, productoDoc, `Total: ${fmtCRC(Number(data.total || 0))}`, '', tipo === 'Proforma' ? 'Esta proforma es una cotización comercial; no registra cobro ni salida de inventario.' : 'Este documento se encuentra en simulación y no ha sido enviado a Hacienda.', '', 'Granja Don Paco'].join('\n');
+    const cuerpo = [`Hola ${cliente?.nombre || 'cliente'},`, '', `Te compartimos una copia del detalle de ${nombreTipo.toLowerCase()} ${consecutivo}.`, productoDoc, `Total: ${fmtCRC(Number(data.total || 0))}`, '', tipo === 'Proforma' ? 'Esta proforma es una cotización comercial; no registra cobro ni salida de inventario.' : 'Este documento se encuentra en simulación y no ha sido enviado a Hacienda.', '', 'Granja Don Paco'].join('\n');
     const enlaceCorreo = document.createElement('a');
     enlaceCorreo.href = `mailto:${encodeURIComponent(correo)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
     enlaceCorreo.target = '_blank';
@@ -344,13 +347,14 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
   const unidadRuta = 'kg';
 
   const resetPos = () => {
-    setClienteId(''); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setTipoDocumentoRuta('Factura'); setProformaOrigenIdRuta(null);
+    setClienteId(''); setProducto(''); setCantidadTexto('1'); setDescuentoTexto('0'); setPagosVenta([{ metodo: 'Efectivo', monto: 'total' }]); setTipoDocumentoRuta('Factura'); setProformaOrigenIdRuta(null); setCorreoFacturaConfirmado(false);
   };
 
   const vender = async () => {
     if (!guiaId) return toast.error('Seleccione una guía activa');
     if (!producto) return toast.error('Seleccione un producto');
     if (!clienteId) return toast.error('Seleccione un cliente');
+    if (tipoDocumentoRuta === 'Factura' && (!correoClientePerfilValido || !correoFacturaConfirmado)) return toast.error(correoClientePerfilValido ? 'Confirme el correo registrado del cliente antes de emitir la factura.' : 'El cliente no tiene un correo válido en su perfil. Solicite que lo actualicen antes de emitir la factura.');
     if (!precioAutorizado || precioVenta < precioMinimo || precioVenta > precioMaximo) return toast.error(`El precio debe estar entre ${fmtCRC(precioMinimo)} y ${fmtCRC(precioMaximo)} por kg.`);
     if (!cantidad || cantidad <= 0) return toast.error('Indique una cantidad');
     if (cantidad > stockProducto) return toast.error(`Solo quedan ${stockProducto.toFixed(2)} kg de ${producto} en el camión.`);
@@ -377,6 +381,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
         body: JSON.stringify({
           guiaId, clienteId, tipoDocumento: tipoDocumentoRuta,
           producto, cantidadKg: cantidad, unidad: 'kg', precioUnitario: precioVenta, descuento: descuento || undefined, pagos: mediosPago,
+          correoReceptorConfirmado: tipoDocumentoRuta === 'Factura' && correoFacturaConfirmado,
         })
       });
       if (res.ok) {
@@ -521,6 +526,9 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
   const clientesCompletadosIds = new Set(ventas.filter((venta: any) => venta.estado === 'Emitida' && venta.clienteId).map((venta: any) => String(venta.clienteId)));
   const clientesPorEntregar = clientesRuta.filter((cliente: any) => !clientesCompletadosIds.has(String(cliente.clienteId)));
   const clienteSeleccionado = clientesRuta.find((c: any) => c.clienteId === clienteId);
+  const correoClientePerfil = String(clienteSeleccionado?.email || clienteSeleccionado?.correo || '').trim();
+  const correoClientePerfilValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoClientePerfil);
+  useEffect(() => { setCorreoFacturaConfirmado(false); }, [clienteId, correoClientePerfil]);
   const limiteCreditoCliente = Number(clienteSeleccionado?.limiteCredito ?? clienteSeleccionado?.limite_credito ?? 0);
   const saldoPendienteCliente = Number(clienteSeleccionado?.saldoPendiente ?? clienteSeleccionado?.saldo_pendiente ?? 0);
   const condicionCreditoCliente = String(clienteSeleccionado?.condicionPago ?? clienteSeleccionado?.condicion_pago ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('credito');
@@ -546,7 +554,7 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
   const guiaListado = guias.find((g: any) => g.id === guia?.id);
   const nombreRutaAsignada = guiaListado?.rutaNombre || camionSeleccionado?.ruta_defecto || guia?.rutaNombre || 'Ruta asignada';
   const estadoRutaLabel = guia?.estado === 'EnRuta' ? 'En ruta' : guia?.estado === 'Cargada' ? 'Lista para iniciar' : guia?.estadoLogico || guia?.estado;
-  const ventaDeshabilitada = loading || guia?.estado !== 'EnRuta' || cajaCerrada || cargandoPrecio || !clienteId || !producto || !politicaPrecio?.precio || Boolean(politicaPrecio?.error) || precioVenta < precioMinimo || precioVenta > precioMaximo || cantidad <= 0 || cantidad > stockProducto || descuento < 0 || descuento > descuentoPermitido || (tipoDocumentoRuta !== 'Proforma' && Boolean(errorPago));
+  const ventaDeshabilitada = loading || guia?.estado !== 'EnRuta' || cajaCerrada || cargandoPrecio || !clienteId || !producto || !politicaPrecio?.precio || Boolean(politicaPrecio?.error) || precioVenta < precioMinimo || precioVenta > precioMaximo || cantidad <= 0 || cantidad > stockProducto || descuento < 0 || descuento > descuentoPermitido || (tipoDocumentoRuta === 'Factura' && (!correoClientePerfilValido || !correoFacturaConfirmado)) || (tipoDocumentoRuta !== 'Proforma' && Boolean(errorPago));
   const previsualizarTiquete = (muestraGeneral = false) => {
     if (!muestraGeneral && (!clienteId || !producto || !Number.isFinite(cantidad) || cantidad <= 0)) return toast.error('Seleccione cliente, producto y kilos para ver la muestra.');
     const cantidadMuestra = muestraGeneral ? 10 : cantidad;
@@ -715,16 +723,19 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
           <section role="dialog" aria-modal="true" aria-labelledby="documento-creado-titulo" className="w-full max-w-md rounded-2xl p-5 shadow-2xl" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-default)' }}>
             <div className="flex items-start justify-between gap-3">
               <div><p className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--status-success)' }}>{documentoCreado.tipo === 'Proforma' ? 'Proforma guardada' : 'Entrega registrada'}</p><h2 id="documento-creado-titulo" className="mt-1 text-xl font-extrabold" style={{ color: 'var(--text-primary)' }}>{documentoCreado.tipo === 'Proforma' ? documentoCreado.data.consecutivo : documentoCreado.data.documentoFiscalConsecutivo || documentoCreado.data.tiqueteConsecutivo}</h2><p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>{documentoCreado.cliente?.nombre || 'Cliente'} · {fmtCRC(Number(documentoCreado.data.total || 0))}</p></div>
-              <button type="button" onClick={() => setDocumentoCreado(null)} aria-label="Cerrar" className="rounded-lg p-2" style={{ color: 'var(--text-secondary)' }}><X className="h-5 w-5" /></button>
+          <button type="button" onClick={() => setDocumentoCreado(null)} aria-label="Cerrar" className="rounded-lg p-2" style={{ color: 'var(--text-secondary)' }}><X className="h-5 w-5" /></button>
             </div>
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
               <button type="button" onClick={() => { if (documentoCreado.tipo === 'Proforma') imprimirProformaRuta(documentoCreado.data, documentoCreado.cliente); else setPreviewTiqueteAbierto(true); }} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Eye className="h-4 w-4" />Ver documento</button>
               <button type="button" onClick={() => { if (documentoCreado.tipo === 'Proforma') imprimirProformaRuta(documentoCreado.data, documentoCreado.cliente, true); else imprimirTiquete(); }} className="flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><Printer className="h-4 w-4" />Imprimir</button>
-              <label className="text-xs font-semibold sm:col-span-2" style={{ color: 'var(--text-secondary)' }} htmlFor="correo-documento-ruta">Correo del cliente</label>
-              <input id="correo-documento-ruta" type="email" value={correoDocumentoDestino} onChange={event => setCorreoDocumentoDestino(event.target.value)} placeholder="cliente@correo.com" autoComplete="email" className="min-h-11 w-full rounded-xl border px-3 py-2 text-sm sm:col-span-2" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} />
-              <button type="button" onClick={() => prepararCorreoDocumento(documentoCreado, correoDocumentoDestino)} disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoDocumentoDestino.trim())} className="flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50 sm:col-span-2" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}><Mail className="h-4 w-4" />Enviar por correo</button>
+              <button type="button" aria-expanded={copiaCorreoAbierta} onClick={() => setCopiaCorreoAbierta(abierta => !abierta)} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold sm:col-span-2" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--brand-primary)' }}><Mail className="h-4 w-4" />{copiaCorreoAbierta ? 'Cancelar copia por correo' : 'Enviar copia a otro correo'}</button>
+              {copiaCorreoAbierta && <>
+                <label className="text-xs font-semibold sm:col-span-2" style={{ color: 'var(--text-secondary)' }} htmlFor="correo-copia-documento-ruta">Correo adicional</label>
+                <input id="correo-copia-documento-ruta" type="email" value={correoCopiaDocumento} onChange={event => setCorreoCopiaDocumento(event.target.value)} placeholder="otro@correo.com" autoComplete="email" className="min-h-11 w-full rounded-xl border px-3 py-2 text-sm sm:col-span-2" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }} />
+                <button type="button" onClick={() => prepararCorreoCopiaDocumento(documentoCreado, correoCopiaDocumento)} disabled={!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correoCopiaDocumento.trim())} className="flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold disabled:opacity-50 sm:col-span-2" style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}><Mail className="h-4 w-4" />Preparar correo</button>
+              </>}
             </div>
-            <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>Se abrirá un borrador en su aplicación de correo para revisarlo y enviarlo. Esta ventana seguirá abierta; el documento también puede imprimirse desde aquí.</p>
+            {copiaCorreoAbierta && <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>Se abrirá un borrador en su aplicación de correo. Revíselo y adjunte el comprobante antes de enviarlo; esta ventana seguirá abierta para que también pueda imprimirlo.</p>}
           </section>
         </div>
       )}
@@ -938,6 +949,16 @@ export default function CajaRuta({ currentUser, initialGuideId, returnInvoiceId,
                 {descuento > 0 && <div className="mt-2 flex justify-between gap-3"><span style={{ color: 'var(--text-muted)' }}>Descuento</span><strong style={{ color: 'var(--text-primary)' }}>− {fmtCRC(descuento)}</strong></div>}
                 <div className="mt-3 flex justify-between gap-3 border-t pt-3 font-extrabold" style={{ borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}><span>Total</span><span>{fmtCRC(total)}</span></div>
               </div>
+              {tipoDocumentoRuta === 'Factura' && <section className="rounded-xl p-3" style={{ background: 'var(--brand-primary-soft)', border: '1px solid var(--border-default)' }} aria-label="Confirmar correo del receptor">
+                <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Correo del cliente</p>
+                {correoClientePerfilValido ? <>
+                  <p className="mt-1 break-all text-sm" style={{ color: 'var(--text-secondary)' }}>{correoClientePerfil}</p>
+                  <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    <input type="checkbox" checked={correoFacturaConfirmado} onChange={event => setCorreoFacturaConfirmado(event.target.checked)} className="h-5 w-5 accent-[var(--brand-primary)]" />
+                    Confirmo que este correo es correcto
+                  </label>
+                </> : <p className="mt-1 text-sm" role="alert" style={{ color: 'var(--status-danger)' }}>El perfil del cliente no tiene un correo válido. Solicite que lo actualicen antes de emitir la factura electrónica.</p>}
+              </section>}
               <button onClick={vender} disabled={ventaDeshabilitada}
                 className="min-h-14 w-full flex items-center justify-center gap-2 rounded-xl px-4 py-4 text-lg font-extrabold disabled:opacity-50"
                 style={{ background: 'var(--brand-action)', color: 'var(--text-on-action)' }}>
