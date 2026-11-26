@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Egg, Check, ChevronRight, ChevronLeft, Plus, Minus, Truck, Wheat } from 'lucide-react';
+import { Egg, Check, ChevronRight, ChevronLeft, Plus, Minus, Truck, Wheat, AlertTriangle } from 'lucide-react';
 import { User } from '../types';
 import { toast } from 'sonner';
 import { BloqueCarga, SpinnerConTexto } from './Spinner';
@@ -10,7 +10,7 @@ type Granja = { id: string; nombre: string; ubicacion?: string; estado?: string 
 type Galeron = { id: string; granjaId: string; nombre: string; estado?: string };
 type Camion = { id: string; nombre: string; placa?: string | null; camioneroId?: string | null; camioneroNombre?: string | null; estado?: string | null };
 
-interface Props { currentUser: User; onNavigateToRecepcion?: () => void; }
+interface Props { currentUser: User; onNavigateToRecepcion?: () => void; onNavigateToIncidencias?: () => void; }
 
 function Stepper({ n }: { n: number }) {
   return (
@@ -59,7 +59,7 @@ function StepperRow({ emoji, label, value, onChange, increment = 1 }: { emoji: s
   );
 }
 
-export default function DespachoMovil({ currentUser, onNavigateToRecepcion }: Props) {
+export default function DespachoMovil({ currentUser, onNavigateToRecepcion, onNavigateToIncidencias }: Props) {
   // Pantalla: 'inicio' (botón registrar), 'form' (granja→galerón→cantidades), 'resumen', 'exito'
   const [screen, setScreen] = useState<'inicio' | 'form' | 'resumen' | 'exito'>('inicio');
   const [formStep, setFormStep] = useState<0 | 1 | 2 | 3>(0); // 0=granja, 1=galeron, 2=cantidades, 3=camion
@@ -250,6 +250,13 @@ export default function DespachoMovil({ currentUser, onNavigateToRecepcion }: Pr
             className="mt-3 w-full max-w-sm min-h-16 rounded-2xl border-2 px-5 text-lg font-extrabold transition-all active:scale-[0.97]"
             style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>
             <span className="inline-flex items-center justify-center gap-3"><Wheat className="h-6 w-6" />Recibir alimento</span>
+          </button>
+        )}
+        {onNavigateToIncidencias && (
+          <button type="button" onClick={onNavigateToIncidencias}
+            className="mt-3 w-full max-w-sm min-h-16 rounded-2xl border-2 px-5 text-lg font-extrabold transition-all active:scale-[0.97]"
+            style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>
+            <span className="inline-flex items-center justify-center gap-3"><AlertTriangle className="h-6 w-6" />Reportar incidencia</span>
           </button>
         )}
         <p className="text-sm mt-4" style={{ color: 'var(--text-muted)' }}>

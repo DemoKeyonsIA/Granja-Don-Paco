@@ -25,7 +25,7 @@ type Incidente = {
   fecha: string;
 };
 
-interface Props { currentUser: User; }
+interface Props { currentUser: User; onBack?: () => void; }
 
 const CATEGORIAS = ['Mortalidad', 'Enfermedad', 'Fiebre / Baja postura', 'Problema de alimentación', 'Problema de iluminación', 'Temperatura / Clima', 'Fuga de agua', 'Falla de equipo', 'Daño en instalaciones', 'Avispa / Plaga / Predador', 'Otro'];
 const SEVERIDADES = ['Alta', 'Media', 'Baja'];
@@ -48,7 +48,7 @@ function IncStepper({ n }: { n: number }) {
   );
 }
 
-export default function IncidentesMovil({ currentUser }: Props) {
+export default function IncidentesMovil({ currentUser, onBack }: Props) {
   const [screen, setScreen] = useState<'inicio' | 'form' | 'resumen' | 'exito'>('inicio');
   const [formStep, setFormStep] = useState<0 | 1 | 2 | 3 | 4 | 5>(0);
   const [granjas, setGranjas] = useState<Granja[]>([]);
@@ -169,6 +169,7 @@ export default function IncidentesMovil({ currentUser }: Props) {
   if (screen === 'inicio') {
     return (
       <div className="min-h-[70vh] px-4 pt-6 pb-24 animate-in fade-in">
+        {onBack && <button type="button" onClick={onBack} className="mb-4 inline-flex min-h-11 items-center gap-2 px-1 text-base font-bold" style={{ color: 'var(--brand-primary)' }}><ChevronLeft className="h-5 w-5" />Volver a opciones</button>}
         <div className="rounded-2xl p-5 mb-6 text-center"
           style={{ background: 'var(--brand-primary-soft)', border: '1px solid color-mix(in srgb, var(--brand-primary) 20%, transparent)' }}>
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-3"
