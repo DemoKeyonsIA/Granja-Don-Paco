@@ -704,13 +704,15 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
             const effectiveSub = subTabMovilEfectivo(userRoles, subTab);
             // Comercial usa la navegación inferior como ruta primaria. Repetir
             // Venta / Mi ruta arriba ocupaba pantalla y duplicaba destinos.
-            const tabsVisibles = userRoles.includes('Comercial') ? [] : subTabs;
+            const tabsVisibles = userRoles.includes('Comercial') ? [] : userRoles.includes('Despachador')
+              ? subTabs.filter(tab => tab.id !== 'alimento-recibido')
+              : subTabs;
             return (
               <div className="space-y-6">
-                {effectiveSub !== 'facturar-movil' && tabsVisibles.length > 1 && renderFilaTabs(tabsVisibles, 'primario')}
+                {effectiveSub !== 'facturar-movil' && effectiveSub !== 'alimento-recibido' && tabsVisibles.length > 1 && renderFilaTabs(tabsVisibles, 'primario')}
                 <Suspense fallback={<ModuleLoading />}><div className="max-w-md mx-auto">
-                  {effectiveSub === 'carga' && <DespachoMovil currentUser={currentUser} />}
-                  {effectiveSub === 'alimento-recibido' && <RecepcionAlimentoMovil currentUser={currentUser} />}
+                  {effectiveSub === 'carga' && <DespachoMovil currentUser={currentUser} onNavigateToRecepcion={() => setSubTab('alimento-recibido')} />}
+                  {effectiveSub === 'alimento-recibido' && <RecepcionAlimentoMovil currentUser={currentUser} onBack={() => setSubTab('carga')} />}
                   {effectiveSub === 'incidencias' && <IncidentesMovil currentUser={currentUser} />}
                   {effectiveSub === 'confirmar' && <CamioneroMovil currentUser={currentUser} />}
                   {effectiveSub === 'recibir' && <BodegaMovil currentUser={currentUser} />}

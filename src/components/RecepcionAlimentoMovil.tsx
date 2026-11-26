@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, RefreshCw, Wheat } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, RefreshCw, Wheat } from 'lucide-react';
 import { toast } from 'sonner';
 import type { User } from '../types';
 import { sessionHeaders } from '../lib/session';
@@ -7,7 +7,7 @@ import { sessionHeaders } from '../lib/session';
 type Galeron = { id: string; nombre: string; granjaId: string; estado?: string };
 type Reporte = { cantidadSacos: number; galeron: string };
 
-export default function RecepcionAlimentoMovil({ currentUser }: { currentUser: User }) {
+export default function RecepcionAlimentoMovil({ currentUser, onBack }: { currentUser: User; onBack?: () => void }) {
   const [galerones, setGalerones] = useState<Galeron[]>([]);
   const [galeronId, setGaleronId] = useState('');
   const [cantidadSacos, setCantidadSacos] = useState('');
@@ -67,6 +67,7 @@ export default function RecepcionAlimentoMovil({ currentUser }: { currentUser: U
 
   return (
     <main className="mx-auto max-w-md space-y-4 pb-8" data-testid="recepcion-alimento-movil">
+      {onBack && <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center gap-2 px-1 text-base font-bold text-[var(--brand-primary)]"><ArrowLeft className="h-5 w-5" />Volver</button>}
       <header className="rounded-2xl border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
         <div className="flex items-center gap-3">
           <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><Wheat className="h-6 w-6" /></span>

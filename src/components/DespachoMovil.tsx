@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Egg, Check, ChevronRight, ChevronLeft, Plus, Minus, Truck } from 'lucide-react';
+import { Egg, Check, ChevronRight, ChevronLeft, Plus, Minus, Truck, Wheat } from 'lucide-react';
 import { User } from '../types';
 import { toast } from 'sonner';
 import { BloqueCarga, SpinnerConTexto } from './Spinner';
@@ -10,7 +10,7 @@ type Granja = { id: string; nombre: string; ubicacion?: string; estado?: string 
 type Galeron = { id: string; granjaId: string; nombre: string; estado?: string };
 type Camion = { id: string; nombre: string; placa?: string | null; camioneroId?: string | null; camioneroNombre?: string | null; estado?: string | null };
 
-interface Props { currentUser: User; }
+interface Props { currentUser: User; onNavigateToRecepcion?: () => void; }
 
 function Stepper({ n }: { n: number }) {
   return (
@@ -59,7 +59,7 @@ function StepperRow({ emoji, label, value, onChange, increment = 1 }: { emoji: s
   );
 }
 
-export default function DespachoMovil({ currentUser }: Props) {
+export default function DespachoMovil({ currentUser, onNavigateToRecepcion }: Props) {
   // Pantalla: 'inicio' (botón registrar), 'form' (granja→galerón→cantidades), 'resumen', 'exito'
   const [screen, setScreen] = useState<'inicio' | 'form' | 'resumen' | 'exito'>('inicio');
   const [formStep, setFormStep] = useState<0 | 1 | 2 | 3>(0); // 0=granja, 1=galeron, 2=cantidades, 3=camion
@@ -243,10 +243,17 @@ export default function DespachoMovil({ currentUser }: Props) {
         <button onClick={iniciarRegistro}
           className="w-full max-w-sm py-6 rounded-2xl text-xl font-black transition-all active:scale-[0.97]"
           style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)', boxShadow: '0 8px 24px color-mix(in srgb, var(--brand-primary) 35%, transparent)' }}>
-          Registrar carga nueva
+          <span className="inline-flex items-center justify-center gap-3"><Truck className="h-6 w-6" />Registrar carga de huevos</span>
         </button>
-        <p className="text-xs mt-4" style={{ color: 'var(--text-muted)' }}>
-          ¡Hola {currentUser.name}! Toca el botón para empezar
+        {onNavigateToRecepcion && (
+          <button type="button" onClick={onNavigateToRecepcion}
+            className="mt-3 w-full max-w-sm min-h-16 rounded-2xl border-2 px-5 text-lg font-extrabold transition-all active:scale-[0.97]"
+            style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>
+            <span className="inline-flex items-center justify-center gap-3"><Wheat className="h-6 w-6" />Recibir alimento</span>
+          </button>
+        )}
+        <p className="text-sm mt-4" style={{ color: 'var(--text-muted)' }}>
+          Elige lo que vas a hacer
         </p>
       </div>
     );
