@@ -4,6 +4,7 @@ import { User } from '../types';
 import { toast } from 'sonner';
 import { BloqueCarga, Spinner } from './Spinner';
 import { sessionHeaders } from '../lib/session';
+import ProgresoPuntosMovil from './ProgresoPuntosMovil';
 
 type Granja = { id: string; nombre: string; ubicacion?: string; estado?: string };
 type Galeron = { id: string; granjaId: string; nombre: string; estado?: string };
@@ -33,20 +34,6 @@ const EQUIPOS = ['Bebedero', 'Comedero', 'Sistema de ventilación', 'Calefacció
 
 const SEVERIDAD_COLOR: Record<string, string> = { Alta: '#dc2626', Media: '#d97706', Baja: '#16a34a' };
 const ESTADO_LABEL: Record<string, string> = { Reportado: 'Reportado', EnRevision: 'En revisión', Resuelto: 'Resuelto', Descartado: 'Descartado' };
-
-function IncStepper({ n }: { n: number }) {
-  return (
-    <div className="flex justify-center gap-2 mb-6">
-      {[0, 1, 2, 3, 4, 5].map(i => (
-        <div key={i} className="h-2 rounded-full transition-all duration-300"
-          style={{
-            width: i <= n ? 28 : 12,
-            background: i <= n ? 'var(--brand-primary)' : 'var(--border-default)'
-          }} />
-      ))}
-    </div>
-  );
-}
 
 export default function IncidentesMovil({ currentUser, onBack, startInForm = false }: Props) {
   const [screen, setScreen] = useState<'inicio' | 'form' | 'resumen' | 'exito'>(() => startInForm ? 'form' : 'inicio');
@@ -259,7 +246,7 @@ export default function IncidentesMovil({ currentUser, onBack, startInForm = fal
             style={{ color: 'var(--brand-primary)' }}>
             <ChevronLeft className="w-4 h-4" /> {onBack ? 'Volver a opciones' : 'Volver'}
           </button>
-          <IncStepper n={0} />
+          <ProgresoPuntosMovil total={6} paso={0} />
           <h2 className="text-xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
             ¿En qué granja ocurrió?
           </h2>
@@ -298,7 +285,7 @@ export default function IncidentesMovil({ currentUser, onBack, startInForm = fal
             style={{ color: 'var(--brand-primary)' }}>
             <ChevronLeft className="w-4 h-4" /> Cambiar granja
           </button>
-          <IncStepper n={1} />
+          <ProgresoPuntosMovil total={6} paso={1} />
           <h2 className="text-xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
             ¿En qué galpón?
           </h2>
@@ -338,7 +325,7 @@ export default function IncidentesMovil({ currentUser, onBack, startInForm = fal
             style={{ color: 'var(--brand-primary)' }}>
             <ChevronLeft className="w-4 h-4" /> Cambiar galpón
           </button>
-          <IncStepper n={2} />
+          <ProgresoPuntosMovil total={6} paso={2} />
           <h2 className="text-xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
             ¿Qué tipo de incidente?
           </h2>
@@ -371,7 +358,7 @@ export default function IncidentesMovil({ currentUser, onBack, startInForm = fal
             style={{ color: 'var(--brand-primary)' }}>
             <ChevronLeft className="w-4 h-4" /> Cambiar categoría
           </button>
-          <IncStepper n={3} />
+          <ProgresoPuntosMovil total={6} paso={3} />
           <h2 className="text-xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
             ¿Qué tan grave es?
           </h2>
@@ -409,7 +396,7 @@ export default function IncidentesMovil({ currentUser, onBack, startInForm = fal
             style={{ color: 'var(--brand-primary)' }}>
             <ChevronLeft className="w-4 h-4" /> Cambiar severidad
           </button>
-          <IncStepper n={4} />
+          <ProgresoPuntosMovil total={6} paso={4} />
           <h2 className="text-xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
             Detalles del incidente
           </h2>
@@ -525,7 +512,7 @@ export default function IncidentesMovil({ currentUser, onBack, startInForm = fal
             style={{ color: 'var(--brand-primary)' }}>
             <ChevronLeft className="w-4 h-4" /> Editar detalles
           </button>
-          <IncStepper n={5} />
+          <ProgresoPuntosMovil total={6} paso={5} />
           <h2 className="text-xl font-black mb-1" style={{ color: 'var(--text-primary)' }}>
             Confirma el reporte
           </h2>
