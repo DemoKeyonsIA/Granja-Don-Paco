@@ -27,7 +27,7 @@ const NOMBRE_TIPO: Record<string, string> = {
   PrecioFueraRango: 'Precio fuera del rango autorizado',
   DescuentoNoAutorizado: 'Descuento requiere aprobación',
   AltaClienteRuta: 'Alta de cliente solicitada por vendedor',
-  RecepcionAlimento: 'Sacos de alimento recibidos en galerón',
+  RecepcionAlimento: 'Recepción de alimento',
 };
 
 export default function AprobacionesAdmin({ currentUser }: { currentUser: User }) {
@@ -151,7 +151,7 @@ export default function AprobacionesAdmin({ currentUser }: { currentUser: User }
                   <div className="mt-4 grid gap-x-6 gap-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 sm:grid-cols-2 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
                     <p><span className="font-semibold">Cantidad recibida:</span> {datosAlimento.cantidadSacos} sacos</p>
                     <p><span className="font-semibold">Tipo:</span> {datosAlimento.tipoAlimento || '—'}</p>
-                    <p><span className="font-semibold">Galerón:</span> {datosAlimento.galeron || '—'}{datosAlimento.granja ? ` · ${datosAlimento.granja}` : ''}</p>
+                    <p><span className="font-semibold">Granja:</span> {datosAlimento.granja || '—'}</p>
                     <p><span className="font-semibold">Proveedor:</span> {datosAlimento.proveedor || 'No indicado'}</p>
                     <p><span className="font-semibold">Factura o referencia:</span> {datosAlimento.referencia || 'No indicada'}</p>
                     {datosAlimento.observaciones && <p className="sm:col-span-2"><span className="font-semibold">Nota:</span> {datosAlimento.observaciones}</p>}

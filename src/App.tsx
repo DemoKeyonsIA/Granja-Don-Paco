@@ -21,6 +21,8 @@ const DespachoMovil = lazy(() => import("./components/DespachoMovil"));
 const BodegaMovil = lazy(() => import("./components/BodegaMovil"));
 const CamioneroMovil = lazy(() => import("./components/CamioneroMovil"));
 const IncidentesMovil = lazy(() => import("./components/IncidentesMovil"));
+const AlimentosMovil = lazy(() => import("./components/AlimentosMovil"));
+const AsignacionAlimentoMovil = lazy(() => import("./components/AsignacionAlimentoMovil"));
 const FinanzasResumen = lazy(() => import("./components/FinanzasResumen"));
 const GastosRutaAdmin = lazy(() => import("./components/GastosRutaAdmin"));
 const InventarioInsumos = lazy(() => import("./components/InventarioInsumos"));
@@ -709,8 +711,10 @@ function AppLayout({ currentUser, onLogout }: { currentUser: User, onLogout: () 
               <div className="space-y-6">
                 {effectiveSub !== 'facturar-movil' && effectiveSub !== 'alimento-recibido' && tabsVisibles.length > 1 && renderFilaTabs(tabsVisibles, 'primario')}
                 <Suspense fallback={<ModuleLoading />}><div className="max-w-md mx-auto">
-                  {effectiveSub === 'carga' && <DespachoMovil currentUser={currentUser} onNavigateToRecepcion={() => setSubTab('alimento-recibido')} onNavigateToIncidencias={() => setSubTab('incidencias')} />}
-                  {effectiveSub === 'alimento-recibido' && <RecepcionAlimentoMovil currentUser={currentUser} onBack={() => setSubTab('carga')} />}
+                  {effectiveSub === 'carga' && <DespachoMovil currentUser={currentUser} onNavigateToAlimentos={() => setSubTab('alimentos-menu')} onNavigateToIncidencias={() => setSubTab('incidencias')} />}
+                  {effectiveSub === 'alimentos-menu' && <AlimentosMovil onBack={() => setSubTab('carga')} onReceive={() => setSubTab('alimento-recibido')} onAssign={() => setSubTab('alimento-asignar')} />}
+                  {effectiveSub === 'alimento-recibido' && <RecepcionAlimentoMovil currentUser={currentUser} onBack={() => setSubTab('alimentos-menu')} />}
+                  {effectiveSub === 'alimento-asignar' && <AsignacionAlimentoMovil currentUser={currentUser} onBack={() => setSubTab('alimentos-menu')} />}
                   {effectiveSub === 'incidencias' && <IncidentesMovil currentUser={currentUser} onBack={() => setSubTab('carga')} startInForm />}
                   {effectiveSub === 'confirmar' && <CamioneroMovil currentUser={currentUser} />}
                   {effectiveSub === 'recibir' && <BodegaMovil currentUser={currentUser} />}

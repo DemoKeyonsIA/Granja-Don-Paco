@@ -10,7 +10,7 @@ type Granja = { id: string; nombre: string; ubicacion?: string; estado?: string 
 type Galeron = { id: string; granjaId: string; nombre: string; estado?: string };
 type Camion = { id: string; nombre: string; placa?: string | null; camioneroId?: string | null; camioneroNombre?: string | null; estado?: string | null };
 
-interface Props { currentUser: User; onNavigateToRecepcion?: () => void; onNavigateToIncidencias?: () => void; }
+interface Props { currentUser: User; onNavigateToAlimentos?: () => void; onNavigateToIncidencias?: () => void; }
 
 function Stepper({ n }: { n: number }) {
   return (
@@ -59,7 +59,7 @@ function StepperRow({ emoji, label, value, onChange, increment = 1 }: { emoji: s
   );
 }
 
-export default function DespachoMovil({ currentUser, onNavigateToRecepcion, onNavigateToIncidencias }: Props) {
+export default function DespachoMovil({ currentUser, onNavigateToAlimentos, onNavigateToIncidencias }: Props) {
   // Pantalla: 'inicio' (botón registrar), 'form' (granja→galerón→cantidades), 'resumen', 'exito'
   const [screen, setScreen] = useState<'inicio' | 'form' | 'resumen' | 'exito'>('inicio');
   const [formStep, setFormStep] = useState<0 | 1 | 2 | 3>(0); // 0=granja, 1=galeron, 2=cantidades, 3=camion
@@ -245,11 +245,11 @@ export default function DespachoMovil({ currentUser, onNavigateToRecepcion, onNa
           style={{ background: 'var(--brand-primary)', color: 'var(--text-on-action)', boxShadow: '0 8px 24px color-mix(in srgb, var(--brand-primary) 35%, transparent)' }}>
           <span className="inline-flex items-center justify-center gap-3"><Truck className="h-6 w-6" />Registrar carga de huevos</span>
         </button>
-        {onNavigateToRecepcion && (
-          <button type="button" onClick={onNavigateToRecepcion}
+        {onNavigateToAlimentos && (
+          <button type="button" onClick={onNavigateToAlimentos}
             className="mt-3 w-full max-w-sm min-h-16 rounded-2xl border-2 px-5 text-lg font-extrabold transition-all active:scale-[0.97]"
             style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}>
-            <span className="inline-flex items-center justify-center gap-3"><Wheat className="h-6 w-6" />Recibir alimento</span>
+            <span className="inline-flex items-center justify-center gap-3"><Wheat className="h-6 w-6" />Alimentos</span>
           </button>
         )}
         {onNavigateToIncidencias && (

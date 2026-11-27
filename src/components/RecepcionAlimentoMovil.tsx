@@ -7,19 +7,16 @@ import { BloqueCarga } from './Spinner';
 import ProgresoPuntosMovil from './ProgresoPuntosMovil';
 
 type Granja = { id: string; nombre: string; ubicacion?: string; estado?: string };
-type Galeron = { id: string; nombre: string; granjaId: string; estado?: string };
-type Reporte = { cantidadSacos: number; tipoAlimento: string; granja: string; galeron: string };
+type Reporte = { cantidadSacos: number; tipoAlimento: string; granja: string };
 
 const TIPOS_ALIMENTO = ['Inicial', 'Crecimiento', 'Producción', 'Premix'];
 
 export default function RecepcionAlimentoMovil({ currentUser, onBack }: { currentUser: User; onBack?: () => void }) {
   const [granjas, setGranjas] = useState<Granja[]>([]);
-  const [galerones, setGalerones] = useState<Galeron[]>([]);
   const [granjaId, setGranjaId] = useState('');
-  const [galeronId, setGaleronId] = useState('');
   const [tipoAlimento, setTipoAlimento] = useState('');
   const [cantidadSacos, setCantidadSacos] = useState('');
-  const [paso, setPaso] = useState<1 | 2 | 3>(1);
+  const [paso, setPaso] = useState<1 | 2>(1);
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
@@ -30,15 +27,10 @@ export default function RecepcionAlimentoMovil({ currentUser, onBack }: { curren
     setError('');
     try {
       const headers = sessionHeaders(currentUser.id);
-      const [granjasResponse, galeronesResponse] = await Promise.all([
-        fetch('/api/granjas', { headers }),
-        fetch('/api/galerones', { headers }),
-      ]);
-      const [granjasData, galeronesData] = await Promise.all([granjasResponse.json(), galeronesResponse.json()]);
+      const granjasResponse = await fetch('/api/granjas', { headers });
+      const granjasData = await granjasResponse.json();
       if (!granjasResponse.ok) throw new Error(granjasData.error || 'No se pudieron cargar las granjas.');
-      if (!galeronesResponse.ok) throw new Error(galeronesData.error || 'No se pudieron cargar los galerones.');
       setGranjas((Array.isArray(granjasData) ? granjasData : []).filter((g: Granja) => g.estado !== 'Archivado'));
-      setGalerones((Array.isArray(galeronesData) ? galeronesData : []).filter((g: Galeron) => g.estado !== 'Archivado'));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron cargar los datos.');
     } finally {
@@ -49,14 +41,12 @@ export default function RecepcionAlimentoMovil({ currentUser, onBack }: { curren
   useEffect(() => { void cargarDatos(); }, [currentUser.id]);
 
   const granjaSeleccionada = granjas.find(g => g.id === granjaId);
-  const galeronesDeGranja = galerones.filter(g => g.granjaId === granjaId);
-  const galeronSeleccionado = galeronesDeGranja.find(g => g.id === galeronId);
 
   const enviar = async (event: React.FormEvent) => {
     event.preventDefault();
     const cantidad = Number(cantidadSacos);
-    if (!granjaSeleccionada || !galeronSeleccionado || !TIPOS_ALIMENTO.includes(tipoAlimento) || !Number.isSafeInteger(cantidad) || cantidad <= 0) {
-      toast.error('Revisa la granja, el galerón, el alimento y la cantidad de sacos.');
+    if (!granjaSeleccionada || !TIPOS_ALIMENTO.includes(tipoAlimento) || !Number.isSafeInteger(cantidad) || cantidad <= 0) {
+      toast.error('Revisa la granja, el alimento y la cantidad de sacos.');
       return;
     }
     setEnviando(true);
@@ -64,11 +54,11 @@ export default function RecepcionAlimentoMovil({ currentUser, onBack }: { curren
       const response = await fetch('/api/alimento/recepciones', {
         method: 'POST',
         headers: sessionHeaders(currentUser.id, true),
-        body: JSON.stringify({ tipoAlimento, cantidadSacos: cantidad, galeronId, granjaId }),
+        body: JSON.stringify({ tipoAlimento, cantidadSacos: cantidad, granjaId }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo enviar el reporte.');
-      setReporteEnviado({ cantidadSacos: cantidad, tipoAlimento, granja: granjaSeleccionada.nombre, galeron: galeronSeleccionado.nombre });
+      setReporteEnviado({ cantidadSacos: cantidad, tipoAlimento, granja: granjaSeleccionada.nombre });
       toast.success('Avisamos al administrador.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo enviar el reporte.');
@@ -89,7 +79,7 @@ export default function RecepcionAlimentoMovil({ currentUser, onBack }: { curren
   const volver = (label: string, action: () => void) => (
     <button type="button" onClick={action} className="mb-4 flex min-h-11 items-center gap-1 text-sm font-semibold text-[var(--brand-primary)]"><ArrowLeft className="h-4 w-4" />{label}</button>
   );
-  const limpiar = () => { setReporteEnviado(null); setPaso(1); setGranjaId(''); setGaleronId(''); setTipoAlimento(''); setCantidadSacos(''); };
+  const limpiar = () => { setReporteEnviado(null); setPaso(1); setGranjaId(''); setTipoAlimento(''); setCantidadSacos(''); };
 
   if (cargando) return <BloqueCarga className="min-h-[60vh]" />;
 
@@ -98,7 +88,7 @@ export default function RecepcionAlimentoMovil({ currentUser, onBack }: { curren
       <div role="status" aria-live="polite" className="max-w-md mx-auto px-4 pt-16 pb-24 animate-in fade-in text-center" data-testid="recepcion-alimento-movil">
         <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><CheckCircle2 className="h-10 w-10" /></div>
         <h1 className="mb-2 text-2xl font-black text-[var(--text-primary)]">Alimento recibido</h1>
-        <p className="mb-10 text-sm text-[var(--text-muted)]">Se avisó al administrador: {reporteEnviado.cantidadSacos} sacos de alimento {reporteEnviado.tipoAlimento.toLowerCase()} en {reporteEnviado.galeron} · {reporteEnviado.granja}.</p>
+        <p className="mb-10 text-sm text-[var(--text-muted)]">Se avisó al administrador: {reporteEnviado.cantidadSacos} sacos de alimento {reporteEnviado.tipoAlimento.toLowerCase()} recibidos en {reporteEnviado.granja}.</p>
         <button type="button" onClick={onBack || limpiar} className="w-full max-w-sm rounded-2xl bg-[var(--brand-primary)] py-5 text-lg font-black text-[var(--text-on-action)]">{onBack ? 'Volver a opciones' : 'Registrar otra entrega'}</button>
       </div>
     );
@@ -108,13 +98,13 @@ export default function RecepcionAlimentoMovil({ currentUser, onBack }: { curren
     return (
       <div className={contenedorPaso} data-testid="recepcion-alimento-movil">
         {onBack && <button type="button" onClick={onBack} className="mb-4 flex min-h-11 items-center gap-1 text-sm font-semibold text-[var(--brand-primary)]"><ArrowLeft className="h-4 w-4" />Volver a opciones</button>}
-        <ProgresoPuntosMovil total={3} paso={0} />
+        <ProgresoPuntosMovil total={2} paso={0} />
         <h2 className="mb-1 text-xl font-black text-[var(--text-primary)]">¿En qué granja llegó el alimento?</h2>
         <p className="mb-6 text-sm text-[var(--text-muted)]">Toca la granja que recibió el alimento</p>
         {mensajeError}
         <div className="space-y-3">
           {granjas.map(granja => (
-            <button key={granja.id} type="button" onClick={() => { setGranjaId(granja.id); setGaleronId(''); setPaso(2); }} className={tarjetaOpcion} style={{ background: 'var(--bg-card)', border: '2px solid var(--border-default)' }}>
+              <button key={granja.id} type="button" onClick={() => { setGranjaId(granja.id); setPaso(2); }} className={tarjetaOpcion} style={{ background: 'var(--bg-card)', border: '2px solid var(--border-default)' }}>
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><Wheat className="h-7 w-7" /></div>
               <div className="min-w-0 flex-1"><p className="text-lg font-bold text-[var(--text-primary)]">{granja.nombre}</p>{granja.ubicacion && <p className="text-sm text-[var(--text-muted)]">{granja.ubicacion}</p>}</div>
               <ChevronRight className="h-6 w-6 shrink-0 text-[var(--brand-primary)]" />
@@ -126,34 +116,12 @@ export default function RecepcionAlimentoMovil({ currentUser, onBack }: { curren
     );
   }
 
-  if (paso === 2) {
-    return (
-      <div className={contenedorPaso} data-testid="recepcion-alimento-movil">
-        {volver('Cambiar granja', () => setPaso(1))}
-        <ProgresoPuntosMovil total={3} paso={1} />
-        <h2 className="mb-1 text-xl font-black text-[var(--text-primary)]">¿En qué galerón?</h2>
-        <p className="mb-6 text-sm text-[var(--text-muted)]">Granja: <strong className="text-[var(--text-primary)]">{granjaSeleccionada?.nombre}</strong></p>
-        {mensajeError}
-        <div className="space-y-3">
-          {galeronesDeGranja.map(galeron => (
-            <button key={galeron.id} type="button" onClick={() => { setGaleronId(galeron.id); setPaso(3); }} className={tarjetaOpcion} style={{ background: 'var(--bg-card)', border: '2px solid var(--border-default)' }}>
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-primary-soft)] text-[var(--brand-primary)]"><Wheat className="h-7 w-7" /></div>
-              <div className="min-w-0 flex-1"><p className="text-lg font-bold text-[var(--text-primary)]">{galeron.nombre}</p></div>
-              <ChevronRight className="h-6 w-6 shrink-0 text-[var(--brand-primary)]" />
-            </button>
-          ))}
-          {!error && galeronesDeGranja.length === 0 && <p className="py-12 text-center text-[var(--text-muted)]">No hay galerones en esta granja</p>}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <form onSubmit={enviar} className={contenedorPaso} data-testid="recepcion-alimento-movil">
-      {volver('Cambiar galerón', () => setPaso(2))}
-      <ProgresoPuntosMovil total={3} paso={2} />
+      {volver('Cambiar granja', () => setPaso(1))}
+      <ProgresoPuntosMovil total={2} paso={1} />
       <h2 className="mb-1 text-xl font-black text-[var(--text-primary)]">¿Qué alimento llegó?</h2>
-      <p className="mb-6 text-sm text-[var(--text-muted)]">{granjaSeleccionada?.nombre} · {galeronSeleccionado?.nombre}</p>
+      <p className="mb-6 text-sm text-[var(--text-muted)]">Granja: <strong className="text-[var(--text-primary)]">{granjaSeleccionada?.nombre}</strong></p>
       {mensajeError}
       <div className="space-y-5">
         <label className="block text-base font-extrabold text-[var(--text-primary)]">Tipo de alimento

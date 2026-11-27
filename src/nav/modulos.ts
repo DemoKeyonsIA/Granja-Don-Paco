@@ -157,7 +157,9 @@ const SUBTABS_BODEGA_LEGACY = ['bodega-etiquetas', 'bodega-pesos'];
 export const SUBTABS_OPERACIONES_MOVIL: Record<Role, SubTabDef[]> = {
   Despachador: [
     { id: 'carga', label: 'Carga' },
+    { id: 'alimentos-menu', label: 'Alimentos' },
     { id: 'alimento-recibido', label: 'Recibir alimento' },
+    { id: 'alimento-asignar', label: 'Asignar alimento' },
     { id: 'incidencias', label: 'Incidencias' },
   ],
   Bodeguero: [{ id: 'recibir', label: 'Recibir' }],
