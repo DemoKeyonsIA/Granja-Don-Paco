@@ -654,8 +654,17 @@ export const vacunaciones = pgTable('vacunaciones', {
 
 // ==================== PHASE 4 — ALIMENTO / SILOS ====================
 
+export const tipos_alimento = pgTable('tipos_alimento', {
+  id: text('id').primaryKey(),
+  nombre: text('nombre').notNull().unique(),
+  estado: text('estado').notNull().default('Activo'), // Activo, Archivado
+  creadoPor: text('creado_por'),
+  creadoEn: text('creado_en').notNull(),
+});
+
 export const inventario_alimento = pgTable('inventario_alimento', {
   id: text('id').primaryKey(),
+  granjaId: text('granja_id').references(() => granjas.id),
   tipoAlimento: text('tipo_alimento').notNull(), // Inicial, Crecimiento, Producción, Premix
   proveedor: text('proveedor'),
   loteAlimento: text('lote_alimento'),

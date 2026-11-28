@@ -242,7 +242,7 @@ export const SUBTABS_OPERACIONES_DESKTOP: SubTabDef[] = [
 ];
 
 /**
- * Sub-tabs de Admin: Productos · Infraestructura · Precios · Usuarios · Vinculaciones.
+ * Sub-tabs de Admin: Configuración · Productos · Infraestructura · Precios · Usuarios · Vinculaciones.
  *
  * Vinculaciones vuelve a vivir aquí. Office la había dejado después de la Fase 6,
  * pero es una pantalla de configuración del sistema, no correo de negocio: se
@@ -250,6 +250,7 @@ export const SUBTABS_OPERACIONES_DESKTOP: SubTabDef[] = [
  * `/api/office/vinculaciones` sigue detrás de `requireOfficeAdmin`.
  */
 export const SUBTABS_ADMIN: SubTabDef[] = [
+  { id: 'configuracion', label: 'Configuración', roles: ['Admin'] },
   { id: 'productos', label: 'Productos' },
   { id: 'infraestructura', label: 'Infraestructura' },
   { id: 'precios-negociacion', label: 'Precios y negociación', roles: ['Admin'] },

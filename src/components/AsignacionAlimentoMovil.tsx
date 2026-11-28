@@ -8,7 +8,7 @@ import ProgresoPuntosMovil from './ProgresoPuntosMovil';
 
 type Granja = { id: string; nombre: string; ubicacion?: string; estado?: string };
 type Galeron = { id: string; nombre: string; granjaId: string; estado?: string };
-type LoteAlimento = { id: string; tipoAlimento: string; loteAlimento?: string | null; cantidadActual: number; unidad: string; estado?: string; galeronAsociado?: string | null };
+type LoteAlimento = { id: string; granjaId?: string | null; tipoAlimento: string; loteAlimento?: string | null; cantidadActual: number; unidad: string; estado?: string; galeronAsociado?: string | null };
 type Asignacion = { alimento: string; galeron: string; cantidad: number; unidad: string };
 
 export default function AsignacionAlimentoMovil({ currentUser, onBack }: { currentUser: User; onBack: () => void }) {
@@ -48,9 +48,10 @@ export default function AsignacionAlimentoMovil({ currentUser, onBack }: { curre
 
   const granja = granjas.find(g => g.id === granjaId);
   const galeron = galerones.find(g => g.id === galeronId);
-  const lote = lotes.find(l => l.id === loteId);
+  const lotesParaGranja = useMemo(() => lotes.filter(l => !l.granjaId || l.granjaId === granjaId), [lotes, granjaId]);
+  const lote = lotesParaGranja.find(l => l.id === loteId);
   const galeronesGranja = useMemo(() => galerones.filter(g => g.granjaId === granjaId), [galerones, granjaId]);
-  const disponibleMismoTipo = lote ? lotes.filter(l => l.tipoAlimento === lote.tipoAlimento && l.unidad === lote.unidad).reduce((sum, row) => sum + Number(row.cantidadActual || 0), 0) : 0;
+  const disponibleMismoTipo = lote ? lotesParaGranja.filter(l => l.tipoAlimento === lote.tipoAlimento && l.unidad === lote.unidad).reduce((sum, row) => sum + Number(row.cantidadActual || 0), 0) : 0;
 
   const reiniciar = () => { setAsignacion(null); setPaso(1); setGranjaId(''); setGaleronId(''); setLoteId(''); setCantidad(''); void cargar(); };
   const guardar = async (event: FormEvent) => {
@@ -94,7 +95,7 @@ export default function AsignacionAlimentoMovil({ currentUser, onBack }: { curre
     <section className={contenedor} data-testid="asignacion-alimento-movil">
       {volver('Volver a Alimentos', onBack)}<ProgresoPuntosMovil total={3} paso={0} />
       <h1 className="mb-1 text-xl font-black text-[var(--text-primary)]">¿En qué granja?</h1><p className="mb-5 text-sm text-[var(--text-muted)]">Elige la granja que recibirá alimento.</p>
-      <div className="space-y-3">{granjas.map(item => <button key={item.id} type="button" className={opcion} onClick={() => { setGranjaId(item.id); setGaleronId(''); setPaso(2); }}><span className="min-w-0 flex-1"><span className="block text-lg font-extrabold text-[var(--text-primary)]">{item.nombre}</span>{item.ubicacion && <span className="text-sm text-[var(--text-muted)]">{item.ubicacion}</span>}</span><ChevronRight className="h-6 w-6 text-[var(--brand-primary)]" /></button>)}{granjas.length === 0 && <p className="py-8 text-center text-[var(--text-muted)]">No hay granjas disponibles.</p>}</div>
+      <div className="space-y-3">{granjas.map(item => <button key={item.id} type="button" className={opcion} onClick={() => { setGranjaId(item.id); setGaleronId(''); setLoteId(''); setCantidad(''); setPaso(2); }}><span className="min-w-0 flex-1"><span className="block text-lg font-extrabold text-[var(--text-primary)]">{item.nombre}</span>{item.ubicacion && <span className="text-sm text-[var(--text-muted)]">{item.ubicacion}</span>}</span><ChevronRight className="h-6 w-6 text-[var(--brand-primary)]" /></button>)}{granjas.length === 0 && <p className="py-8 text-center text-[var(--text-muted)]">No hay granjas disponibles.</p>}</div>
     </section>
   );
 
@@ -110,10 +111,10 @@ export default function AsignacionAlimentoMovil({ currentUser, onBack }: { curre
     <form onSubmit={guardar} className={contenedor} data-testid="asignacion-alimento-movil">
       {volver('Cambiar galerón', () => setPaso(2))}<ProgresoPuntosMovil total={3} paso={2} />
       <h1 className="mb-1 text-xl font-black text-[var(--text-primary)]">¿Cuánto alimento asignamos?</h1><p className="mb-5 text-sm text-[var(--text-muted)]">{granja?.nombre} · {galeron?.nombre}</p>
-      {lotes.length === 0 ? <div className="rounded-2xl border border-[var(--border-default)] bg-[var(--bg-card)] p-5 text-center"><PackagePlus className="mx-auto mb-3 h-9 w-9 text-[var(--text-muted)]"/><p className="font-bold text-[var(--text-primary)]">No hay alimento disponible</p><p className="mt-1 text-sm text-[var(--text-muted)]">No hay saldo en el stock común.</p></div> : <>
+      {lotesParaGranja.length === 0 ? <div className="rounded-2xl border border-[var(--border-default)] bg-[var(--bg-card)] p-5 text-center"><PackagePlus className="mx-auto mb-3 h-9 w-9 text-[var(--text-muted)]"/><p className="font-bold text-[var(--text-primary)]">No hay alimento disponible</p><p className="mt-1 text-sm text-[var(--text-muted)]">Esta granja aún no tiene saldo común. Registra la recepción o consulta a Administración.</p></div> : <>
         <label className="block text-base font-extrabold text-[var(--text-primary)]">Alimento disponible
           <select required value={loteId} onChange={e => { setLoteId(e.target.value); setCantidad(''); }} className="mt-2 min-h-14 w-full rounded-xl border-2 border-[var(--border-default)] bg-[var(--bg-card)] px-4 text-base text-[var(--text-primary)]">
-            <option value="">Elige un lote</option>{lotes.map(item => <option key={item.id} value={item.id}>{item.tipoAlimento} · {item.loteAlimento || 'sin lote'} · {Number(item.cantidadActual)} {item.unidad}</option>)}
+            <option value="">Elige un lote</option>{lotesParaGranja.map(item => <option key={item.id} value={item.id}>{item.tipoAlimento} · {item.loteAlimento || 'sin lote'} · {Number(item.cantidadActual)} {item.unidad}</option>)}
           </select>
         </label>
         {lote && <>

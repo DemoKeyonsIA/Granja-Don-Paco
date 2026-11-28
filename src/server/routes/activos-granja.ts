@@ -63,8 +63,52 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
 
   // ==================== ALIMENTO / SILOS ====================
 
-  // El encargado informa los sacos que recibió. Es un aviso para Administración:
-  // no crea ni modifica inventario, evitando duplicar la compra que ya registró Finanzas.
+  app.get('/api/alimento/tipos', requirePermission ? requirePermission('produccion', 'view') : undefined, async (_req: any, res: any) => {
+    try {
+      const tipos = await db.query.tipos_alimento.findMany();
+      return res.json((tipos as any[]).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es')));
+    } catch (error: any) { return res.status(500).json({ error: error?.message || 'No se pudo cargar el catálogo de alimentos.' }); }
+  });
+
+  app.post('/api/alimento/tipos', requirePermission ? requirePermission('produccion', 'create') : undefined, async (req: any, res: any) => {
+    try {
+      const usuario = req.usuario;
+      const roles = rolesParaUsuario(usuario?.role, usuario?.roles);
+      if (!roles.includes('Admin')) return res.status(403).json({ error: 'Solo Administración puede configurar los tipos de alimento.' });
+      const nombre = String(req.body?.nombre || '').trim().replace(/\s+/g, ' ');
+      if (nombre.length < 2 || nombre.length > 60) return res.status(400).json({ error: 'El nombre debe tener entre 2 y 60 caracteres.' });
+      const tipos = await db.query.tipos_alimento.findMany();
+      if ((tipos as any[]).some(t => String(t.nombre).toLocaleLowerCase('es') === nombre.toLocaleLowerCase('es'))) return res.status(409).json({ error: 'Ese tipo de alimento ya está registrado.' });
+      const id = crypto.randomUUID();
+      const creadoEn = new Date().toISOString();
+      const tipo = { id, nombre, estado: 'Activo', creadoPor: String(usuario?.id || 'demo'), creadoEn };
+      await db.insert(schema.tipos_alimento).values(tipo);
+      await logAudit?.(String(usuario?.id || 'demo'), 'Crear', 'TipoAlimento', id, null, tipo);
+      return res.status(201).json(tipo);
+    } catch (error: any) {
+      const duplicate = /unique|duplicate/i.test(String(error?.message || ''));
+      return res.status(duplicate ? 409 : 500).json({ error: duplicate ? 'Ese tipo de alimento ya está registrado.' : error?.message || 'No se pudo guardar el tipo de alimento.' });
+    }
+  });
+
+  app.patch('/api/alimento/tipos/:id', requirePermission ? requirePermission('produccion', 'create') : undefined, async (req: any, res: any) => {
+    try {
+      const usuario = req.usuario;
+      const roles = rolesParaUsuario(usuario?.role, usuario?.roles);
+      if (!roles.includes('Admin')) return res.status(403).json({ error: 'Solo Administración puede configurar los tipos de alimento.' });
+      const estado = String(req.body?.estado || '');
+      if (!['Activo', 'Archivado'].includes(estado)) return res.status(400).json({ error: 'Estado de tipo de alimento inválido.' });
+      const actual = await db.query.tipos_alimento.findFirst({ where: eq(schema.tipos_alimento.id, String(req.params.id)) });
+      if (!actual) return res.status(404).json({ error: 'No se encontró el tipo de alimento.' });
+      await db.update(schema.tipos_alimento).set({ estado }).where(eq(schema.tipos_alimento.id, actual.id));
+      const despues = { ...actual, estado };
+      await logAudit?.(String(usuario?.id || 'demo'), estado === 'Activo' ? 'Reactivar' : 'Archivar', 'TipoAlimento', actual.id, actual, despues);
+      return res.json(despues);
+    } catch (error: any) { return res.status(500).json({ error: error?.message || 'No se pudo actualizar el tipo de alimento.' }); }
+  });
+
+  // La recepción física genera saldo común de la granja para poder asignarlo
+  // después a un galerón. También queda una notificación para revisión administrativa.
   app.post('/api/alimento/recepciones', requirePermission ? requirePermission('produccion', 'create') : undefined, async (req: any, res: any) => {
     try {
       const usuario = req.usuario;
@@ -76,7 +120,8 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
       const proveedor = String(req.body?.proveedor || '').trim();
       const referencia = String(req.body?.referencia || '').trim();
       const observaciones = String(req.body?.observaciones || '').trim();
-      if (!['Inicial', 'Crecimiento', 'Producción', 'Premix'].includes(tipoAlimento)) return res.status(400).json({ error: 'Seleccione un tipo de alimento válido.' });
+      const tipoActivo = await db.query.tipos_alimento.findFirst({ where: and(eq(schema.tipos_alimento.nombre, tipoAlimento), eq(schema.tipos_alimento.estado, 'Activo')) });
+      if (!tipoActivo) return res.status(400).json({ error: 'Seleccione un tipo de alimento activo del catálogo.' });
       if (!Number.isSafeInteger(cantidadSacos) || cantidadSacos <= 0) return res.status(400).json({ error: 'Indique la cantidad recibida en sacos completos.' });
       if (!granjaId) return res.status(400).json({ error: 'Seleccione la granja que recibió el alimento.' });
       if (proveedor.length > 160 || referencia.length > 160 || observaciones.length > 500) return res.status(400).json({ error: 'Revise los datos: el proveedor y la referencia aceptan hasta 160 caracteres y la nota hasta 500.' });
@@ -84,22 +129,35 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
       if (!granja || granja.estado === 'Archivado') return res.status(404).json({ error: 'La granja seleccionada no está disponible.' });
       const fecha = new Date().toISOString();
       const id = crypto.randomUUID();
+      const inventarioAlimentoId = crypto.randomUUID();
       const datos = {
         tipoAlimento, cantidadSacos, unidad: 'sacos', granjaId,
         granja: granja.nombre,
         proveedor: proveedor || null, referencia: referencia || null,
         observaciones: observaciones || null,
         reportadoPorNombre: usuario?.name || usuario?.nombre || 'Encargado de galerón',
-        inventarioActualizado: false,
+        inventarioAlimentoId,
+        inventarioActualizado: true,
       };
-      await db.insert(schema.aprobaciones).values({
-        id, tipo: 'RecepcionAlimento', modulo: 'Inventario de alimento', referenciaId: null,
-        solicitudUsuario: String(usuario.id),
-        descripcion: `Recepción reportada: ${cantidadSacos} sacos de alimento de ${tipoAlimento.toLowerCase()} en ${granja.nombre}.`,
-        datos: JSON.stringify(datos), estado: 'Pendiente', fechaSolicitud: fecha,
+      await db.transaction(async (tx: any) => {
+        await tx.insert(inventario_alimento).values({
+          id: inventarioAlimentoId, granjaId, tipoAlimento: tipoActivo.nombre,
+          proveedor: proveedor || null, loteAlimento: null, siloUbicacion: 'Bodega Alimento',
+          cantidadRecibida: cantidadSacos, cantidadActual: cantidadSacos, unidad: 'sacos',
+          galeronAsociado: null, loteAvesAsociado: null, fechaIngreso: fecha,
+          responsable: String(usuario?.name || usuario?.nombre || 'Encargado de galerón'),
+          referenciaDocumentoOrigen: referencia || null, fechaDocumentoOrigen: null,
+          montoDocumentoOrigen: null, monedaDocumentoOrigen: null, merma: 0, estado: 'Activo',
+        });
+        await tx.insert(schema.aprobaciones).values({
+          id, tipo: 'RecepcionAlimento', modulo: 'Inventario de alimento', referenciaId: null,
+          solicitudUsuario: String(usuario.id),
+          descripcion: `Recepción registrada: ${cantidadSacos} sacos de alimento ${tipoActivo.nombre.toLowerCase()} en ${granja.nombre}.`,
+          datos: JSON.stringify(datos), estado: 'Pendiente', fechaSolicitud: fecha,
+        });
       });
-      await logAudit?.(String(usuario.id), 'ReportarRecepcion', 'RecepcionAlimento', id, null, datos, 'Recepción informada por encargado; pendiente de revisión administrativa.');
-      return res.status(201).json({ success: true, id, datos, message: 'Recepción enviada a Administración.' });
+      await logAudit?.(String(usuario.id), 'RegistrarRecepcion', 'RecepcionAlimento', id, null, datos, 'Recepción física incorporada al stock común de la granja y enviada a revisión administrativa.');
+      return res.status(201).json({ success: true, id, datos, message: 'Recepción registrada en el inventario y enviada a Administración.' });
     } catch (error: any) {
       console.error('Error reportando recepción de alimento:', error);
       return res.status(500).json({ error: 'No se pudo enviar la recepción a Administración.' });
@@ -108,6 +166,45 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
 
   app.get("/api/alimento", requirePermission ? requirePermission(['produccion', 'inventario_bodega'], 'view') : undefined, async (req, res) => {
     try {
+      // Recupera recepciones antiguas: antes solo quedaban como solicitudes
+      // pendientes y nunca generaban saldo para el asistente de asignación.
+      const recepcionesAnteriores = await db.query.aprobaciones.findMany({ where: eq(schema.aprobaciones.tipo, 'RecepcionAlimento') });
+      for (const recepcion of recepcionesAnteriores) {
+        if (!['Pendiente', 'Aprobado'].includes(recepcion.estado) || !recepcion.datos) continue;
+        let datos: any;
+        try { datos = JSON.parse(recepcion.datos); } catch { continue; }
+        if (datos.inventarioActualizado) continue;
+        const granjaId = String(datos.granjaId || '').trim();
+        const tipoAlimento = String(datos.tipoAlimento || '').trim();
+        const cantidadSacos = Number(datos.cantidadSacos);
+        if (!granjaId || !tipoAlimento || !Number.isSafeInteger(cantidadSacos) || cantidadSacos <= 0) continue;
+        const granja = await db.query.granjas.findFirst({ where: eq(schema.granjas.id, granjaId) });
+        if (!granja || granja.estado === 'Archivado') continue;
+        await db.transaction(async (tx: any) => {
+          const inventarioAlimentoId = crypto.randomUUID();
+          const fechaIngreso = new Date().toISOString();
+          const nuevosDatos = { ...datos, inventarioAlimentoId, inventarioActualizado: true };
+          const actualizada = await tx.update(schema.aprobaciones)
+            .set({ datos: JSON.stringify(nuevosDatos) })
+            .where(and(
+              eq(schema.aprobaciones.id, recepcion.id),
+              eq(schema.aprobaciones.estado, recepcion.estado),
+              eq(schema.aprobaciones.datos, recepcion.datos),
+            ))
+            .returning({ id: schema.aprobaciones.id });
+          if (!actualizada.length) return;
+          await tx.insert(inventario_alimento).values({
+            id: inventarioAlimentoId, granjaId, tipoAlimento,
+            proveedor: datos.proveedor || null, loteAlimento: null, siloUbicacion: 'Bodega Alimento',
+            cantidadRecibida: cantidadSacos, cantidadActual: cantidadSacos, unidad: 'sacos',
+            galeronAsociado: null, loteAvesAsociado: null, fechaIngreso,
+            responsable: datos.reportadoPorNombre || 'Encargado de galerón',
+            referenciaDocumentoOrigen: datos.referencia || null, fechaDocumentoOrigen: null,
+            montoDocumentoOrigen: null, monedaDocumentoOrigen: null, merma: 0, estado: 'Activo',
+          });
+          await logAudit?.(recepcion.solicitudUsuario || 'sistema', 'RecuperarRecepcion', 'RecepcionAlimento', recepcion.id, null, nuevosDatos, 'Recepción anterior incorporada al stock común de la granja.');
+        });
+      }
       const data = await db.query.inventario_alimento.findMany();
       res.json(data);
     } catch (error: any) { res.status(500).json({ error: error.message }); }
@@ -120,6 +217,8 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
       if (!tipoAlimento || !Number.isFinite(cantidad) || cantidad <= 0 || !responsable) {
         return res.status(400).json({ error: "Faltan datos requeridos de alimento" });
       }
+      const tipoActivo = await db.query.tipos_alimento.findFirst({ where: and(eq(schema.tipos_alimento.nombre, String(tipoAlimento).trim()), eq(schema.tipos_alimento.estado, 'Activo')) });
+      if (!tipoActivo) return res.status(400).json({ error: 'Elija un tipo de alimento activo del catálogo de Administración.' });
       if (!['kg', 'sacos'].includes(String(unidad || 'kg'))) return res.status(400).json({ error: 'La unidad del alimento debe ser kg o sacos.' });
       const hayDatosDocumento = Boolean(referenciaDocumentoOrigen || fechaDocumentoOrigen || (montoDocumentoOrigen !== '' && montoDocumentoOrigen != null) || monedaDocumentoOrigen);
       const montoDocumento = montoDocumentoOrigen === '' || montoDocumentoOrigen == null ? null : Number(montoDocumentoOrigen);
@@ -130,7 +229,8 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
       }
       const id = crypto.randomUUID();
       await db.insert(inventario_alimento).values({
-        id, tipoAlimento, proveedor: proveedor || null, loteAlimento: loteAlimento || null,
+          id,
+          tipoAlimento, proveedor: proveedor || null, loteAlimento: loteAlimento || null,
         siloUbicacion: siloUbicacion || null, cantidadRecibida: cantidad,
         cantidadActual: cantidad, unidad: unidad || 'kg',
         galeronAsociado: galeronAsociado || null, loteAvesAsociado: loteAvesAsociado || null,
@@ -160,6 +260,7 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
       const resultado = await db.transaction(async (tx: any) => {
         const item = await tx.query.inventario_alimento.findFirst({ where: eq(inventario_alimento.id, inventarioAlimentoId) });
         if (!item || item.estado !== 'Activo' || Number(item.cantidadActual) <= 0 || item.galeronAsociado) throw Object.assign(new Error('Ese alimento ya no está disponible en el stock común. Actualice la pantalla.'), { status: 409 });
+        if (item.granjaId && item.granjaId !== granjaId) throw Object.assign(new Error('Ese alimento está registrado para otra granja.'), { status: 409 });
         if (!['kg', 'sacos'].includes(String(item.unidad)) || String(req.body?.unidad || item.unidad) !== item.unidad) throw Object.assign(new Error('La unidad seleccionada no coincide con el inventario.'), { status: 400 });
         if (item.unidad === 'sacos' && !Number.isSafeInteger(cantidad)) throw Object.assign(new Error('La cantidad debe ser un número entero de sacos.'), { status: 400 });
         if (item.unidad === 'kg' && Math.abs(cantidad * 1000 - Math.round(cantidad * 1000)) > 0.00001) throw Object.assign(new Error('La cantidad en kilos admite hasta tres decimales.'), { status: 400 });
@@ -178,7 +279,7 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
 
         if (cantidadAsignada >= saldoAntes) {
           const updated = await tx.update(inventario_alimento)
-            .set({ galeronAsociado: galeronId, loteAvesAsociado: null })
+            .set({ galeronAsociado: galeronId, granjaId, loteAvesAsociado: null })
             .where(and(eq(inventario_alimento.id, item.id), eq(inventario_alimento.cantidadActual, item.cantidadActual), isNull(inventario_alimento.galeronAsociado)))
             .returning({ id: inventario_alimento.id });
           if (!updated.length) throw Object.assign(new Error('El stock cambió mientras se guardaba. Actualice e inténtelo de nuevo.'), { status: 409 });
@@ -191,7 +292,7 @@ export function registrarRutasActivosGranja(app: any, db: any, requirePermission
 
           inventarioDestinoId = crypto.randomUUID();
           await tx.insert(inventario_alimento).values({
-            id: inventarioDestinoId, tipoAlimento: item.tipoAlimento, proveedor: item.proveedor || null,
+            id: inventarioDestinoId, granjaId, tipoAlimento: item.tipoAlimento, proveedor: item.proveedor || null,
             loteAlimento: item.loteAlimento || null, siloUbicacion: galeron.nombre,
             cantidadRecibida: cantidadAsignada, cantidadActual: cantidadAsignada, unidad: item.unidad,
             galeronAsociado: galeronId, loteAvesAsociado: null, fechaIngreso: fecha, responsable,

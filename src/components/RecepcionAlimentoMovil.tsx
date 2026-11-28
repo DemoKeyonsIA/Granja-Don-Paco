@@ -7,12 +7,12 @@ import { BloqueCarga } from './Spinner';
 import ProgresoPuntosMovil from './ProgresoPuntosMovil';
 
 type Granja = { id: string; nombre: string; ubicacion?: string; estado?: string };
+type TipoAlimento = { id: string; nombre: string; estado: 'Activo' | 'Archivado' };
 type Reporte = { cantidadSacos: number; tipoAlimento: string; granja: string };
-
-const TIPOS_ALIMENTO = ['Inicial', 'Crecimiento', 'Producción', 'Premix'];
 
 export default function RecepcionAlimentoMovil({ currentUser, onBack }: { currentUser: User; onBack?: () => void }) {
   const [granjas, setGranjas] = useState<Granja[]>([]);
+  const [tiposAlimento, setTiposAlimento] = useState<TipoAlimento[]>([]);
   const [granjaId, setGranjaId] = useState('');
   const [tipoAlimento, setTipoAlimento] = useState('');
   const [cantidadSacos, setCantidadSacos] = useState('');
@@ -27,10 +27,14 @@ export default function RecepcionAlimentoMovil({ currentUser, onBack }: { curren
     setError('');
     try {
       const headers = sessionHeaders(currentUser.id);
-      const granjasResponse = await fetch('/api/granjas', { headers });
-      const granjasData = await granjasResponse.json();
+      const [granjasResponse, tiposResponse] = await Promise.all([
+        fetch('/api/granjas', { headers }), fetch('/api/alimento/tipos', { headers }),
+      ]);
+      const [granjasData, tiposData] = await Promise.all([granjasResponse.json(), tiposResponse.json()]);
       if (!granjasResponse.ok) throw new Error(granjasData.error || 'No se pudieron cargar las granjas.');
+      if (!tiposResponse.ok) throw new Error(tiposData.error || 'No se pudieron cargar los tipos de alimento.');
       setGranjas((Array.isArray(granjasData) ? granjasData : []).filter((g: Granja) => g.estado !== 'Archivado'));
+      setTiposAlimento((Array.isArray(tiposData) ? tiposData : []).filter((tipo: TipoAlimento) => tipo.estado === 'Activo'));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron cargar los datos.');
     } finally {
@@ -45,7 +49,7 @@ export default function RecepcionAlimentoMovil({ currentUser, onBack }: { curren
   const enviar = async (event: React.FormEvent) => {
     event.preventDefault();
     const cantidad = Number(cantidadSacos);
-    if (!granjaSeleccionada || !TIPOS_ALIMENTO.includes(tipoAlimento) || !Number.isSafeInteger(cantidad) || cantidad <= 0) {
+    if (!granjaSeleccionada || !tiposAlimento.some(tipo => tipo.nombre === tipoAlimento) || !Number.isSafeInteger(cantidad) || cantidad <= 0) {
       toast.error('Revisa la granja, el alimento y la cantidad de sacos.');
       return;
     }
@@ -59,7 +63,7 @@ export default function RecepcionAlimentoMovil({ currentUser, onBack }: { curren
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'No se pudo enviar el reporte.');
       setReporteEnviado({ cantidadSacos: cantidad, tipoAlimento, granja: granjaSeleccionada.nombre });
-      toast.success('Avisamos al administrador.');
+      toast.success('Alimento agregado al stock de la granja y aviso enviado al administrador.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo enviar el reporte.');
     } finally {
@@ -88,7 +92,7 @@ export default function RecepcionAlimentoMovil({ currentUser, onBack }: { curren
       <div role="status" aria-live="polite" className="max-w-md mx-auto px-4 pt-16 pb-24 animate-in fade-in text-center" data-testid="recepcion-alimento-movil">
         <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><CheckCircle2 className="h-10 w-10" /></div>
         <h1 className="mb-2 text-2xl font-black text-[var(--text-primary)]">Alimento recibido</h1>
-        <p className="mb-10 text-sm text-[var(--text-muted)]">Se avisó al administrador: {reporteEnviado.cantidadSacos} sacos de alimento {reporteEnviado.tipoAlimento.toLowerCase()} recibidos en {reporteEnviado.granja}.</p>
+        <p className="mb-10 text-sm text-[var(--text-muted)]">{reporteEnviado.cantidadSacos} sacos de alimento {reporteEnviado.tipoAlimento.toLowerCase()} quedaron disponibles para asignar en {reporteEnviado.granja}. También se avisó al administrador.</p>
         <button type="button" onClick={onBack || limpiar} className="w-full max-w-sm rounded-2xl bg-[var(--brand-primary)] py-5 text-lg font-black text-[var(--text-on-action)]">{onBack ? 'Volver a opciones' : 'Registrar otra entrega'}</button>
       </div>
     );
@@ -127,13 +131,14 @@ export default function RecepcionAlimentoMovil({ currentUser, onBack }: { curren
         <label className="block text-base font-extrabold text-[var(--text-primary)]">Tipo de alimento
           <select required value={tipoAlimento} onChange={e => setTipoAlimento(e.target.value)} className={campo}>
             <option value="">Elige el alimento</option>
-            {TIPOS_ALIMENTO.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}
+            {tiposAlimento.map(tipo => <option key={tipo.id} value={tipo.nombre}>{tipo.nombre}</option>)}
           </select>
         </label>
+        {tiposAlimento.length === 0 && <p role="status" className="text-sm text-[var(--text-muted)]">No hay tipos de alimento activos. Pide al administrador que agregue uno en Configuración.</p>}
         <label className="block text-base font-extrabold text-[var(--text-primary)]">¿Cuántos sacos llegaron?
           <input required type="number" inputMode="numeric" min="1" step="1" value={cantidadSacos} onChange={e => setCantidadSacos(e.target.value)} placeholder="Escribe la cantidad" className={`${campo} text-2xl font-extrabold tabular-nums`} />
         </label>
-        <button type="submit" disabled={enviando || !tipoAlimento || !cantidadSacos} className="min-h-14 w-full rounded-xl bg-[var(--brand-primary)] px-4 text-lg font-extrabold text-[var(--text-on-action)] disabled:cursor-not-allowed disabled:opacity-50">{enviando ? 'Enviando…' : 'Avisar al administrador'}</button>
+        <button type="submit" disabled={enviando || tiposAlimento.length === 0 || !tipoAlimento || !cantidadSacos} className="min-h-14 w-full rounded-xl bg-[var(--brand-primary)] px-4 text-lg font-extrabold text-[var(--text-on-action)] disabled:cursor-not-allowed disabled:opacity-50">{enviando ? 'Enviando…' : 'Avisar al administrador'}</button>
       </div>
     </form>
   );

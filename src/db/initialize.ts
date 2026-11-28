@@ -118,6 +118,14 @@ export async function initializeDatabase(client: any, dbInstance: any) {
   for (const sql of createTables) {
     await client.execute(sql);
   }
+  const inventarioAlimentoCols = new Set((await client.execute('PRAGMA table_info(inventario_alimento)')).rows.map((r: any) => String(r.name)));
+  if (!inventarioAlimentoCols.has('granja_id')) await client.execute('ALTER TABLE inventario_alimento ADD COLUMN granja_id TEXT REFERENCES granjas(id)');
+  const tiposAlimentoIniciales = ['Inicial', 'Crecimiento', 'Producción', 'Premix'];
+  const fechaCatalogoAlimento = new Date().toISOString();
+  for (const [index, nombre] of tiposAlimentoIniciales.entries()) await client.execute({
+    sql: "INSERT OR IGNORE INTO tipos_alimento (id, nombre, estado, creado_por, creado_en) VALUES (?, ?, 'Activo', NULL, ?)",
+    args: [`tipo-alimento-demo-${index + 1}`, nombre, fechaCatalogoAlimento],
+  });
   const notaEstadosCols = new Set((await client.execute('PRAGMA table_info(notas_estados_financieros)')).rows.map((r: any) => String(r.name)));
   if (!notaEstadosCols.has('reemplaza_nota_id')) await client.execute('ALTER TABLE notas_estados_financieros ADD COLUMN reemplaza_nota_id TEXT');
   await client.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_notas_estados_reemplaza_unico ON notas_estados_financieros(reemplaza_nota_id) WHERE reemplaza_nota_id IS NOT NULL');

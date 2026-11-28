@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { sessionHeaders } from '../lib/session';
 
 interface Props { currentUser: User; }
+type TipoAlimento = { id: string; nombre: string; estado: 'Activo' | 'Archivado' };
 
 export default function Alimento({ currentUser }: Props) {
   const [inventario, setInventario] = useState<InventarioAlimento[]>([]);
@@ -16,6 +17,7 @@ export default function Alimento({ currentUser }: Props) {
   const [integridad, setIntegridad] = useState<any>(null);
   const [conteos, setConteos] = useState<any[]>([]);
   const [transferencias, setTransferencias] = useState<any[]>([]);
+  const [tiposAlimento, setTiposAlimento] = useState<TipoAlimento[]>([]);
   const [mostrarConteo, setMostrarConteo] = useState(false);
   const [mostrarTransferencia, setMostrarTransferencia] = useState(false);
   const [formConteo, setFormConteo] = useState({ inventarioAlimentoId: '', cantidadFisica: '', responsable: '', observaciones: '' });
@@ -28,7 +30,7 @@ export default function Alimento({ currentUser }: Props) {
   const [subTab, setSubTab] = useState<'inventario' | 'consumo' | 'alertas'>('inventario');
 
   const [formInv, setFormInv] = useState({
-    tipoAlimento: 'Producción', proveedor: '', loteAlimento: '', siloUbicacion: 'Silo 1',
+    tipoAlimento: '', proveedor: '', loteAlimento: '', siloUbicacion: 'Silo 1',
     cantidadRecibida: 0, unidad: 'kg', responsable: '', galeronAsociado: '', loteAvesAsociado: '', referenciaDocumentoOrigen: '', fechaDocumentoOrigen: '', montoDocumentoOrigen: '', monedaDocumentoOrigen: 'CRC'
   });
   const [formCons, setFormCons] = useState({
@@ -40,9 +42,9 @@ export default function Alimento({ currentUser }: Props) {
     setLoadError('');
     try {
       const headers = sessionHeaders(currentUser.id);
-      const [iRes, cRes, aRes, gRes, lRes, f3Res, conteosRes, transferenciasRes] = await Promise.all([
+      const [iRes, cRes, aRes, gRes, lRes, f3Res, conteosRes, transferenciasRes, tiposRes] = await Promise.all([
         fetch('/api/alimento', { headers }), fetch('/api/alimento/consumo', { headers }), fetch('/api/alimento/alertas', { headers }),
-        fetch('/api/galerones', { headers }), fetch('/api/lotes', { headers }), fetch('/api/alimento/f3-integridad', { headers }), fetch('/api/alimento/conteos', { headers }), fetch('/api/alimento/transferencias', { headers })
+        fetch('/api/galerones', { headers }), fetch('/api/lotes', { headers }), fetch('/api/alimento/f3-integridad', { headers }), fetch('/api/alimento/conteos', { headers }), fetch('/api/alimento/transferencias', { headers }), fetch('/api/alimento/tipos', { headers })
       ]);
       const responses = [iRes, cRes, aRes];
       const failed = responses.find(r => !r.ok);
@@ -50,6 +52,11 @@ export default function Alimento({ currentUser }: Props) {
         ? 'No tienes acceso al control de alimento con este perfil.'
         : `No se pudo cargar alimento (${failed.status}).`);
       const [inventarioData, consumosData, alertasData] = await Promise.all(responses.map(r => r.json()));
+      const tiposData = await tiposRes.json();
+      if (!tiposRes.ok) throw new Error(tiposData.error || `No se pudo cargar el catálogo de alimento (${tiposRes.status}).`);
+      const tiposActivos = (Array.isArray(tiposData) ? tiposData : []).filter((tipo: TipoAlimento) => tipo.estado === 'Activo');
+      setTiposAlimento(tiposActivos);
+      setFormInv(prev => ({ ...prev, tipoAlimento: tiposActivos.some((tipo: TipoAlimento) => tipo.nombre === prev.tipoAlimento) ? prev.tipoAlimento : tiposActivos[0]?.nombre || '' }));
       setInventario(Array.isArray(inventarioData) ? inventarioData : []);
       setConsumos(Array.isArray(consumosData) ? consumosData : []);
       setAlertas(alertasData && typeof alertasData === 'object' ? alertasData : {});
@@ -75,7 +82,7 @@ export default function Alimento({ currentUser }: Props) {
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Error al registrar ingreso'); }
       toast.success('Ingreso de alimento registrado');
       setIsCreating(false);
-      setFormInv({ tipoAlimento: 'Producción', proveedor: '', loteAlimento: '', siloUbicacion: 'Silo 1', cantidadRecibida: 0, unidad: 'kg', responsable: '', galeronAsociado: '', loteAvesAsociado: '', referenciaDocumentoOrigen: '', fechaDocumentoOrigen: '', montoDocumentoOrigen: '', monedaDocumentoOrigen: 'CRC' });
+      setFormInv({ tipoAlimento: tiposAlimento[0]?.nombre || '', proveedor: '', loteAlimento: '', siloUbicacion: 'Silo 1', cantidadRecibida: 0, unidad: 'kg', responsable: '', galeronAsociado: '', loteAvesAsociado: '', referenciaDocumentoOrigen: '', fechaDocumentoOrigen: '', montoDocumentoOrigen: '', monedaDocumentoOrigen: 'CRC' });
       cargar();
     } catch (e: any) { toast.error(e.message); }
     setLoading(false);
@@ -261,9 +268,11 @@ export default function Alimento({ currentUser }: Props) {
             </div>
             <div className="space-y-3">
               <div><label className="block text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-1">Tipo de Alimento *</label>
-                <select value={formInv.tipoAlimento} onChange={e => setFormInv({ ...formInv, tipoAlimento: e.target.value })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white">
-                  {['Inicial', 'Crecimiento', 'Producción', 'Premix'].map(t => <option key={t}>{t}</option>)}
+                <select required value={formInv.tipoAlimento} onChange={e => setFormInv({ ...formInv, tipoAlimento: e.target.value })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white">
+                  <option value="">Seleccione un tipo</option>
+                  {tiposAlimento.map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)}
                 </select></div>
+              {tiposAlimento.length === 0 && <p className="text-sm text-amber-800 dark:text-amber-200">Agrega y activa un tipo de alimento en Administración → Configuración para habilitar nuevos ingresos.</p>}
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-1">Proveedor</label>
                   <input value={formInv.proveedor} onChange={e => setFormInv({ ...formInv, proveedor: e.target.value })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white" /></div>
@@ -282,7 +291,7 @@ export default function Alimento({ currentUser }: Props) {
               </div>
               <div><label className="block text-xs font-bold text-neutral-500 dark:text-neutral-400 mb-1">Responsable *</label>
                 <input value={formInv.responsable} onChange={e => setFormInv({ ...formInv, responsable: e.target.value })} className="w-full border border-neutral-200 dark:border-neutral-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white" /></div>
-              <button onClick={crearInventario} className="w-full text-white py-2.5 rounded-lg font-bold" style={{ background: 'var(--brand-secondary)' }}>Registrar Ingreso</button>
+              <button onClick={crearInventario} disabled={!tiposAlimento.length || !formInv.tipoAlimento} className="w-full text-white py-2.5 rounded-lg font-bold disabled:cursor-not-allowed disabled:opacity-50" style={{ background: 'var(--brand-secondary)' }}>Registrar Ingreso</button>
             </div>
           </div>
         </div>

@@ -266,6 +266,7 @@ export interface Vacunacion {
 
 export interface InventarioAlimento {
   id: string;
+  granjaId?: string | null;
   tipoAlimento: string;
   proveedor?: string;
   loteAlimento?: string;

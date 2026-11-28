@@ -149,6 +149,7 @@ export default function AprobacionesAdmin({ currentUser }: { currentUser: User }
 
                 {esRecepcionAlimento && datosAlimento && (
                   <div className="mt-4 grid gap-x-6 gap-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 sm:grid-cols-2 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100">
+                    {datosAlimento.inventarioActualizado && <p className="font-semibold sm:col-span-2">La recepción ya está en el inventario común y disponible para asignarse a un galerón.</p>}
                     <p><span className="font-semibold">Cantidad recibida:</span> {datosAlimento.cantidadSacos} sacos</p>
                     <p><span className="font-semibold">Tipo:</span> {datosAlimento.tipoAlimento || '—'}</p>
                     <p><span className="font-semibold">Granja:</span> {datosAlimento.granja || '—'}</p>

@@ -9,13 +9,14 @@ import AdminUsuarios from './AdminUsuarios';
 import OfficeVinculos from './OfficeVinculos';
 import AprobacionesAdmin from './AprobacionesAdmin';
 import ConfiguracionFiscal from './ConfiguracionFiscal';
+import ConfiguracionAlimento from './ConfiguracionAlimento';
 import './gcrm.css';
 
 const Precios = lazy(() => import('./Precios'));
 
 interface Props { currentUser: User; initialTab?: AdminTab; }
 
-type AdminTab = 'productos' | 'infraestructura' | 'precios-negociacion' | 'datos-fiscales' | 'usuarios' | 'aprobaciones' | 'vinculaciones';
+type AdminTab = 'configuracion' | 'productos' | 'infraestructura' | 'precios-negociacion' | 'datos-fiscales' | 'usuarios' | 'aprobaciones' | 'vinculaciones';
 
 /**
  * Colores e iconos de la fila. Los ids y las etiquetas salen de
@@ -26,6 +27,7 @@ type AdminTab = 'productos' | 'infraestructura' | 'precios-negociacion' | 'datos
  * `Admin` compara ambas listas para que no vuelvan a divergir en silencio.
  */
 const ESTILO_TAB: Record<AdminTab, { icon: React.ComponentType<{ className?: string }>; tono: 'cielo' | 'salmon' }> = {
+  configuracion: { icon: Settings, tono: 'cielo' },
   productos: { icon: Package, tono: 'cielo' },
   infraestructura: { icon: Warehouse, tono: 'salmon' },
   'precios-negociacion': { icon: DollarSign, tono: 'cielo' },
@@ -69,7 +71,7 @@ export default function Admin({ currentUser, initialTab = 'productos' }: Props) 
         <h2 className="text-2xl font-black text-neutral-800 dark:text-white">Panel de Administración</h2>
       </div>
       <p className="text-[15px] text-neutral-500 dark:text-neutral-400 -mt-4 max-w-3xl">
-        Configura productos, infraestructura, precios autorizados para vendedores, usuarios y permisos del sistema.
+        Configura catálogos de alimento y productos, infraestructura, precios autorizados, usuarios y permisos del sistema.
       </p>
 
       <div data-testid="admin-tabs" role="tablist" aria-label="Secciones de administración" onKeyDown={moverTabConTeclado} className="admin-tab-list flex gap-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl p-1 w-full max-w-full xl:max-w-4xl overflow-x-auto">
@@ -84,6 +86,7 @@ export default function Admin({ currentUser, initialTab = 'productos' }: Props) 
       </div>
 
       <div id="admin-tabpanel" role="tabpanel" aria-labelledby={`admin-tab-${tab}`} tabIndex={0} className="animate-in fade-in min-w-0">
+        {tab === 'configuracion' && <ConfiguracionAlimento currentUser={currentUser} />}
         {tab === 'productos' && <ProductosCatalogo currentUser={currentUser} />}
         {tab === 'infraestructura' && <Infraestructura currentUser={currentUser} />}
         {tab === 'precios-negociacion' && <Suspense fallback={<div role="status" className="py-12 text-center text-sm text-neutral-500">Cargando precios…</div>}><Precios currentUser={currentUser} /></Suspense>}

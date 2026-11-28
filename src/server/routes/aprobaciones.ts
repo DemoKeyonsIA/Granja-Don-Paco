@@ -2,7 +2,7 @@ import { eq, and } from "drizzle-orm";
 import * as schema from "../../db/schema";
 
 export function registrarRutasAprobaciones(app: any, db: any, deps: { requirePermission: any; ApiError: any; httpError: any; logAudit: any; recordEventTx: any }) {
-  const { aprobaciones, guias_despacho, camiones, inventario, movimientosInventario, retornos_camion, etiquetas, cierres_caja_ruta, depositos_caja, clientes, rutas } = schema;
+  const { aprobaciones, guias_despacho, camiones, inventario, inventario_alimento, movimientosInventario, retornos_camion, etiquetas, cierres_caja_ruta, depositos_caja, clientes, rutas } = schema;
   const { requirePermission, ApiError, httpError, logAudit, recordEventTx } = deps;
   // ==================== PHASE 5 — APROBACIONES ====================
 
@@ -53,6 +53,34 @@ export function registrarRutasAprobaciones(app: any, db: any, deps: { requirePer
         if (!aprobacionPrev) throw new ApiError(404, 'Aprobación no encontrada');
         if (aprobacionPrev.estado !== 'Pendiente') throw new ApiError(409, `La aprobación ya fue resuelta (${aprobacionPrev.estado})`);
         if (aprobacionPrev.tipo === 'RecepcionAlimento' && estado === 'Rechazado' && !String(motivoRechazo || '').trim()) throw new ApiError(400, 'Indique qué diferencia encontró para informársela al encargado.');
+        // Compatibilidad con recepciones creadas antes de que el registro físico
+        // actualizara el stock común. Al revisarlas, se incorporan una sola vez.
+        if (aprobacionPrev.tipo === 'RecepcionAlimento' && estado === 'Aprobado') {
+          let datos: any;
+          try { datos = JSON.parse(aprobacionPrev.datos || '{}'); } catch { throw new ApiError(400, 'Los datos de la recepción no son válidos.'); }
+          if (!datos.inventarioActualizado) {
+            const tipoAlimento = String(datos.tipoAlimento || '').trim();
+            const granjaId = String(datos.granjaId || '').trim();
+            const cantidadSacos = Number(datos.cantidadSacos);
+            if (!tipoAlimento || !granjaId || !Number.isSafeInteger(cantidadSacos) || cantidadSacos <= 0) throw new ApiError(400, 'La recepción no tiene granja, tipo o cantidad válida para ingresarla al inventario.');
+            const granja = await tx.query.granjas.findFirst({ where: eq(schema.granjas.id, granjaId) });
+            if (!granja || granja.estado === 'Archivado') throw new ApiError(409, 'La granja de la recepción ya no está disponible.');
+            const inventarioAlimentoId = crypto.randomUUID();
+            const fechaIngreso = new Date().toISOString();
+            await tx.insert(inventario_alimento).values({
+              id: inventarioAlimentoId, granjaId, tipoAlimento,
+              proveedor: datos.proveedor || null, loteAlimento: null, siloUbicacion: 'Bodega Alimento',
+              cantidadRecibida: cantidadSacos, cantidadActual: cantidadSacos, unidad: 'sacos',
+              galeronAsociado: null, loteAvesAsociado: null, fechaIngreso,
+              responsable: datos.reportadoPorNombre || 'Encargado de galerón',
+              referenciaDocumentoOrigen: datos.referencia || null, fechaDocumentoOrigen: null,
+              montoDocumentoOrigen: null, monedaDocumentoOrigen: null, merma: 0, estado: 'Activo',
+            });
+            datos.inventarioAlimentoId = inventarioAlimentoId;
+            datos.inventarioActualizado = true;
+            updateData.datos = JSON.stringify(datos);
+          }
+        }
         if (aprobacionPrev.tipo === 'DiferenciaConteoBodega' && estado === 'Rechazado') {
           updateData.estado = 'RecuentoRequerido';
           updateData.motivoRechazo = String(motivoRechazo || '').trim() || 'Administración solicitó un nuevo conteo independiente.';
